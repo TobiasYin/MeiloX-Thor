@@ -428,7 +428,9 @@ class MusicService : MediaLibraryService(),
                 PendingIntent.getActivity(
                     this,
                     0,
-                    Intent(this, MainActivity::class.java),
+                    Intent(this, com.ljyh.mei.thor.ThorActivity::class.java)
+                        .putExtra(com.ljyh.mei.thor.ThorActivity.OPEN_PLAYER, true)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                     PendingIntent.FLAG_IMMUTABLE
                 )
             )

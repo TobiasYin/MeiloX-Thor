@@ -280,6 +280,9 @@ class MainActivity : ComponentActivity() {
     private var pictureInPictureMode by mutableStateOf(false)
     private var floatingLyricsRequest: Boolean? = null
     private var musicService: MusicService? = null
+    private var thorLegacyRoute: String? = null
+    private var thorUpperDisplayId = android.view.Display.DEFAULT_DISPLAY
+    private var thorReturnSent = false
 
 
     @androidx.annotation.OptIn(UnstableApi::class)
@@ -287,6 +290,17 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        thorLegacyRoute = (savedInstanceState?.getString("thor.legacyRoute")
+            ?: intent.getStringExtra(com.ljyh.mei.thor.ThorActivity.LEGACY_ROUTE))
+            ?.takeIf { it in com.ljyh.mei.thor.ThorActivity.LegacyRoutes }
+        thorUpperDisplayId = savedInstanceState?.getInt("thor.upperDisplay")
+            ?: intent.getIntExtra(com.ljyh.mei.thor.ThorActivity.UPPER_DISPLAY, android.view.Display.DEFAULT_DISPLAY)
+        if (thorLegacyRoute != null) {
+            // Compose sheets/navigation register later and consume back before this fallback.
+            onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() { finish() }
+            })
+        }
         pictureInPictureMode = isInPictureInPictureMode
         readFloatingLyricsIntent(intent)
         configureGlassDynamicRange(window, hdrEnabled = true)
@@ -303,10 +317,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = this@MainActivity
             val lifecycleOwner = LocalLifecycleOwner.current
-            val backStack = rememberNavBackStack(MeiRoute(Screen.Home.route))
+            val thorLegacyRoute = remember {
+                this@MainActivity.thorLegacyRoute
+            }
+            val backStack = if (thorLegacyRoute != null) {
+                rememberNavBackStack(MeiRoute(Screen.Home.route), MeiRoute(thorLegacyRoute))
+            } else rememberNavBackStack(MeiRoute(Screen.Home.route))
             val pageHeaders = remember { MeiloXPageHeaders() }
             val navController = remember(backStack) {
                 MeiNavigator(context = context, backStack = backStack)
+            }
+            LaunchedEffect(thorLegacyRoute, navController.currentRoute) {
+                if (thorLegacyRoute != null && navController.currentRoute == Screen.Home.route) finish()
             }
             val pageAppearanceOverrides = remember {
                 mutableStateMapOf<String, Pair<Any, Boolean>>()
@@ -361,6 +383,7 @@ class MainActivity : ComponentActivity() {
             var startupUpdateResult by remember { mutableStateOf<VersionUpdateResult?>(null) }
 
             LaunchedEffect(Unit) {
+                if (thorLegacyRoute != null) return@LaunchedEffect
                 try {
                     val betaUpdatesEnabled = context.dataStore.data.first()[BetaUpdatesEnabledKey] ?: false
                     val result = VersionUpdateChecker.check(
@@ -1366,6 +1389,32 @@ class MainActivity : ComponentActivity() {
     }
     }
 
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (thorLegacyRoute != null) {
+            if (event.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_B || event.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    onBackPressedDispatcher.onBackPressed()
+                    // Android's task-root fallback may background a compatibility task.
+                    window.decorView.postDelayed({
+                        if (!isFinishing && !isDestroyed) {
+                            val task = getSystemService(android.app.ActivityManager::class.java)?.appTasks
+                                ?.firstOrNull { it.taskInfo?.taskId == taskId }
+                            if (task?.taskInfo?.isVisible != true) finish()
+                        }
+                    }, 250L)
+                }
+                return true
+            }
+            if (event.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_A) {
+                return super.dispatchKeyEvent(android.view.KeyEvent(
+                    event.downTime, event.eventTime, event.action, android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                    event.repeatCount, event.metaState, event.deviceId, event.scanCode, event.flags, event.source,
+                ))
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -1410,7 +1459,30 @@ class MainActivity : ComponentActivity() {
         pictureInPictureMode = isInPictureInPictureMode
         musicService?.updateFloatingLyricsState(this)
     }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("thor.legacyRoute", thorLegacyRoute)
+        outState.putInt("thor.upperDisplay", thorUpperDisplayId)
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun finish() {
+        returnToThor()
+        super.finish()
+    }
+
+    private fun returnToThor() {
+        if (thorLegacyRoute == null || thorReturnSent) return
+        thorReturnSent = true
+        val returnIntent = Intent(this, com.ljyh.mei.thor.ThorActivity::class.java)
+            .setAction(com.ljyh.mei.thor.ThorActivity.RETURN_FROM_LEGACY)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val options = android.app.ActivityOptions.makeBasic().apply { launchDisplayId = thorUpperDisplayId }
+        runCatching { startActivity(returnIntent, options.toBundle()) }
+            .onFailure { thorReturnSent = false }
+    }
+
     override fun onDestroy() {
+        if (isFinishing) returnToThor()
         musicService?.detachFloatingLyricsActivity(this)
         musicService = null
         super.onDestroy()

@@ -15,16 +15,19 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +54,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,7 +71,9 @@ import com.ljyh.mei.constants.UserNicknameKey
 import com.ljyh.mei.data.repository.MeloXRepository
 import com.ljyh.mei.data.network.clearNeteaseAccountSession
 import com.ljyh.mei.data.network.setNeteaseWebSession
+import com.ljyh.mei.thor.ThorActivity
 import io.github.neoruaa.glasmio.ui.GlasmioButton
+import io.github.neoruaa.glasmio.ui.GlasmioIconButton
 import io.github.neoruaa.glasmio.glass.GlassEmphasis
 import io.github.neoruaa.glasmio.glass.GlassSurfaceStyle
 import io.github.neoruaa.glasmio.ui.GlasmioGroupedList
@@ -103,53 +109,68 @@ import javax.inject.Inject
 fun NeteaseLoginScreen(viewModel: NeteaseLoginViewModel = hiltViewModel()) {
     val navController = LocalNavController.current
     var showMobileLoginSheet by remember { mutableStateOf(false) }
+    val legacyRoute = LocalActivity.current?.intent?.getStringExtra(ThorActivity.LEGACY_ROUTE)
+    val compactThorLayout = legacyRoute != null && legacyRoute in ThorActivity.LegacyRoutes
     val bottomPadding = LocalPlayerAwareWindowInsets.current
         .asPaddingValues()
         .calculateBottomPadding()
+    val loginChoices: @Composable () -> Unit = {
+        NeteaseLoginChoiceButtons(
+            onMobileLogin = { showMobileLoginSheet = true },
+            onWebLogin = { Screen.NeteaseWebLogin.navigate(navController) },
+            size = if (compactThorLayout) GlasmioButtonSize.Large else null,
+        )
+    }
 
-    MeiloXPinnedListPage(
-        title = stringResource(R.string.netease_login),
-        subtitle = stringResource(R.string.netease_mobile_login_page_subtitle),
-        showsLargeTitle = false,
-        bottomPadding = bottomPadding,
-        onNavigateBack = navController::navigateUp,
-    ) {
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                SfIcon("iphone", null, size = 56.dp)
+    if (compactThorLayout) {
+        Column(
+            Modifier.fillMaxSize()
+                .padding(horizontal = 14.dp)
+                .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = bottomPadding),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                GlasmioIconButton(
+                    onClick = navController::navigateUp,
+                    modifier = Modifier.size(48.dp),
+                    size = 48.dp,
+                    style = GlassSurfaceStyle.Navigation,
+                ) { SfIcon("chevron.left", stringResource(R.string.navigation_back), size = 20.dp) }
                 Text(
-                    text = stringResource(R.string.netease_mobile_login_page_tip),
-                    style = IosTypography.body,
-                    color = LocalGlassColors.current.secondaryContent,
+                    stringResource(R.string.netease_login),
+                    modifier = Modifier.weight(1f),
+                    style = IosTypography.title3,
+                    color = LocalGlassColors.current.content,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                GlasmioButton(
-                    onClick = { showMobileLoginSheet = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    style = GlassSurfaceStyle.Navigation,
-                    emphasis = GlassEmphasis.Prominent,
+            }
+            loginChoices()
+        }
+    } else {
+        MeiloXPinnedListPage(
+            title = stringResource(R.string.netease_login),
+            subtitle = stringResource(R.string.netease_mobile_login_page_subtitle),
+            showsLargeTitle = false,
+            bottomPadding = bottomPadding,
+            onNavigateBack = navController::navigateUp,
+        ) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
+                    SfIcon("iphone", null, size = 56.dp)
                     Text(
-                        stringResource(R.string.netease_mobile_login),
-                        fontWeight = FontWeight.SemiBold,
+                        text = stringResource(R.string.netease_mobile_login_page_tip),
+                        style = IosTypography.body,
+                        color = LocalGlassColors.current.secondaryContent,
                     )
-                }
-                GlasmioButton(
-                    onClick = { Screen.NeteaseWebLogin.navigate(navController) },
-                    modifier = Modifier.fillMaxWidth(),
-                    style = GlassSurfaceStyle.Navigation,
-                ) {
-                    SfIcon("globe", null, size = 19.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(R.string.netease_web_login),
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    loginChoices()
                 }
             }
         }
@@ -164,6 +185,33 @@ fun NeteaseLoginScreen(viewModel: NeteaseLoginViewModel = hiltViewModel()) {
             onSubmitUpSms = viewModel::loginWithUpSms,
             onLoginSuccess = navController::finishNeteaseLogin,
         )
+    }
+}
+
+@Composable
+private fun NeteaseLoginChoiceButtons(
+    onMobileLogin: () -> Unit,
+    onWebLogin: () -> Unit,
+    size: GlasmioButtonSize? = null,
+) {
+    GlasmioButton(
+        onClick = onMobileLogin,
+        modifier = Modifier.fillMaxWidth(),
+        style = GlassSurfaceStyle.Navigation,
+        emphasis = GlassEmphasis.Prominent,
+        size = size,
+    ) {
+        Text(stringResource(R.string.netease_mobile_login), fontWeight = FontWeight.SemiBold)
+    }
+    GlasmioButton(
+        onClick = onWebLogin,
+        modifier = Modifier.fillMaxWidth(),
+        style = GlassSurfaceStyle.Navigation,
+        size = size,
+    ) {
+        SfIcon("globe", null, size = 19.dp)
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.netease_web_login), fontWeight = FontWeight.SemiBold)
     }
 }
 

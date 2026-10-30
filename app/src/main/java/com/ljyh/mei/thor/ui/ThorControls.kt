@@ -1,0 +1,242 @@
+package com.ljyh.mei.thor.ui
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Album
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import com.ljyh.mei.thor.components.ThorActionButton
+import com.ljyh.mei.thor.components.ThorSurfaceRole
+import com.ljyh.mei.thor.components.thorMaterial
+import com.ljyh.mei.thor.menu.ThorMenuAnchor
+import com.ljyh.mei.thor.model.ThorItem
+import com.ljyh.mei.thor.model.ThorDirection
+
+class ThorFocusEntry(
+    val requester: FocusRequester,
+    var action: () -> Unit,
+    var item: ThorItem? = null,
+    var bounds: Rect = Rect.Zero,
+    var enabled: Boolean = true,
+)
+
+/** This registry belongs to the lower composition, never the service or a ViewModel. */
+class ThorFocusRegistry {
+    private val entries = linkedMapOf<String, ThorFocusEntry>()
+    private var registrationVersion by mutableIntStateOf(0)
+    private var prepared: Triple<Any, String, ThorFocusEntry>? = null
+    private var listMovement: Pair<Any, (ThorDirection, Boolean) -> Boolean?>? = null
+    var selectedKey by mutableStateOf<String?>(null)
+    var blocked by mutableStateOf(false)
+    var onFocus: (String, ThorItem?) -> Unit = { _, _ -> }
+    val current get() = entries[selectedKey] ?: prepared?.takeIf { it.second == selectedKey }?.third
+    fun register(key: String, entry: ThorFocusEntry) {
+        entries[key] = entry
+        registrationVersion++
+        if (prepared?.second == key) prepared = null
+    }
+    fun unregister(key: String, entry: ThorFocusEntry) {
+        if (entries[key] === entry) { entries.remove(key); registrationVersion++ }
+    }
+    fun contains(key: String?): Boolean {
+        registrationVersion // Allows a pending focus job to await LazyColumn registration.
+        return key != null && entries.containsKey(key)
+    }
+    fun select(key: String) {
+        if (prepared?.second != key) prepared = null
+        selectedKey = key
+        onFocus(key, current?.item)
+    }
+    fun confirm(): Boolean {
+        if (blocked) return true
+        val entry = current ?: return selectedKey != null
+        if (entry.enabled) entry.action()
+        return true
+    }
+    fun request(key: String?): Boolean {
+        if (blocked) return false
+        // A logical pending request prevents a parent fallback from stealing focus before scroll.
+        val entry = entries[key] ?: return prepared?.second == key && key != null
+        if (!entry.enabled) return false
+        return entry.requester.requestFocus().also {
+            if (it && key != null) { if (prepared?.second == key) prepared = null; select(key) }
+        }
+    }
+    fun requestFirst(): Boolean = entries.keys.toList().any { request(it) }
+
+    /** Keep exact action/identity available while LazyColumn realizes an offscreen focus target. */
+    fun prepareFocus(owner: Any, key: String, item: ThorItem?, action: () -> Unit) {
+        val fallbackBounds = current?.bounds ?: Rect.Zero
+        prepared = Triple(owner, key, ThorFocusEntry(FocusRequester(), action, item, fallbackBounds))
+        selectedKey = key
+        onFocus(key, item)
+    }
+    fun clearPreparedFocus(owner: Any) { if (prepared?.first === owner) prepared = null }
+    fun installListMove(owner: Any, handler: (ThorDirection, Boolean) -> Boolean?) { listMovement = owner to handler }
+    fun removeListMove(owner: Any) { if (listMovement?.first === owner) listMovement = null }
+    fun move(direction: ThorDirection, repeated: Boolean): Boolean? =
+        if (blocked) false else listMovement?.second?.invoke(direction, repeated)
+}
+
+@Composable
+internal fun Modifier.thorFocus(
+    registry: ThorFocusRegistry,
+    key: String,
+    item: ThorItem? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+): Modifier {
+    val requester = remember(key) { FocusRequester() }
+    val entry = remember(key) { ThorFocusEntry(requester, onClick, item) }
+    SideEffect { entry.action = onClick; entry.item = item; entry.enabled = enabled }
+    DisposableEffect(registry, key) {
+        registry.register(key, entry)
+        onDispose { registry.unregister(key, entry) }
+    }
+    return this.focusRequester(requester)
+        .focusProperties { canFocus = enabled && !registry.blocked }
+        .onFocusChanged { if (it.isFocused) registry.select(key) }
+        .onGloballyPositioned { entry.bounds = it.boundsInRoot() }
+}
+
+@Composable
+internal fun ThorButton(
+    registry: ThorFocusRegistry, key: String, label: String,
+    modifier: Modifier = Modifier, icon: ImageVector? = null, primary: Boolean = false,
+    selected: Boolean = false, enabled: Boolean = true, contentDescription: String? = null,
+    onClick: () -> Unit,
+) {
+    val description = contentDescription ?: label.takeIf(String::isNotBlank) ?: when (icon?.name?.substringAfterLast('.')) {
+        "ArrowBack" -> "返回"; "PlayArrow" -> "播放"; "Pause" -> "暂停"
+        "SkipPrevious" -> "上一首"; "SkipNext" -> "下一首"; "Close" -> "关闭"
+        "MoreHoriz", "MoreVert" -> "更多操作"; "Search" -> "搜索"
+        else -> "操作"
+    }
+    ThorActionButton(
+        onClick = { if (enabled && !registry.blocked) { registry.select(key); onClick() } },
+        modifier = modifier.thorFocus(registry, key, enabled = enabled, onClick = onClick)
+            .thorControllerRing(enabled && registry.selectedKey == key, primary)
+            .semantics { if (label.isBlank() || contentDescription != null) this.contentDescription = description },
+        primary = primary, selected = selected, enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        if (icon != null) Icon(icon, null, Modifier.size(21.dp))
+        if (label.isNotEmpty()) {
+            if (icon != null) Spacer(Modifier.width(6.dp))
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun Modifier.thorControllerRing(focused: Boolean, primary: Boolean): Modifier {
+    val theme = com.ljyh.mei.thor.theme.LocalThorTheme.current
+    return drawWithContent {
+        drawContent()
+        if (focused) {
+            val stroke = 2.dp.toPx()
+            drawRoundRect(
+                color = if (primary) theme.onAccent else theme.focus,
+                topLeft = Offset(stroke / 2, stroke / 2),
+                size = Size((size.width - stroke).coerceAtLeast(0f), (size.height - stroke).coerceAtLeast(0f)),
+                cornerRadius = CornerRadius(theme.controlRadius.toPx()), style = Stroke(stroke),
+            )
+        }
+    }
+}
+
+@Composable
+internal fun ThorCover(item: ThorItem?, modifier: Modifier = Modifier) {
+    val theme = com.ljyh.mei.thor.theme.LocalThorTheme.current
+    Box(modifier.clip(RoundedCornerShape(5.dp)).background(theme.inset), contentAlignment = Alignment.Center) {
+        if (!item?.artworkUri.isNullOrBlank()) AsyncImage(item?.artworkUri, item?.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        else Icon(Icons.Outlined.Album, null, Modifier.size(24.dp), tint = theme.secondary)
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun ThorMusicRow(
+    registry: ThorFocusRegistry, key: String, item: ThorItem,
+    selected: Boolean = registry.selectedKey == key, trailing: String? = null,
+    onClick: () -> Unit, onMenu: (ThorMenuAnchor) -> Unit,
+    onFocused: () -> Unit = {},
+) {
+    val theme = com.ljyh.mei.thor.theme.LocalThorTheme.current
+    var bounds by remember { mutableStateOf(Rect.Zero) }
+    var press by remember { mutableStateOf(Offset.Zero) }
+    val configuration = LocalViewConfiguration.current
+    val rowTouchSlopPx = with(LocalDensity.current) { 8.dp.toPx() }
+    val rowConfiguration = remember(configuration, rowTouchSlopPx) {
+        object : ViewConfiguration by configuration {
+            override val longPressTimeoutMillis: Long = 460L
+            override val touchSlop: Float = rowTouchSlopPx
+        }
+    }
+    CompositionLocalProvider(LocalViewConfiguration provides rowConfiguration) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 62.dp)
+            .thorFocus(registry, key, item, onClick = onClick)
+            .onFocusChanged { if (it.isFocused) onFocused() }
+            .onGloballyPositioned { bounds = it.boundsInRoot() }
+            .thorMaterial(ThorSurfaceRole.Panel, focused = selected, selected = selected)
+            .pointerInput(key) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    press = down.position
+                    waitForUpOrCancellation()
+                }
+            }
+            .combinedClickable(
+                enabled = !registry.blocked,
+                onClick = { if (!registry.blocked) { registry.select(key); onClick() } },
+                onLongClick = { if (!registry.blocked) { registry.select(key); onMenu(ThorMenuAnchor(bounds.left + press.x, bounds.top + press.y)) } },
+                onLongClickLabel = "更多操作",
+            ).padding(horizontal = 9.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+    ) {
+        ThorCover(item, Modifier.size(43.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, color = theme.text)
+            if (item.subtitle.isNotEmpty() && item.subtitle != item.title) Text(item.subtitle, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = theme.secondary)
+        }
+        if (trailing != null) Text(trailing, color = theme.secondary, fontSize = 12.sp)
+    }
+    }
+}
