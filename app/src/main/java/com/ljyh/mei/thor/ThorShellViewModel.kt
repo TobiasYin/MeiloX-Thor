@@ -47,6 +47,13 @@ class ThorShellViewModel @Inject constructor(
     val lyrics = lyricManager.lyricData
     private val mutableNavigation = MutableStateFlow(ThorNavigation(tab = ThorTab.entries.firstOrNull { it.name == savedState.get<String>("thor.tab") } ?: ThorTab.Home))
     val navigation = mutableNavigation.asStateFlow()
+    private val mutableLibraryCategory = MutableStateFlow((savedState.get<Int>("thor.libraryCategory") ?: 0).coerceIn(0, 2))
+    val libraryCategory = mutableLibraryCategory.asStateFlow()
+    fun selectLibraryCategory(category: Int) {
+        val selection = category.coerceIn(0, 2)
+        mutableLibraryCategory.value = selection
+        savedState["thor.libraryCategory"] = selection
+    }
     private val mutablePreview = MutableStateFlow<ThorItem?>(null)
     val preview = mutablePreview.asStateFlow()
     private val mutableMenu = MutableStateFlow<ThorMenuState?>(null)

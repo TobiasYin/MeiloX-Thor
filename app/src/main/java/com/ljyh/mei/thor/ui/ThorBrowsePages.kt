@@ -10,7 +10,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -39,13 +38,14 @@ import com.ljyh.mei.thor.theme.LocalThorTheme
 import com.ljyh.mei.thor.theme.thorThemeTokens
 
 @Composable
-internal fun ThorPageHeader(registry: ThorFocusRegistry, title: String, count: Int? = null, onBack: (() -> Unit)? = null, onSearch: (() -> Unit)? = null, countUnit: String = "首") {
+internal fun ThorPageHeader(registry: ThorFocusRegistry, title: String, count: Int? = null, onBack: (() -> Unit)? = null, onSearch: (() -> Unit)? = null, countUnit: String = "首", onMy: (() -> Unit)? = null) {
     val theme = LocalThorTheme.current
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).thorMaterial(ThorSurfaceRole.Header).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (onBack != null) ThorButton(registry, "header:back", "", icon = Icons.Outlined.ChevronLeft, contentDescription = "返回", flat = true, onClick = onBack)
         Text(title, Modifier.weight(1f), fontWeight = FontWeight.Medium, fontSize = theme.typography.pageTitle, lineHeight = 26.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (count != null) Text("共 ${count} ${countUnit}", color = LocalThorTheme.current.secondary, fontSize = 14.sp)
         if (onSearch != null) ThorButton(registry, "header:search", "", icon = Icons.Outlined.Search, contentDescription = "搜索", flat = true, onClick = onSearch)
+        if (onMy != null) ThorButton(registry, "header:my", "", icon = Icons.Outlined.Settings, contentDescription = "我的", flat = true, onClick = onMy)
     }
 }
 
@@ -83,6 +83,26 @@ internal fun ThorBrowseBottomActions(
 ) {
     if (navigation.overlay != null) return
     when (val page = navigation.page) {
+        is ThorPage.Root -> when (page.tab) {
+            ThorTab.Home, ThorTab.Discover -> {
+                val collection = if (page.tab == ThorTab.Home) ThorCollection.Home else ThorCollection.Discover
+                Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ThorButton(registry, "root:local", "本地音乐", Modifier.width(112.dp), icon = Icons.Outlined.FolderOpen,
+                        onClick = { vm.openCollection(ThorCollection.LocalSongs) })
+                    ThorButton(registry, "root:refresh", "", Modifier.size(48.dp), icon = Icons.Outlined.Refresh,
+                        flat = true, contentDescription = "刷新", onClick = { vm.refresh(collection) })
+                }
+            }
+            ThorTab.Library -> {
+                val category by vm.libraryCategory.collectAsStateWithLifecycle()
+                Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (category == 2) ThorButton(registry, "library:create", "新建歌单", icon = Icons.Outlined.Add, onClick = vm::createPlaylist)
+                    else ThorButton(registry, "library:import", if (isScanning) "停止扫描" else "导入音乐", icon = Icons.Outlined.FolderOpen,
+                        onClick = { onLegacyRoute("local_music") })
+                }
+            }
+            ThorTab.My -> Unit
+        }
         is ThorPage.Collection -> {
             val items = library[page.collection]
             val tracks = items.flatMap { it.tracks }
@@ -227,19 +247,15 @@ internal fun ThorBrowsePage(
     when (val page = navigation.page) {
         is ThorPage.Root -> when (page.tab) {
             ThorTab.My -> ThorMyPage(vm, registry, library, onLegacyRoute)
-            ThorTab.Library -> ThorLibraryPage(vm, registry, library, onLegacyRoute, isScanning)
+            ThorTab.Library -> ThorLibraryPage(vm, registry, library)
             else -> {
                 val collection = if (page.tab == ThorTab.Home) ThorCollection.Home else ThorCollection.Discover
                 Column(Modifier.fillMaxSize()) {
-                    ThorPageHeader(registry, page.tab.title, onSearch = { vm.push(ThorPage.Search) })
+                    ThorPageHeader(registry, page.tab.title, onSearch = { vm.push(ThorPage.Search) }, onMy = { vm.selectTab(ThorTab.My) })
                     val items = library[collection]
                     if (items.isEmpty()) ThorEmptyState(vm, registry, library.errors[collection] ?: if (collection in library.loading) "正在加载" else "还没有内容",
                         if (collection in library.loading) null else "刷新", { vm.refresh(collection) }, Modifier.weight(1f), collection in library.loading)
                     else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f))
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        ThorButton(registry, "root:local", "本地音乐", modifier = Modifier.weight(1f), icon = Icons.Outlined.FolderOpen, onClick = { vm.openCollection(ThorCollection.LocalSongs) })
-                        ThorButton(registry, "root:refresh", "刷新", icon = Icons.Outlined.Refresh, onClick = { vm.refresh(collection) })
-                    }
                 }
             }
         }
@@ -273,8 +289,8 @@ internal fun ThorBrowsePage(
 
 @UnstableApi
 @Composable
-private fun ThorLibraryPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, library: ThorLibraryState, onLegacyRoute: (String) -> Unit, isScanning: Boolean) {
-    var category by rememberSaveable { mutableIntStateOf(0) }
+private fun ThorLibraryPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, library: ThorLibraryState) {
+    val category by vm.libraryCategory.collectAsStateWithLifecycle()
     val collections = when (category) {
         1 -> listOf(ThorCollection.CollectedAlbums, ThorCollection.LocalAlbums)
         2 -> listOf(ThorCollection.OwnedPlaylists, ThorCollection.SavedPlaylists)
@@ -284,17 +300,14 @@ private fun ThorLibraryPage(vm: ThorShellViewModel, registry: ThorFocusRegistry,
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).thorMaterial(ThorSurfaceRole.Header).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("音乐库", Modifier.weight(1f), color = LocalThorTheme.current.secondary, fontSize = 14.sp)
             listOf("专辑" to 1, "歌曲" to 0, "歌单" to 2).forEach { (title, index) ->
-                ThorCategoryButton(registry, "library:category:$index", title, selected = category == index, onClick = { category = index })
+                ThorCategoryButton(registry, "library:category:$index", title, selected = category == index, onClick = { vm.selectLibraryCategory(index) })
             }
             ThorButton(registry, "header:search", "", icon = Icons.Outlined.Search, flat = true, contentDescription = "搜索", onClick = { vm.push(ThorPage.Search) })
+            ThorButton(registry, "header:my", "", icon = Icons.Outlined.Settings, flat = true, contentDescription = "我的", onClick = { vm.selectTab(ThorTab.My) })
         }
         ThorBrowseList(vm, registry, "library:$category", collections.map { collection ->
             ThorItem(ThorItemKey.Destination(collection.name), collection.title, "${library[collection].size} ${if (category == 0) "首" else "项"}", library[collection].firstOrNull()?.artworkUri)
         }, Modifier.weight(1f), onItem = { item, _ -> vm.openCollection(ThorCollection.valueOf((item.key as ThorItemKey.Destination).id)) })
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
-            if (category == 2) ThorButton(registry, "library:create", "新建歌单", icon = Icons.Outlined.Add, onClick = vm::createPlaylist)
-            else ThorButton(registry, "library:import", if (isScanning) "停止扫描" else "导入音乐", icon = Icons.Outlined.FolderOpen, onClick = { onLegacyRoute("local_music") })
-        }
     }
 }
 
@@ -311,7 +324,7 @@ private fun ThorMyPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, libr
         ThorItem(ThorItemKey.Destination("about"), "关于"),
     )
     Column(Modifier.fillMaxSize()) {
-        ThorPageHeader(registry, "我的", onSearch = { vm.push(ThorPage.Search) })
+        ThorPageHeader(registry, "我的", onSearch = { vm.push(ThorPage.Search) }, onMy = { vm.selectTab(ThorTab.My) })
         ThorBrowseList(vm, registry, "my", items, Modifier.weight(1f), onItem = { item, _ ->
             when ((item.key as ThorItemKey.Destination).id) {
                 "appearance" -> vm.push(ThorPage.Appearance)

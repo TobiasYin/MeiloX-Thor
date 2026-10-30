@@ -144,7 +144,8 @@ fun ThorLowerScreen(
 
     val playerView = navigation.overlay == ThorOverlay.Player
     val hasBottomActions = navigation.overlay == null &&
-        (navigation.page is ThorPage.Detail || navigation.page is ThorPage.Collection)
+        (navigation.page is ThorPage.Detail || navigation.page is ThorPage.Collection ||
+            (navigation.page is ThorPage.Root && navigation.tab != ThorTab.My))
     val bottomHeight = if (playerView) 28.dp else if (hasBottomActions) 56.dp else 32.dp
     val miniVisible = navigation.overlay != ThorOverlay.Player && playback.current != null
 
