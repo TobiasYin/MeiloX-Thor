@@ -1,0 +1,48 @@
+{
+  "originalSystemMode": "Night mode: yes",
+  "windowsBefore": [
+    "593975c",
+    "a2e8642"
+  ],
+  "checks": [
+    {
+      "systemNight": "no",
+      "rgb": {
+        "lower": [
+          239,
+          238,
+          232
+        ],
+        "upper": [
+          239,
+          238,
+          232
+        ]
+      },
+      "windows": [
+        "593975c",
+        "a2e8642"
+      ]
+    },
+    {
+      "systemNight": "yes",
+      "rgb": {
+        "lower": [
+          24,
+          30,
+          28
+        ],
+        "upper": [
+          10,
+          12,
+          11
+        ]
+      },
+      "windows": [
+        "593975c",
+        "a2e8642"
+      ]
+    }
+  ],
+  "sameWindows": true
+}

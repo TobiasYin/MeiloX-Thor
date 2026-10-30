@@ -1,0 +1,17 @@
+{
+  "build": "Debug",
+  "refreshRateHz": 60,
+  "totalFrames": 5342,
+  "jankFrames": 44,
+  "jankPercent": 0.82,
+  "legacyJankPercent": 1.44,
+  "frameTimePercentilesMs": {
+    "p50": 8,
+    "p90": 10,
+    "p95": 13,
+    "p99": 23
+  },
+  "gpuP95Ms": 2,
+  "systemHighInputLatencyCounter": 3044,
+  "physicalInputLatencyMeasured": false
+}

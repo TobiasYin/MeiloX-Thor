@@ -1,0 +1,122 @@
+[
+  {
+    "pack": "ceramic",
+    "mode": "day",
+    "lowerSize": [
+      1240,
+      1080
+    ],
+    "canvasRgb": [
+      239,
+      238,
+      232
+    ],
+    "expectedRgb": [
+      239,
+      238,
+      232
+    ],
+    "maximumChannelDelta": 0,
+    "withinOneLevel": true
+  },
+  {
+    "pack": "ceramic",
+    "mode": "night",
+    "lowerSize": [
+      1240,
+      1080
+    ],
+    "canvasRgb": [
+      24,
+      30,
+      28
+    ],
+    "expectedRgb": [
+      23,
+      30,
+      28
+    ],
+    "maximumChannelDelta": 1,
+    "withinOneLevel": true
+  },
+  {
+    "pack": "glass",
+    "mode": "day",
+    "lowerSize": [
+      1240,
+      1080
+    ],
+    "canvasRgb": [
+      233,
+      237,
+      243
+    ],
+    "expectedRgb": [
+      233,
+      237,
+      244
+    ],
+    "maximumChannelDelta": 1,
+    "withinOneLevel": true
+  },
+  {
+    "pack": "glass",
+    "mode": "night",
+    "lowerSize": [
+      1240,
+      1080
+    ],
+    "canvasRgb": [
+      22,
+      28,
+      42
+    ],
+    "expectedRgb": [
+      21,
+      28,
+      43
+    ],
+    "maximumChannelDelta": 1,
+    "withinOneLevel": true
+  },
+  {
+    "pack": "titanium",
+    "mode": "day",
+    "lowerSize": [
+      1240,
+      1080
+    ],
+    "canvasRgb": [
+      226,
+      224,
+      218
+    ],
+    "expectedRgb": [
+      227,
+      224,
+      217
+    ],
+    "maximumChannelDelta": 1,
+    "withinOneLevel": true
+  },
+  {
+    "pack": "titanium",
+    "mode": "night",
+    "lowerSize": [
+      1240,
+      1080
+    ],
+    "canvasRgb": [
+      34,
+      35,
+      32
+    ],
+    "expectedRgb": [
+      34,
+      35,
+      32
+    ],
+    "maximumChannelDelta": 0,
+    "withinOneLevel": true
+  }
+]

@@ -45,4 +45,6 @@
 
 代码提交：`93646bff`（材质/布局/图标/动画/主题）、`242bce50`（喜欢收藏状态）、`d7ca7404`（一级页页头与底部动作）。
 
-最终 APK：`app/build/outputs/apk/debug/app-debug.apk`，74266882 字节；SHA-256：`9c8bc5a3b2f67fd47137a545de8f07e6d1d079651aca0bc6906f90e14a03dffb`。此包使用替换安装，保留原登录与资料。
+视觉修正阶段 APK（历史构建）：`app/build/outputs/apk/debug/app-debug.apk`，74266882 字节；SHA-256：`9c8bc5a3b2f67fd47137a545de8f07e6d1d079651aca0bc6906f90e14a03dffb`。此包使用替换安装，保留原登录与资料。
+
+后续真机构建、登录迁移验证及最新 APK 哈希见 [真机验证记录](hardware-validation.md)。

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thor Music · 真机 QA 截图</title>
+  <style>
+    :root { color-scheme: light; --bg: #f5f5f5; --panel: #fff; --ink: #222; --muted: #666; --line: #d8d8d8; --error: #9b2828; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans SC", sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 28px 24px 40px; }
+    h1 { margin: 0; font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; }
+    p { margin: 8px 0 0; }
+    .subtle { color: var(--muted); }
+    .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 24px 0 16px; }
+    label { display: grid; gap: 6px; font-size: 13px; }
+    select { min-width: 150px; min-height: 44px; padding: 8px 34px 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+    select:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+    a { color: inherit; text-underline-offset: 3px; }
+    .selection { padding-bottom: 10px; color: var(--muted); font-size: 13px; }
+    .panel { min-width: 0; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+    figure { width: 100%; margin: 0; min-width: 0; }
+    .lower { width: 64.58333333333333%; margin: 20px auto 0; }
+    .media { background: var(--bg); outline: 1px solid var(--line); }
+    img { display: block; width: 100%; height: auto; }
+    img[hidden], .placeholder[hidden] { display: none; }
+    .placeholder { display: grid; place-items: center; aspect-ratio: var(--ratio); padding: 20px; text-align: center; color: var(--muted); overflow-wrap: anywhere; }
+    figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-top: 7px; font-size: 12px; color: var(--muted); }
+    .status { overflow-wrap: anywhere; }
+    .error { color: var(--error); }
+    details { margin-top: 20px; }
+    summary { min-height: 44px; padding: 10px 0; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+    th { font-weight: 600; }
+    footer { margin-top: 20px; color: var(--muted); font-size: 13px; }
+    noscript { display: block; padding: 16px 0; }
+    @media (max-width: 600px) {
+      main { padding: 20px 14px 30px; }
+      .panel { padding: 12px; }
+      .controls { gap: 12px; }
+      .controls label { flex: 1; min-width: 0; }
+      select { min-width: 0; width: 100%; }
+      .selection { flex-basis: 100%; padding-bottom: 0; }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { color-scheme: dark; --bg: #181818; --panel: #232323; --ink: #eee; --muted: #bbb; --line: #494949; --error: #ffb4ad; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Thor Music · 真机 QA 截图</h1>
+      <p class="subtle">实体 AYN Thor · Android 13／API 33 · 369dpi。以下六组静态截图均使用本地 QA 音频。</p>
+      <p class="subtle">上屏 1920 × 1080，下屏 1240 × 1080；两屏以相同像素比例缩放。</p>
+    </header>
+    <div class="controls" role="group" aria-label="真机截图主题选择">
+      <label for="pack">主题材质
+        <select id="pack">
+          <option value="ceramic">微砂陶瓷 · Ceramic</option>
+          <option value="glass">晶雾玻璃 · Glass</option>
+          <option value="titanium">钛金 · Titanium</option>
+        </select>
+      </label>
+      <label for="mode">昼夜模式
+        <select id="mode">
+          <option value="day">白天 · Day</option>
+          <option value="night">夜间 · Night</option>
+        </select>
+      </label>
+      <span class="selection" id="selection" aria-live="polite"></span>
+    </div>
+    <section class="panel" id="screens" aria-label="实体 AYN Thor 上下屏静态截图"></section>
+    <details>
+      <summary>六组下屏背景色抽样校验</summary>
+      <div class="panel">
+        <p class="subtle">实测 RGB 与设计预期的单通道最大差均 ≤ 1，六组均通过。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">材质／昼夜</th><th scope="col">实测 RGB</th><th scope="col">设计 RGB</th><th scope="col">最大通道差</th><th scope="col">结果</th></tr></thead>
+            <tbody id="checks"></tbody>
+          </table>
+        </div>
+        <p><a href="./hardware-screenshots/theme-check.json" target="_blank" rel="noopener">打开原始校验 JSON ↗</a></p>
+      </div>
+    </details>
+    <footer>
+      <p>锁屏与后台恢复已验证；实体手柄、实际吹气与真实合盖仍待配合确认。</p>
+      <p><a href="./hardware-validation.md">真机验证记录</a> · <a href="./design-parity.html">设计稿与模拟器静态对照</a></p>
+    </footer>
+    <noscript>主题选择和图片尺寸校验需要 JavaScript。原图位于同目录 hardware-screenshots 文件夹。</noscript>
+    <details><summary>真机封面拖动录像</summary><p>Android 触摸注入：正向、反向拖动与释放。仅本地 QA 媒体，未包含麦克风音频。</p><video controls preload="metadata" playsinline style="width:100%;max-width:900px" src="hardware-screenshots/case-drag.mp4"></video></details>
+</main>
+  <script>
+    (() => {
+      'use strict';
+      const checks = [{"pack":"ceramic","mode":"day","lowerSize":[1240,1080],"canvasRgb":[239,238,232],"expectedRgb":[239,238,232],"maximumChannelDelta":0,"withinOneLevel":true},{"pack":"ceramic","mode":"night","lowerSize":[1240,1080],"canvasRgb":[24,30,28],"expectedRgb":[23,30,28],"maximumChannelDelta":1,"withinOneLevel":true},{"pack":"glass","mode":"day","lowerSize":[1240,1080],"canvasRgb":[233,237,243],"expectedRgb":[233,237,244],"maximumChannelDelta":1,"withinOneLevel":true},{"pack":"glass","mode":"night","lowerSize":[1240,1080],"canvasRgb":[22,28,42],"expectedRgb":[21,28,43],"maximumChannelDelta":1,"withinOneLevel":true},{"pack":"titanium","mode":"day","lowerSize":[1240,1080],"canvasRgb":[226,224,218],"expectedRgb":[227,224,217],"maximumChannelDelta":1,"withinOneLevel":true},{"pack":"titanium","mode":"night","lowerSize":[1240,1080],"canvasRgb":[34,35,32],"expectedRgb":[34,35,32],"maximumChannelDelta":0,"withinOneLevel":true}];
+      const packs = { ceramic: '微砂陶瓷', glass: '晶雾玻璃', titanium: '钛金' };
+      const modes = { day: '白天', night: '夜间' };
+      const folder = './hardware-screenshots/';
+      const packSelect = document.getElementById('pack');
+      const modeSelect = document.getElementById('mode');
+      function capture(filename, label, width, height, lower) {
+        const figure = document.createElement('figure');
+        if (lower) figure.className = 'lower';
+        const media = document.createElement('div');
+        media.className = 'media';
+        const placeholder = document.createElement('div');
+        placeholder.className = 'placeholder';
+        placeholder.style.setProperty('--ratio', width + ' / ' + height);
+        placeholder.textContent = '正在载入' + label + '…';
+        const image = document.createElement('img');
+        image.alt = label;
+        image.width = width;
+        image.height = height;
+        image.hidden = true;
+        image.decoding = 'async';
+        const caption = document.createElement('figcaption');
+        const status = document.createElement('span');
+        status.className = 'status';
+        status.textContent = label + ' · 尺寸待校验';
+        const original = document.createElement('a');
+        original.href = folder + filename;
+        original.target = '_blank';
+        original.rel = 'noopener';
+        original.textContent = '原图 ↗';
+        image.addEventListener('load', () => {
+          image.hidden = false;
+          placeholder.hidden = true;
+          const matches = image.naturalWidth === width && image.naturalHeight === height;
+          status.textContent = label + ' · ' + image.naturalWidth + ' × ' + image.naturalHeight +
+            (matches ? ' · 尺寸正确' : ' · 预期 ' + width + ' × ' + height);
+          status.classList.toggle('error', !matches);
+        });
+        image.addEventListener('error', () => {
+          image.hidden = true;
+          placeholder.hidden = false;
+          placeholder.textContent = '截图未载入：' + filename;
+          status.textContent = label + ' · 无法校验尺寸';
+          status.classList.add('error');
+        });
+        media.append(image, placeholder);
+        caption.append(status, original);
+        figure.append(media, caption);
+        image.src = folder + filename;
+        return figure;
+      }
+      function render() {
+        const pack = packSelect.value;
+        const mode = modeSelect.value;
+        const title = packs[pack] + '／' + modes[mode];
+        document.getElementById('selection').textContent = title + ' · 真机静态截图';
+        document.getElementById('screens').replaceChildren(
+          capture(pack + '-' + mode + '-player-upper.png', '真机上屏 · ' + title, 1920, 1080, false),
+          capture(pack + '-' + mode + '-player-lower.png', '真机下屏 · ' + title, 1240, 1080, true)
+        );
+      }
+      for (const check of checks) {
+        const row = document.createElement('tr');
+        const values = [
+          packs[check.pack] + '／' + modes[check.mode],
+          check.canvasRgb.join(', '), check.expectedRgb.join(', '),
+          String(check.maximumChannelDelta), check.withinOneLevel ? '通过' : '未通过'
+        ];
+        values.forEach(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.append(cell);
+        });
+        document.getElementById('checks').append(row);
+      }
+      packSelect.addEventListener('change', render);
+      modeSelect.addEventListener('change', render);
+      render();
+    })();
+  </script>
+</body>
+</html>

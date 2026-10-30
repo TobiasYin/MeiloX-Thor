@@ -1,0 +1,9 @@
+{
+  "sourceLoginRetained": true,
+  "targetCredentialMatchesSource": true,
+  "sameStoredAccount": true,
+  "bothDeviceIdentitiesPresent": true,
+  "deviceIdentitiesDistinct": true,
+  "targetSecurityInitialized": true,
+  "bootstrapPendingCleared": true
+}

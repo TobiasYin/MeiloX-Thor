@@ -1,0 +1,13 @@
+{
+  "installedApkMatchesLocal": true,
+  "recordingStopped": true,
+  "jvm": {
+    "tests": 412,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "instrumentedTests": 10,
+  "manualControllerEvents": 0,
+  "manualLidEvents": 0
+}

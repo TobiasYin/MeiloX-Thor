@@ -1,0 +1,37 @@
+{
+  "before": {
+    "recording": true,
+    "displays": {
+      "0": "ON",
+      "4": "ON"
+    }
+  },
+  "sleep": {
+    "recording": false,
+    "displays": {
+      "0": "OFF",
+      "4": "OFF"
+    }
+  },
+  "wake": {
+    "recording": true,
+    "displays": {
+      "0": "ON",
+      "4": "ON"
+    }
+  },
+  "home": {
+    "recording": false,
+    "displays": {
+      "0": "ON",
+      "4": "ON"
+    }
+  },
+  "return": {
+    "recording": true,
+    "displays": {
+      "0": "ON",
+      "4": "ON"
+    }
+  }
+}
