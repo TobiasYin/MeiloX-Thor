@@ -11,10 +11,10 @@ import com.ljyh.mei.extensions.togglePlayPause
 import com.ljyh.mei.playback.PlayerConnection
 import com.ljyh.mei.playback.StableDeckPlayer
 import com.ljyh.mei.playback.nextPlaybackMediaItemIndex
+import com.ljyh.mei.playback.normalizeQueueMediaItems
 import com.ljyh.mei.playback.playbackOrderIndices
 import com.ljyh.mei.playback.queue.ListQueue
 import com.ljyh.mei.playback.queueEntryId
-import com.ljyh.mei.playback.withQueueEntryId
 import com.ljyh.mei.thor.model.ThorItem
 import com.ljyh.mei.thor.model.ThorItemKey
 import com.ljyh.mei.thor.model.ThorOperationResult
@@ -55,12 +55,19 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     private var ticker: Job? = null
     private var visible = true
     private val deferredRemoval = mutableSetOf<String>()
-    private val undos = linkedMapOf<String, () -> Unit>()
+    private val undoTracker = ThorQueueUndoTracker()
+    private data class QueueUndo(val epoch: Long, val action: () -> Unit)
+    private val undos = linkedMapOf<String, QueueUndo>()
+    private var observedPlayer: Player? = null
+    private var observedIdentityEpoch: Long? = null
 
     fun attach(connection: PlayerConnection?) {
         if (this.connection === connection) return
         this.connection?.player?.removeListener(this)
         ticker?.cancel()
+        resetQueueActions()
+        observedPlayer = null
+        observedIdentityEpoch = null
         this.connection = connection
         connection?.player?.addListener(this)
         refresh()
@@ -83,6 +90,8 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     }
 
     override fun onEvents(player: Player, events: Player.Events) {
+        if (connection?.player !== player) return
+        observeQueueIdentity(player)
         if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) && deferredRemoval.isNotEmpty()) {
             val current = player.currentMediaItem?.queueEntryId
             val removable = deferredRemoval.filter { it != current }
@@ -94,12 +103,35 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
         refresh()
     }
 
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        val player = connection?.player ?: return
+        observeQueueIdentity(player)
+        undoTracker.observeCurrent(mediaItem?.queueEntryId)
+    }
+
+    private fun resetQueueActions() {
+        undoTracker.beginEpoch()
+        undos.clear()
+        deferredRemoval.clear()
+    }
+
+    private fun observeQueueIdentity(player: Player) {
+        val identityEpoch = (player as? StableDeckPlayer)?.queueIdentityEpoch
+        if (observedPlayer !== player || observedIdentityEpoch != identityEpoch) {
+            resetQueueActions()
+            observedPlayer = player
+            observedIdentityEpoch = identityEpoch
+        }
+        undoTracker.observeCurrent(player.currentMediaItem?.queueEntryId)
+    }
+
     private fun refresh() {
         val connection = connection ?: run {
             mutableState.value = ThorPlaybackState()
             return
         }
         val player = connection.player
+        observeQueueIdentity(player)
         val items = player.playbackOrderIndices().mapNotNull { index ->
             val item = player.getMediaItemAt(index)
             val entryId = item.queueEntryId ?: return@mapNotNull null
@@ -152,8 +184,7 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     fun play(tracks: List<MediaMetadata>, index: Int, title: String, shuffle: Boolean? = null): Boolean {
         val connection = connection ?: return false
         if (tracks.isEmpty() || index !in tracks.indices) return false
-        deferredRemoval.clear()
-        undos.clear()
+        resetQueueActions()
         connection.playQueue(ListQueue(
             id = "thor:${UUID.randomUUID()}", title = title,
             items = tracks.map { it.id.toString() to it.toMediaItem() }, startIndex = index,
@@ -165,16 +196,19 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     fun enqueue(tracks: List<MediaMetadata>, next: Boolean): ThorOperationResult {
         val connection = connection ?: return ThorOperationResult(false, "播放器尚未连接")
         if (tracks.isEmpty()) return ThorOperationResult(false, "没有可播放的歌曲")
+        val player = connection.player
+        observeQueueIdentity(player)
         // Queue edits run asynchronously in the existing owner. Assign identities before
         // dispatch, rather than diffing a timeline that may not have updated yet.
-        val items = tracks.map { it.toMediaItem().withQueueEntryId(UUID.randomUUID().toString()) }
+        val existingIds = (0 until player.mediaItemCount).mapNotNull { player.getMediaItemAt(it).queueEntryId }.toSet()
+        val items = normalizeQueueMediaItems(tracks.map { it.toMediaItem() }, existingIds)
         val inserted = items.mapNotNull { it.queueEntryId }.toSet()
+        val epoch = undoTracker.epoch
         if (next) connection.playNext(items) else connection.addToQueue(items)
         val token = registerUndo {
-            val current = connection.player.currentMediaItem?.queueEntryId
-            for (index in connection.player.mediaItemCount - 1 downTo 0) {
-                val id = connection.player.getMediaItemAt(index).queueEntryId
-                if (id in inserted && id != current) connection.player.removeMediaItem(index)
+            val removable = undoTracker.insertionUndoTargets(epoch, inserted, player.currentMediaItem?.queueEntryId).orEmpty()
+            for (index in player.mediaItemCount - 1 downTo 0) {
+                if (player.getMediaItemAt(index).queueEntryId in removable) player.removeMediaItem(index)
             }
         }
         refresh()
@@ -184,6 +218,7 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     fun remove(entryId: String): ThorOperationResult {
         val connection = connection ?: return ThorOperationResult(false, "播放器尚未连接")
         val player = connection.player
+        observeQueueIdentity(player)
         val index = (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).queueEntryId == entryId }
             ?: return ThorOperationResult(false, "该曲目已移出队列")
         val token = if (player.currentMediaItem?.queueEntryId == entryId) {
@@ -216,18 +251,21 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     private fun registerUndo(action: () -> Unit): String {
         val token = "queue:${UUID.randomUUID()}"
         if (undos.size >= 20) undos.remove(undos.keys.first())
-        undos[token] = action
+        undos[token] = QueueUndo(undoTracker.epoch, action)
         return token
     }
 
     fun undo(token: String): ThorOperationResult {
-        val action = undos.remove(token) ?: return ThorOperationResult(false, "此操作已无法撤销")
-        action()
+        val player = connection?.player ?: return ThorOperationResult(false, "播放器尚未连接")
+        observeQueueIdentity(player)
+        val undo = undos.remove(token) ?: return ThorOperationResult(false, "此操作已无法撤销")
+        if (undo.epoch != undoTracker.epoch) return ThorOperationResult(false, "播放队列已变化，无法撤销")
+        undo.action()
         refresh()
         return ThorOperationResult(true, "已撤销")
     }
 
-    fun close() { attach(null); undos.clear(); deferredRemoval.clear() }
+    fun close() { attach(null); resetQueueActions() }
 }
 
 private fun MediaItem.thorMetadata(): MediaMetadata = metadata ?: MediaMetadata(

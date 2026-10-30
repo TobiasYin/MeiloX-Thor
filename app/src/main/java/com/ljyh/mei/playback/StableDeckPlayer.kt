@@ -80,6 +80,9 @@ class StableDeckPlayer(
     private var activeDeckIndex = 0
     private var released = false
     private var internalQueueUpdateDepth = 0
+    /** Full replacements invalidate queue-scoped commands even when IDs are intentionally reused. */
+    internal var queueIdentityEpoch: Long = 0
+        private set
     internal var onQueueEdited: ((replaced: Boolean) -> Unit)? = null
     internal var onSeekRequested: (() -> Unit)? = null
     internal var isExternalMediaRequest: (() -> Boolean)? = null
@@ -94,6 +97,7 @@ class StableDeckPlayer(
     }
 
     private fun notifyQueueEdit(replaced: Boolean = false) {
+        if (replaced) queueIdentityEpoch++
         if (internalQueueUpdateDepth == 0) onQueueEdited?.invoke(replaced)
     }
 
@@ -135,12 +139,14 @@ class StableDeckPlayer(
             return handleSeek(startIndex, startPositionMs, Player.COMMAND_SEEK_TO_MEDIA_ITEM)
         }
         notifyQueueEdit(replaced = true)
-        return super.handleSetMediaItems(mediaItems.map { it.withQueueEntryId() }, startIndex, startPositionMs)
+        // A full replacement has no retained occurrences to collide with.
+        return super.handleSetMediaItems(normalizeQueueMediaItems(mediaItems), startIndex, startPositionMs)
     }
 
     override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
         notifyQueueEdit()
-        return super.handleAddMediaItems(index, mediaItems.map { it.withQueueEntryId() })
+        val retained = (0 until activeDeck.mediaItemCount).mapNotNull { activeDeck.getMediaItemAt(it).queueEntryId }.toSet()
+        return super.handleAddMediaItems(index, normalizeQueueMediaItems(mediaItems, retained))
     }
 
     override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> {
@@ -165,12 +171,18 @@ class StableDeckPlayer(
         val sameEntries = toIndex - fromIndex == mediaItems.size && mediaItems.indices.all {
             activeDeck.getMediaItemAt(fromIndex + it).mediaId == mediaItems[it].mediaId
         }
-        if (!sameEntries) notifyQueueEdit()
-        val order = activeDeck.playbackOrderIndices(true)
-        val replacements = mediaItems.mapIndexed { offset, item ->
-            val id = if (sameEntries) activeDeck.getMediaItemAt(fromIndex + offset).queueEntryId else null
-            if (id != null) item.withQueueEntryId(id) else item.withQueueEntryId()
+        if (!sameEntries) {
+            if (fromIndex == 0 && toIndex == activeDeck.mediaItemCount) queueIdentityEpoch++
+            notifyQueueEdit()
         }
+        val order = activeDeck.playbackOrderIndices(true)
+        val proposed = mediaItems.mapIndexed { offset, item ->
+            val id = if (sameEntries) activeDeck.getMediaItemAt(fromIndex + offset).queueEntryId else null
+            if (id != null) item.withQueueEntryId(id) else item
+        }
+        val retained = (0 until activeDeck.mediaItemCount).filter { it !in (fromIndex until toIndex) }
+            .mapNotNull { activeDeck.getMediaItemAt(it).queueEntryId }.toSet()
+        val replacements = normalizeQueueMediaItems(proposed, retained)
         val result = super.handleReplaceMediaItems(fromIndex, toIndex, replacements)
         if (sameEntries) setPlaybackOrder(order)
         return result

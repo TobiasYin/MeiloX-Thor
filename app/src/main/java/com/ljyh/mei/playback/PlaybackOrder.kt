@@ -18,6 +18,16 @@ internal fun MediaItem.withQueueEntryId(id: String = UUID.randomUUID().toString(
         ).build(),
     ).build()
 
+internal fun normalizeQueueMediaItems(
+    items: List<MediaItem>,
+    retainedIds: Set<String> = emptySet(),
+): List<MediaItem> {
+    val ids = normalizeQueueEntryIds(items.map { it.queueEntryId }, retainedIds)
+    return items.mapIndexed { index, item ->
+        if (item.queueEntryId == ids[index]) item else item.withQueueEntryId(ids[index])
+    }
+}
+
 internal fun Player.playbackOrderIndices(shuffle: Boolean = shuffleModeEnabled): List<Int> {
     val timeline = currentTimeline
     val result = ArrayList<Int>(timeline.windowCount)
