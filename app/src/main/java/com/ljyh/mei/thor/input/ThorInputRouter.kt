@@ -37,6 +37,9 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
         if (closed || event.action !in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) return false
         val key = event.keyCode
         val command = commandForKey(key) ?: return false
+        // Controller playback shortcuts are owned by text entry while a field is active.
+        // A headset media key remains an independent playback command.
+        if (isTextEditing && command in playbackCommands && key != KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) return true
         // Physical Enter/Dpad/system Back belong to the IME; gamepad A/B keep app form actions.
         if (isTextEditing && command !in playbackCommands && key != KeyEvent.KEYCODE_BUTTON_A && key != KeyEvent.KEYCODE_BUTTON_B) return false
         val down = event.action == KeyEvent.ACTION_DOWN
