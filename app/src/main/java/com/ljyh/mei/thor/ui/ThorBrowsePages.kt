@@ -1,6 +1,8 @@
 package com.ljyh.mei.thor.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -19,21 +21,148 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.ljyh.mei.thor.ThorShellViewModel
+import com.ljyh.mei.thor.components.ThorSurfaceRole
+import com.ljyh.mei.thor.components.ThorActionButton
+import com.ljyh.mei.thor.components.thorMaterial
 import com.ljyh.mei.thor.menu.ThorMenuAnchor
 import com.ljyh.mei.thor.model.*
 import com.ljyh.mei.thor.state.*
 import com.ljyh.mei.thor.theme.LocalThorTheme
+import com.ljyh.mei.thor.theme.thorThemeTokens
 
 @Composable
 internal fun ThorPageHeader(registry: ThorFocusRegistry, title: String, count: Int? = null, onBack: (() -> Unit)? = null, onSearch: (() -> Unit)? = null, countUnit: String = "首") {
-    Row(Modifier.fillMaxWidth().heightIn(min = 49.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (onBack != null) ThorButton(registry, "header:back", "", icon = Icons.Outlined.ArrowBack, contentDescription = "返回", onClick = onBack)
-        Text(title, Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (count != null) Text("共 $count $countUnit", color = LocalThorTheme.current.secondary, fontSize = 12.sp)
-        if (onSearch != null) ThorButton(registry, "header:search", "搜索", icon = Icons.Outlined.Search, onClick = onSearch)
+    val theme = LocalThorTheme.current
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).thorMaterial(ThorSurfaceRole.Header).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (onBack != null) ThorButton(registry, "header:back", "", icon = Icons.Outlined.ChevronLeft, contentDescription = "返回", flat = true, onClick = onBack)
+        Text(title, Modifier.weight(1f), fontWeight = FontWeight.Medium, fontSize = theme.typography.pageTitle, lineHeight = 26.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (count != null) Text("共 ${count} ${countUnit}", color = LocalThorTheme.current.secondary, fontSize = 14.sp)
+        if (onSearch != null) ThorButton(registry, "header:search", "", icon = Icons.Outlined.Search, contentDescription = "搜索", flat = true, onClick = onSearch)
+    }
+}
+
+private val libraryHeaderCollections = setOf(ThorCollection.CollectedAlbums, ThorCollection.LikedSongs, ThorCollection.OwnedPlaylists, ThorCollection.SavedPlaylists)
+
+@UnstableApi
+@Composable
+private fun ThorCollectionHeader(vm: ThorShellViewModel, registry: ThorFocusRegistry, collection: ThorCollection, count: Int, onBack: () -> Unit) {
+    val theme = LocalThorTheme.current
+    BoxWithConstraints(Modifier.fillMaxWidth().thorMaterial(ThorSurfaceRole.Header)) {
+        val showContext = maxWidth >= 420.dp
+        val showCount = maxWidth >= 380.dp
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            ThorButton(registry, "header:back", "", icon = Icons.Outlined.ChevronLeft, flat = true, contentDescription = "返回", onClick = onBack)
+            if (showContext) Text("音乐库", Modifier.padding(end = 8.dp), color = theme.secondary, fontSize = 14.sp)
+            listOf("专辑" to ThorCollection.CollectedAlbums, "歌曲" to ThorCollection.LikedSongs, "歌单" to ThorCollection.OwnedPlaylists).forEach { (label, target) ->
+                val selected = collection == target || (target == ThorCollection.OwnedPlaylists && collection == ThorCollection.SavedPlaylists)
+                ThorCategoryButton(registry, "collection:category:${target.name}", label, selected,
+                    onClick = { if (!selected) vm.replaceCollection(target) })
+            }
+            Spacer(Modifier.weight(1f))
+            if (showCount) Text("共 ${count} ${when (collection) { ThorCollection.CollectedAlbums -> "张"; ThorCollection.LikedSongs -> "首"; else -> "个" }}",
+                color = theme.secondary, fontSize = 12.sp, maxLines = 1)
+        }
+    }
+}
+
+/** The shell places these actions beside its key hints, below the miniature player. */
+@UnstableApi
+@Composable
+internal fun ThorBrowseBottomActions(
+    vm: ThorShellViewModel, registry: ThorFocusRegistry, navigation: ThorNavigation, library: ThorLibraryState,
+    onLegacyRoute: (String) -> Unit, isScanning: Boolean, modifier: Modifier = Modifier,
+) {
+    if (navigation.overlay != null) return
+    when (val page = navigation.page) {
+        is ThorPage.Collection -> {
+            val items = library[page.collection]
+            val tracks = items.flatMap { it.tracks }
+            val playable = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History)
+            Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (page.collection == ThorCollection.OwnedPlaylists) ThorButton(registry, "collection:create", "新建歌单", primary = true,
+                    icon = Icons.Outlined.Add, onClick = vm::createPlaylist)
+                if (page.collection == ThorCollection.Downloads) ThorButton(registry, "collection:downloads", "", icon = Icons.Outlined.Download,
+                    contentDescription = "管理下载", flat = true, onClick = { onLegacyRoute("download_manage") })
+                if (page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums)) ThorButton(registry, "collection:scan", "", icon = Icons.Outlined.FolderOpen,
+                    contentDescription = if (isScanning) "停止扫描" else "扫描音乐", flat = true, onClick = { onLegacyRoute("local_music") })
+                ThorButton(registry, "collection:refresh", "", icon = Icons.Outlined.Refresh, contentDescription = "刷新", flat = true, onClick = { vm.refresh(page.collection) })
+                if (playable) {
+                    ThorButton(registry, "collection:shuffle", "随机播放", Modifier.widthIn(min = 96.dp), enabled = tracks.isNotEmpty(),
+                        onClick = { vm.play(tracks, tracks.indices.random(), page.collection.title, shuffle = true) })
+                    ThorButton(registry, "collection:play", "播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = tracks.isNotEmpty(),
+                        onClick = { vm.play(tracks, 0, page.collection.title, shuffle = false) })
+                }
+            }
+        }
+        is ThorPage.Detail -> {
+            val item = page.item
+            Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                ThorButton(registry, "detail:more", "", icon = Icons.Outlined.MoreHoriz, flat = true, contentDescription = "更多操作", onClick = {
+                    val bounds = registry.current?.bounds
+                    vm.openMenu(ThorMenuSubject(item, "detail:more"), ThorMenuAnchor(bounds?.left ?: 30f, bounds?.bottom ?: 100f))
+                })
+                ThorButton(registry, "detail:shuffle", "随机播放", Modifier.widthIn(min = 96.dp), enabled = item.tracks.isNotEmpty(),
+                    onClick = { vm.play(item.tracks, item.tracks.indices.random(), item.title, shuffle = true) })
+                ThorButton(registry, "detail:play", "播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = item.tracks.isNotEmpty(),
+                    onClick = { vm.play(item.tracks, 0, item.title) })
+            }
+        }
+        else -> Unit
+    }
+}
+
+private fun destinationIcon(item: ThorItem) = (item.key as? ThorItemKey.Destination)?.id?.let { id ->
+    when (id) {
+        "LikedSongs" -> Icons.Outlined.FavoriteBorder
+        "CollectedAlbums", "SavedPlaylists" -> Icons.Outlined.BookmarkBorder
+        "OwnedPlaylists" -> Icons.Outlined.QueueMusic
+        "LocalSongs", "LocalAlbums" -> Icons.Outlined.FolderOpen
+        "Downloads" -> Icons.Outlined.Download
+        "History" -> Icons.Outlined.History
+        "account" -> Icons.Outlined.AccountCircle.takeIf { item.artworkUri.isNullOrBlank() }
+        "bindings" -> Icons.Outlined.Link
+        "appearance" -> Icons.Outlined.Palette
+        "controls" -> Icons.Outlined.Gamepad
+        "play" -> Icons.Outlined.Settings
+        "about" -> Icons.Outlined.Info
+        else -> Icons.Outlined.MusicNote
+    }
+}
+
+@Composable
+private fun ThorThemeSample(registry: ThorFocusRegistry, pack: ThorThemePack, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val current = LocalThorTheme.current
+    val sample = remember(pack, current.isDark, current.reduceMotion, current.reduceTransparency) {
+        thorThemeTokens(pack, current.isDark, current.reduceMotion, current.reduceTransparency)
+    }
+    val key = "theme:${pack.name}"
+    CompositionLocalProvider(LocalThorTheme provides sample) {
+        ThorActionButton(
+            onClick = { if (!registry.blocked) { registry.select(key); onClick() } },
+            modifier = modifier.heightIn(min = 100.dp).thorFocus(registry, key, onClick = onClick),
+            selected = selected, focused = registry.selectedKey == key, role = ThorSurfaceRole.Panel,
+            contentPadding = PaddingValues(8.dp),
+        ) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().height(42.dp).thorMaterial(ThorSurfaceRole.Deck).padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(25.dp).thorMaterial(ThorSurfaceRole.Primary), contentAlignment = Alignment.Center) {
+                        Icon(thorLineIcon(Icons.Outlined.PlayArrow), null, Modifier.size(14.dp), tint = sample.onAccent)
+                    }
+                    Box(Modifier.weight(1f).height(5.dp).thorMaterial(ThorSurfaceRole.ProgressTrack))
+                }
+                Text(pack.title, color = sample.text, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            }
+        }
     }
 }
 
@@ -44,6 +173,11 @@ internal fun ThorBrowseList(
     modifier: Modifier = Modifier, sourcePlaylist: ThorItemKey.Playlist? = null,
     onItem: ((ThorItem, Int) -> Unit)? = null,
 ) {
+    val library by vm.library.collectAsStateWithLifecycle()
+    val localLikes = remember(library[ThorCollection.LikedSongs]) { library[ThorCollection.LikedSongs].map { it.key }.toSet() }
+    val collected = remember(library[ThorCollection.CollectedAlbums], library[ThorCollection.SavedPlaylists]) {
+        (library[ThorCollection.CollectedAlbums] + library[ThorCollection.SavedPlaylists]).map { it.key }.toSet()
+    }
     val listState = rememberLazyListState()
     val keys = remember(scene, items) {
         val occurrences = mutableMapOf<String, Int>()
@@ -63,13 +197,19 @@ internal fun ThorBrowseList(
             else -> vm.open(item)
         }
     }
-    LazyColumn(modifier.fillMaxWidth(), state = listState, verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(vertical = 3.dp)) {
+    LazyColumn(modifier.fillMaxWidth().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp)) {
         itemsIndexed(items, key = { index, _ -> keys[index] }) { index, item ->
             ThorMusicRow(registry, keys[index], item,
                 trailing = item.trackCount?.let { "$it" },
                 onClick = { focus.activate(index) },
                 onMenu = { anchor -> focus.onFocused(index); vm.openMenu(ThorMenuSubject(item, keys[index], sourcePlaylist), anchor) },
                 onFocused = { focus.onFocused(index) },
+                leadingIcon = destinationIcon(item),
+                mark = when (val key = item.key) {
+                    is ThorItemKey.Song -> if (if (key.local) key in localLikes else library.songLikes[key.id] == true) Icons.Outlined.Favorite else null
+                    is ThorItemKey.Album, is ThorItemKey.Playlist -> if (item.key in collected) Icons.Outlined.Bookmark else null
+                    else -> null
+                },
             )
         }
     }
@@ -96,7 +236,7 @@ internal fun ThorBrowsePage(
                     if (items.isEmpty()) ThorEmptyState(vm, registry, library.errors[collection] ?: if (collection in library.loading) "正在加载" else "还没有内容",
                         if (collection in library.loading) null else "刷新", { vm.refresh(collection) }, Modifier.weight(1f), collection in library.loading)
                     else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         ThorButton(registry, "root:local", "本地音乐", modifier = Modifier.weight(1f), icon = Icons.Outlined.FolderOpen, onClick = { vm.openCollection(ThorCollection.LocalSongs) })
                         ThorButton(registry, "root:refresh", "刷新", icon = Icons.Outlined.Refresh, onClick = { vm.refresh(collection) })
                     }
@@ -106,7 +246,8 @@ internal fun ThorBrowsePage(
         is ThorPage.Collection -> Column(Modifier.fillMaxSize()) {
             val items = library[page.collection]
             val songList = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History)
-            ThorPageHeader(registry, page.collection.title, items.size, onBack = onBack, countUnit = if (songList) "首" else "项")
+            if (page.collection in libraryHeaderCollections) ThorCollectionHeader(vm, registry, page.collection, items.size, onBack)
+            else ThorPageHeader(registry, page.collection.title, items.size, onBack = onBack, countUnit = if (songList) "首" else if (page.collection == ThorCollection.LocalAlbums) "张" else "个")
             if (items.isEmpty()) {
                 val busy = page.collection in library.loading
                 val local = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums)
@@ -115,18 +256,6 @@ internal fun ThorBrowsePage(
                         if (local) onLegacyRoute("local_music") else vm.refresh(page.collection)
                     }, Modifier.weight(1f), busy)
             } else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.weight(1f))
-                if (songList) {
-                    val tracks = items.flatMap { it.tracks }
-                    ThorButton(registry, "collection:play", "播放全部", icon = Icons.Outlined.PlayArrow, primary = true, enabled = tracks.isNotEmpty(), onClick = { vm.play(tracks, 0, page.collection.title, shuffle = false) })
-                    ThorButton(registry, "collection:shuffle", "随机播放", icon = Icons.Outlined.Shuffle, enabled = tracks.isNotEmpty(), onClick = { vm.play(tracks, tracks.indices.random(), page.collection.title, shuffle = true) })
-                }
-                if (page.collection == ThorCollection.OwnedPlaylists) ThorButton(registry, "collection:create", "新建歌单", icon = Icons.Outlined.Add, onClick = vm::createPlaylist)
-                if (page.collection == ThorCollection.Downloads) ThorButton(registry, "collection:downloads", "管理下载", onClick = { onLegacyRoute("download_manage") })
-                if (page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums)) ThorButton(registry, "collection:scan", if (isScanning) "停止扫描" else "扫描", onClick = { onLegacyRoute("local_music") })
-                ThorButton(registry, "collection:refresh", "", icon = Icons.Outlined.Refresh, contentDescription = "刷新", onClick = { vm.refresh(page.collection) })
-            }
         }
         is ThorPage.Detail -> Column(Modifier.fillMaxSize()) {
             val item = page.item
@@ -135,11 +264,6 @@ internal fun ThorBrowsePage(
             else ThorBrowseList(vm, registry, page.key, item.tracks.map { it.toThorItem() }, Modifier.weight(1f),
                 sourcePlaylist = (item.key as? ThorItemKey.Playlist)?.takeIf { item.owned },
                 onItem = { _, index -> vm.play(item.tracks, index, item.title) })
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Spacer(Modifier.weight(1f))
-                ThorButton(registry, "detail:play", "播放全部", icon = Icons.Outlined.PlayArrow, primary = true, enabled = item.tracks.isNotEmpty(), onClick = { vm.play(item.tracks, 0, item.title) })
-                ThorButton(registry, "detail:more", "更多", icon = Icons.Outlined.MoreHoriz, onClick = { vm.openMenu(ThorMenuSubject(item, "detail:more"), ThorMenuAnchor(30f, 100f)) })
-            }
         }
         ThorPage.Search -> ThorSearchPage(vm, registry, onBack)
         ThorPage.Appearance -> ThorAppearancePage(vm, registry, onBack)
@@ -157,16 +281,17 @@ private fun ThorLibraryPage(vm: ThorShellViewModel, registry: ThorFocusRegistry,
         else -> listOf(ThorCollection.LikedSongs, ThorCollection.LocalSongs, ThorCollection.Downloads, ThorCollection.History)
     }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 49.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("音乐库", Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            listOf("歌曲", "专辑", "歌单").forEachIndexed { index, title ->
-                ThorButton(registry, "library:category:$index", title, selected = category == index, onClick = { category = index })
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).thorMaterial(ThorSurfaceRole.Header).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("音乐库", Modifier.weight(1f), color = LocalThorTheme.current.secondary, fontSize = 14.sp)
+            listOf("专辑" to 1, "歌曲" to 0, "歌单" to 2).forEach { (title, index) ->
+                ThorCategoryButton(registry, "library:category:$index", title, selected = category == index, onClick = { category = index })
             }
+            ThorButton(registry, "header:search", "", icon = Icons.Outlined.Search, flat = true, contentDescription = "搜索", onClick = { vm.push(ThorPage.Search) })
         }
         ThorBrowseList(vm, registry, "library:$category", collections.map { collection ->
             ThorItem(ThorItemKey.Destination(collection.name), collection.title, "${library[collection].size} ${if (category == 0) "首" else "项"}", library[collection].firstOrNull()?.artworkUri)
         }, Modifier.weight(1f), onItem = { item, _ -> vm.openCollection(ThorCollection.valueOf((item.key as ThorItemKey.Destination).id)) })
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
             if (category == 2) ThorButton(registry, "library:create", "新建歌单", icon = Icons.Outlined.Add, onClick = vm::createPlaylist)
             else ThorButton(registry, "library:import", if (isScanning) "停止扫描" else "导入音乐", icon = Icons.Outlined.FolderOpen, onClick = { onLegacyRoute("local_music") })
         }
@@ -186,7 +311,7 @@ private fun ThorMyPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, libr
         ThorItem(ThorItemKey.Destination("about"), "关于"),
     )
     Column(Modifier.fillMaxSize()) {
-        ThorPageHeader(registry, "我的")
+        ThorPageHeader(registry, "我的", onSearch = { vm.push(ThorPage.Search) })
         ThorBrowseList(vm, registry, "my", items, Modifier.weight(1f), onItem = { item, _ ->
             when ((item.key as ThorItemKey.Destination).id) {
                 "appearance" -> vm.push(ThorPage.Appearance)
@@ -204,13 +329,19 @@ private fun ThorMyPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, libr
 @Composable
 private fun ThorSearchPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit) {
     val search by vm.search.collectAsStateWithLifecycle()
+    var fieldFocused by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "搜索", onBack = onBack)
-        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                search.query, vm::setSearchQuery, Modifier.weight(1f).onFocusChanged { vm.textEditing.value = it.isFocused },
-                singleLine = true, label = { Text("歌曲、专辑、歌单") },
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BasicTextField(
+                search.query, vm::setSearchQuery, Modifier.weight(1f).heightIn(min = 48.dp)
+                    .onFocusChanged { fieldFocused = it.isFocused; vm.textEditing.value = it.isFocused }
+                    .semantics { contentDescription = "搜索音乐" }
+                    .thorMaterial(ThorSurfaceRole.Inset, focused = fieldFocused).padding(horizontal = 12.dp, vertical = 12.dp),
+                singleLine = true, textStyle = TextStyle(color = LocalThorTheme.current.text, fontSize = 14.sp, lineHeight = 20.sp),
+                cursorBrush = SolidColor(LocalThorTheme.current.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { vm.search() }),
+                decorationBox = { field -> Box { if (search.query.isEmpty()) Text("歌曲、专辑、歌单", color = LocalThorTheme.current.secondary, fontSize = 14.sp); field() } },
             )
             ThorButton(registry, "search:submit", "搜索", primary = true, onClick = vm::search)
         }
@@ -227,17 +358,28 @@ private fun ThorAppearancePage(vm: ThorShellViewModel, registry: ThorFocusRegist
     val preferences by vm.preferences.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "主题与外观", onBack = onBack)
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-            item { Text("材质", color = LocalThorTheme.current.secondary, fontSize = 12.sp) }
-            item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { ThorThemePack.entries.forEach { pack ->
-                ThorButton(registry, "theme:${pack.name}", pack.title, Modifier.weight(1f), selected = preferences.theme == pack, onClick = { vm.updatePreferences { it.copy(theme = pack) } })
-            } } }
-            item { Text("显示模式", color = LocalThorTheme.current.secondary, fontSize = 12.sp) }
-            item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { ThorAppearance.entries.forEach { appearance ->
-                ThorButton(registry, "appearance:${appearance.name}", appearance.title, Modifier.weight(1f), selected = preferences.appearance == appearance, onClick = { vm.updatePreferences { it.copy(appearance = appearance) } })
-            } } }
-            item { ThorButton(registry, "appearance:motion", "减少动态 · ${if (preferences.reduceMotion) "开启" else "关闭"}", Modifier.fillMaxWidth(), selected = preferences.reduceMotion, onClick = { vm.updatePreferences { it.copy(reduceMotion = !it.reduceMotion) } }) }
-            item { ThorButton(registry, "appearance:transparency", "减少透明 · ${if (preferences.reduceTransparency) "开启" else "关闭"}", Modifier.fillMaxWidth(), selected = preferences.reduceTransparency, onClick = { vm.updatePreferences { it.copy(reduceTransparency = !it.reduceTransparency) } }) }
+        // A small fixed set stays composed, so native focus can reach its controls while scrolling.
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("材质", color = LocalThorTheme.current.secondary, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThorThemePack.entries.forEach { pack ->
+                    ThorThemeSample(registry, pack, preferences.theme == pack, Modifier.weight(1f),
+                        onClick = { vm.updatePreferences { it.copy(theme = pack) } })
+                }
+            }
+            Text("显示模式", color = LocalThorTheme.current.secondary, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThorAppearance.entries.forEach { appearance ->
+                    ThorButton(registry, "appearance:${appearance.name}", appearance.title, Modifier.weight(1f),
+                        selected = preferences.appearance == appearance,
+                        onClick = { vm.updatePreferences { it.copy(appearance = appearance) } })
+                }
+            }
+            ThorButton(registry, "appearance:motion", "减少动态 · ${if (preferences.reduceMotion) "开启" else "关闭"}", Modifier.fillMaxWidth(),
+                selected = preferences.reduceMotion, onClick = { vm.updatePreferences { it.copy(reduceMotion = !it.reduceMotion) } })
+            ThorButton(registry, "appearance:transparency", "减少透明 · ${if (preferences.reduceTransparency) "开启" else "关闭"}", Modifier.fillMaxWidth(),
+                selected = preferences.reduceTransparency, onClick = { vm.updatePreferences { it.copy(reduceTransparency = !it.reduceTransparency) } })
         }
     }
 }
@@ -248,7 +390,7 @@ private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry
     val preferences by vm.preferences.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "手柄与吹气", onBack = onBack)
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 5.dp)) {
+        LazyColumn(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 5.dp)) {
             item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThorButton(registry, "controls:airflow", "吹气 · ${if (preferences.airflowEnabled) "开启" else "关闭"}", Modifier.weight(1f), selected = preferences.airflowEnabled, onClick = { onRequestAirflow(!preferences.airflowEnabled) })
                 ThorButton(registry, "controls:calibrate", "校准", enabled = preferences.airflowEnabled, onClick = onCalibrateAirflow)

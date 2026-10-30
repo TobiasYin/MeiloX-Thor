@@ -115,7 +115,8 @@ class ThorMenuInputInstrumentedTest {
         val expected = "ThorQA20261030Renamed"
         expected.forEach { compose.onNode(hasSetTextAction()).performTextInput(it.toString()) }
         compose.onNode(hasSetTextAction()).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(expected)))
-        compose.onNodeWithText("保存").performScrollTo().performClick()
+        // The approved popover keeps its action footer fixed below the scrolling field body.
+        compose.onNodeWithText("保存").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(expected, latestName); assertEquals(expected, savedName) }
     }
 

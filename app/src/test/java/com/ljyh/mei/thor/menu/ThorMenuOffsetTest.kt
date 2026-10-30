@@ -6,7 +6,12 @@ import org.junit.Test
 
 class ThorMenuOffsetTest {
     @Test fun bottomRightAnchorsFlipAboveAndLeftWithoutChangingTheAnchor() {
-        assertEquals(IntOffset(220, 80), thorMenuOffset(500f, 440f, 538f, 468f, 280f, 360f, 12f))
+        assertEquals(IntOffset(208, 68), thorMenuOffset(500f, 440f, 538f, 468f, 280f, 360f, 12f))
+    }
+
+    @Test fun ordinaryTouchesKeepTheDesignedGapAndPreferAbove() {
+        assertEquals(IntOffset(42, 88), thorMenuOffset(30f, 300f, 538f, 468f, 280f, 200f, 12f))
+        assertEquals(IntOffset(42, 32), thorMenuOffset(30f, 20f, 538f, 468f, 280f, 200f, 12f))
     }
 
     @Test fun offscreenAndInvalidAnchorsStayInsideTheLowerWindow() {
@@ -20,8 +25,8 @@ class ThorMenuOffsetTest {
 
     @Test fun laterLongSubmenusGrowOnlyInsideTheSpaceBelowTheCachedAnchor() {
         val placement = thorMenuPlacement(500f, 440f, 538f, 468f, 280f, 301f, 360f, 12f)
-        assertEquals(IntOffset(220, 139), placement.offset)
-        assertEquals(317f, placement.maxHeight, 0f)
+        assertEquals(IntOffset(208, 127), placement.offset)
+        assertEquals(329f, placement.maxHeight, 0f)
         assertEquals(456f, placement.offset.y + placement.maxHeight, 0f)
     }
 

@@ -56,7 +56,7 @@ fun BindThorListFocus(
     var focusJob by remember(scene) { mutableStateOf<Job?>(null) }
     val currentKeys by rememberUpdatedState(keys)
     val keyPositions = remember(keys) { keys.withIndex().associate { it.value to it.index } }
-    val fallbackRowHeightPx = with(LocalDensity.current) { 62.dp.roundToPx() }
+    val fallbackRowHeightPx = with(LocalDensity.current) { 56.dp.roundToPx() }
 
     fun rememberSelection(index: Int) {
         val key = keys.getOrNull(index) ?: return

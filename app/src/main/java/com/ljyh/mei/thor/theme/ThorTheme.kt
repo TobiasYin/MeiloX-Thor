@@ -71,14 +71,22 @@ data class ThorThemeTokens(
     val glintAngle: Float,
     val reduceMotion: Boolean = false,
     val reduceTransparency: Boolean = false,
+    val bezel: Color = surface,
+    val typography: ThorTypographyTokens = ThorTypographyTokens(),
 ) {
     val success: Color get() = accent
     val warning: Color get() = if (isDark) Color(0xFFF4C36B) else Color(0xFF815000)
     val error: Color get() = if (isDark) Color(0xFFFFB4AB) else Color(0xFFA82C25)
     val onError: Color get() = if (isDark) Color(0xFF561B16) else Color.White
-    val scrim: Color get() = background.copy(alpha = .72f)
+    val scrim: Color get() = background.copy(alpha = .58f)
     val disabledText: Color get() = secondary
     val overlay: Color get() = surface
+    val pressMs: Int get() = if (reduceMotion) 0 else 120
+    val surfaceMs: Int get() = if (reduceMotion) 0 else 180
+    val caseMs: Int get() = if (reduceMotion) 0 else 320
+    val menuEnterMs: Int get() = if (reduceMotion) 0 else 170
+    val disabledOpacity: Float get() = .45f
+    val selectionStroke: Dp get() = 1.5.dp
 }
 
 val LocalThorTheme = staticCompositionLocalOf { thorThemeTokens(ThorThemePack.Ceramic, false) }
@@ -126,6 +134,7 @@ fun thorThemeTokens(
                 caseSpineDark = Color(0xFF3A5D4C),
                 caseText = Color(0xFF12291E),
                 caseShadow = Color(0x5C000A08),
+                bezel = Color(0xFF303A32),
                 pack = ThorThemePack.Ceramic, isDark = true,
                 controlRadius = 12.dp, cardRadius = 14.dp, smallRadius = 6.dp, deckRadius = 24.dp,
                 shadowBlur = 12.dp, shadowLift = 4.dp, glintAngle = 155f,
@@ -165,6 +174,7 @@ fun thorThemeTokens(
                 caseSpineDark = Color(0xFF8FA9A0),
                 caseText = Color(0xFF253B32),
                 caseShadow = Color(0x351A342E),
+                bezel = Color(0xFFD8DCD4),
                 pack = ThorThemePack.Ceramic, isDark = false,
                 controlRadius = 12.dp, cardRadius = 14.dp, smallRadius = 6.dp, deckRadius = 24.dp,
                 shadowBlur = 12.dp, shadowLift = 4.dp, glintAngle = 155f,
@@ -194,7 +204,7 @@ fun thorThemeTokens(
                 shadow = Color(0x47040B23),
                 primaryHighlight = Color(0xB3F1F6FF),
                 primaryLowlight = Color(0x4D2A4773),
-                paneGlint = Color(0x13BDD3FF),
+                paneGlint = Color(0x26BDD3FF),
                 grain = Color(0x04D3E2FF),
                 ambient = Color(0xFF243C63),
                 caseEdge = Color(0xD4BED0F5),
@@ -205,6 +215,7 @@ fun thorThemeTokens(
                 caseSpineDark = Color(0xFF35517B),
                 caseText = Color(0xFF152440),
                 caseShadow = Color(0x6602071A),
+                bezel = Color(0xFF303C54),
                 pack = ThorThemePack.Glass, isDark = true,
                 controlRadius = 14.dp, cardRadius = 16.dp, smallRadius = 8.dp, deckRadius = 26.dp,
                 shadowBlur = 16.dp, shadowLift = 5.dp, glintAngle = 118f,
@@ -244,6 +255,7 @@ fun thorThemeTokens(
                 caseSpineDark = Color(0xFF869FBD),
                 caseText = Color(0xFF25384F),
                 caseShadow = Color(0x381A2A53),
+                bezel = Color(0xFFD4DCE9),
                 pack = ThorThemePack.Glass, isDark = false,
                 controlRadius = 14.dp, cardRadius = 16.dp, smallRadius = 8.dp, deckRadius = 26.dp,
                 shadowBlur = 16.dp, shadowLift = 5.dp, glintAngle = 118f,
@@ -273,7 +285,7 @@ fun thorThemeTokens(
                 shadow = Color(0x52020400),
                 primaryHighlight = Color(0xBFFFF7E1),
                 primaryLowlight = Color(0x4D6B4915),
-                paneGlint = Color(0x0AFFF3CA),
+                paneGlint = Color(0x17FFF3CA),
                 grain = Color(0x09F0E4BF),
                 ambient = Color(0xFF493F2B),
                 caseEdge = Color(0xD4D9D7BE),
@@ -284,6 +296,7 @@ fun thorThemeTokens(
                 caseSpineDark = Color(0xFF5C6141),
                 caseText = Color(0xFF252B14),
                 caseShadow = Color(0x73000400),
+                bezel = Color(0xFF3D4034),
                 pack = ThorThemePack.Titanium, isDark = true,
                 controlRadius = 8.dp, cardRadius = 10.dp, smallRadius = 4.dp, deckRadius = 18.dp,
                 shadowBlur = 8.dp, shadowLift = 3.dp, glintAngle = 175f,
@@ -323,6 +336,7 @@ fun thorThemeTokens(
                 caseSpineDark = Color(0xFF99967F),
                 caseText = Color(0xFF383524),
                 caseShadow = Color(0x4731291B),
+                bezel = Color(0xFFC8C5BC),
                 pack = ThorThemePack.Titanium, isDark = false,
                 controlRadius = 8.dp, cardRadius = 10.dp, smallRadius = 4.dp, deckRadius = 18.dp,
                 shadowBlur = 8.dp, shadowLift = 3.dp, glintAngle = 175f,
@@ -334,18 +348,33 @@ fun thorThemeTokens(
         reduceTransparency = reduceTransparency,
         paneGlint = if (reduceTransparency) Color.Transparent else tokens.paneGlint,
         grain = if (reduceTransparency) Color.Transparent else tokens.grain,
+        caseReflection = if (reduceTransparency) Color.Transparent else tokens.caseReflection,
     )
 }
 
+@Immutable
+data class ThorTypographyTokens(
+    val display: androidx.compose.ui.unit.TextUnit = 38.sp,
+    val pageTitle: androidx.compose.ui.unit.TextUnit = 20.sp,
+    val playerTitle: androidx.compose.ui.unit.TextUnit = 24.sp,
+    val body: androidx.compose.ui.unit.TextUnit = 16.sp,
+    val secondary: androidx.compose.ui.unit.TextUnit = 12.sp,
+    val control: androidx.compose.ui.unit.TextUnit = 14.sp,
+    val caption: androidx.compose.ui.unit.TextUnit = 11.sp,
+    val lyricCurrent: androidx.compose.ui.unit.TextUnit = 28.sp,
+    val lyricAdjacent: androidx.compose.ui.unit.TextUnit = 19.sp,
+    val lyricTranslation: androidx.compose.ui.unit.TextUnit = 14.sp,
+)
+
 private val ThorTypography = Typography(
-    displaySmall = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 36.sp, lineHeight = 42.sp, fontWeight = FontWeight.Medium),
+    displaySmall = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 38.sp, lineHeight = 46.sp, fontWeight = FontWeight.Medium),
     headlineMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
     titleLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Medium),
     titleMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Medium),
-    bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 16.sp, lineHeight = 23.sp),
+    bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 16.sp, lineHeight = 23.sp, fontWeight = FontWeight.Medium),
     bodyMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, lineHeight = 21.sp),
     bodySmall = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 12.sp, lineHeight = 18.sp),
-    labelLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+    labelLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
     labelMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 12.sp, lineHeight = 18.sp),
     labelSmall = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 11.sp, lineHeight = 16.sp),
 )
@@ -357,11 +386,12 @@ fun ThorTheme(preferences: ThorPreferences, content: @Composable () -> Unit) {
         ThorAppearance.Day -> false
         ThorAppearance.Night -> true
     }
-    val tokens = remember(preferences.theme, dark, preferences.reduceMotion, preferences.reduceTransparency) {
+    val target = remember(preferences.theme, dark, preferences.reduceMotion, preferences.reduceTransparency) {
         thorThemeTokens(preferences.theme, dark, preferences.reduceMotion, preferences.reduceTransparency)
     }
+    val tokens = animatedThorTheme(target)
     val colors = remember(tokens) {
-        val base = if (dark) darkColorScheme() else lightColorScheme()
+        val base = if (tokens.isDark) darkColorScheme() else lightColorScheme()
         base.copy(
             primary = tokens.accent, onPrimary = tokens.onAccent,
             primaryContainer = tokens.selected, onPrimaryContainer = tokens.selectedText,

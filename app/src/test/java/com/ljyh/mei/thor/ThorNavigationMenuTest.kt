@@ -34,6 +34,17 @@ class ThorNavigationMenuTest {
         assertEquals(ThorPage.Root(ThorTab.Library), my.switchTab(-1).page)
     }
 
+    @Test fun siblingCollectionTabsDoNotAddBackStepsOrDiscardOtherTabState() {
+        val homeDetail = ThorItem(ThorItemKey.Album(71), "首页专辑")
+        val start = ThorNavigation().push(ThorPage.Detail(homeDetail)).copy(tab = ThorTab.Library)
+            .push(ThorPage.Collection(ThorCollection.CollectedAlbums))
+        val changed = start.replaceCollection(ThorCollection.LikedSongs)
+            .replaceCollection(ThorCollection.OwnedPlaylists)
+        assertEquals(2, changed.stacks[ThorTab.Library]?.size)
+        assertEquals(ThorPage.Root(ThorTab.Library), changed.back()?.page)
+        assertEquals(ThorPage.Detail(homeDetail), changed.copy(tab = ThorTab.Home).page)
+    }
+
     @Test fun repeatedSongsAndCrossSourceIdsRemainDistinct() {
         assertNotEquals(ThorItemKey.Song(7, true), ThorItemKey.Song(7, false))
         assertNotEquals(ThorItemKey.Album(7, true).stableId, ThorItemKey.Album(7, false).stableId)

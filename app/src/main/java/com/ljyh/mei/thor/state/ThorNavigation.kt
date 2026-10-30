@@ -38,6 +38,13 @@ data class ThorNavigation(
         return copy(stacks = stacks + (tab to stack.map { if (it is ThorPage.Detail && it.item.key == item.key) ThorPage.Detail(item) else it }))
     }
 
+    /** Sibling library categories share a header and a single back-stack level. */
+    fun replaceCollection(collection: ThorCollection): ThorNavigation {
+        if (page !is ThorPage.Collection) return push(ThorPage.Collection(collection))
+        val stack = stacks[tab].orEmpty()
+        return copy(stacks = stacks + (tab to (stack.dropLast(1) + ThorPage.Collection(collection))))
+    }
+
     /** Shoulder navigation never escapes an immersive child page. */
     fun switchTab(delta: Int): ThorNavigation {
         if (!isRoot) return this

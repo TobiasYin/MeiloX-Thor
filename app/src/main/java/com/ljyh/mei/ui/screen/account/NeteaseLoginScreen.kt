@@ -38,6 +38,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.setValue
@@ -72,6 +76,10 @@ import com.ljyh.mei.data.repository.MeloXRepository
 import com.ljyh.mei.data.network.clearNeteaseAccountSession
 import com.ljyh.mei.data.network.setNeteaseWebSession
 import com.ljyh.mei.thor.ThorActivity
+import com.ljyh.mei.thor.components.ThorActionButton
+import com.ljyh.mei.thor.components.ThorSurfaceRole
+import com.ljyh.mei.thor.theme.LocalThorLegacyMode
+import com.ljyh.mei.thor.ui.thorLineIcon
 import io.github.neoruaa.glasmio.ui.GlasmioButton
 import io.github.neoruaa.glasmio.ui.GlasmioIconButton
 import io.github.neoruaa.glasmio.glass.GlassEmphasis
@@ -110,7 +118,7 @@ fun NeteaseLoginScreen(viewModel: NeteaseLoginViewModel = hiltViewModel()) {
     val navController = LocalNavController.current
     var showMobileLoginSheet by remember { mutableStateOf(false) }
     val legacyRoute = LocalActivity.current?.intent?.getStringExtra(ThorActivity.LEGACY_ROUTE)
-    val compactThorLayout = legacyRoute != null && legacyRoute in ThorActivity.LegacyRoutes
+    val compactThorLayout = LocalThorLegacyMode.current || (legacyRoute != null && legacyRoute in ThorActivity.LegacyRoutes)
     val bottomPadding = LocalPlayerAwareWindowInsets.current
         .asPaddingValues()
         .calculateBottomPadding()
@@ -119,6 +127,7 @@ fun NeteaseLoginScreen(viewModel: NeteaseLoginViewModel = hiltViewModel()) {
             onMobileLogin = { showMobileLoginSheet = true },
             onWebLogin = { Screen.NeteaseWebLogin.navigate(navController) },
             size = if (compactThorLayout) GlasmioButtonSize.Large else null,
+            thorLayout = compactThorLayout,
         )
     }
 
@@ -131,16 +140,16 @@ fun NeteaseLoginScreen(viewModel: NeteaseLoginViewModel = hiltViewModel()) {
         ) {
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                GlasmioIconButton(
+                ThorActionButton(
                     onClick = navController::navigateUp,
                     modifier = Modifier.size(48.dp),
-                    size = 48.dp,
-                    style = GlassSurfaceStyle.Navigation,
-                ) { SfIcon("chevron.left", stringResource(R.string.navigation_back), size = 20.dp) }
+                    role = ThorSurfaceRole.Flat,
+                    contentPadding = PaddingValues(0.dp),
+                ) { Icon(thorLineIcon(Icons.Outlined.ChevronLeft), stringResource(R.string.navigation_back), Modifier.size(16.dp)) }
                 Text(
                     stringResource(R.string.netease_login),
                     modifier = Modifier.weight(1f),
-                    style = IosTypography.title3,
+                    style = MaterialTheme.typography.titleMedium,
                     color = LocalGlassColors.current.content,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -193,7 +202,19 @@ private fun NeteaseLoginChoiceButtons(
     onMobileLogin: () -> Unit,
     onWebLogin: () -> Unit,
     size: GlasmioButtonSize? = null,
+    thorLayout: Boolean = false,
 ) {
+    if (thorLayout) {
+        ThorActionButton(onClick = onMobileLogin, modifier = Modifier.fillMaxWidth(), primary = true) {
+            Text(stringResource(R.string.netease_mobile_login))
+        }
+        ThorActionButton(onClick = onWebLogin, modifier = Modifier.fillMaxWidth()) {
+            SfIcon("globe", null, size = 19.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.netease_web_login))
+        }
+        return
+    }
     GlasmioButton(
         onClick = onMobileLogin,
         modifier = Modifier.fillMaxWidth(),

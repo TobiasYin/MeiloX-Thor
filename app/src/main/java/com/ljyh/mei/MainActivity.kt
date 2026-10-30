@@ -238,7 +238,12 @@ import com.ljyh.mei.ui.screen.search.SearchScreen
 import com.ljyh.mei.ui.navigation.MeiNavEntryViewModelStoreOwner
 import com.ljyh.mei.ui.navigation.MeiNavigator
 import com.ljyh.mei.ui.navigation.MeiRoute
-import com.ljyh.mei.ui.theme.MusicTheme
+import com.ljyh.mei.thor.model.ThorPreferences
+import com.ljyh.mei.thor.theme.LocalThorTheme
+import com.ljyh.mei.thor.theme.ThorLegacyTheme
+import com.ljyh.mei.thor.theme.decodeThorPreferences
+import com.ljyh.mei.thor.theme.thorLegacyGlassAppearance
+import com.ljyh.mei.thor.theme.thorLegacyGlassColors
 import com.ljyh.mei.ui.theme.LocalAccentSeedColor
 import com.ljyh.mei.utils.log.CrashHandler
 import com.ljyh.mei.utils.cache.preloadImage
@@ -352,6 +357,10 @@ class MainActivity : ComponentActivity() {
             val recognizeClipboardLinks by rememberPreference(RecognizeClipboardLinksKey, false)
             val navigationPreferences by context.dataStore.data
                 .collectAsState<Preferences, Preferences?>(initial = null)
+            val thorPreferences = remember(thorLegacyRoute, navigationPreferences) {
+                if (thorLegacyRoute != null) navigationPreferences?.let(::decodeThorPreferences) ?: ThorPreferences()
+                else null
+            }
             val colorfulPageBackgrounds = navigationPreferences?.let {
                 it[com.ljyh.mei.constants.ColorfulDetailBackgroundsKey] ?: true
             } ?: false
@@ -541,12 +550,13 @@ class MainActivity : ComponentActivity() {
             } else {
                 Color(accentColorArgb.toInt()).takeUnless { accentColorArgb == DefaultAccentColorArgb }
             }
-            MusicTheme(
+            ThorLegacyTheme(
+                preferences = thorPreferences,
                 seedColor = effectiveAccent,
                 isDark = effectiveDark,
                 dynamicAccent = dynamicTheme && targetThemeColor != null,
             ) {
-                val glassColors = defaultGlassColors(
+                val glassColors = if (thorPreferences != null) thorLegacyGlassColors(LocalThorTheme.current) else defaultGlassColors(
                     isDark = effectiveDark,
                     accent = MaterialTheme.colorScheme.primary,
                 )
@@ -574,9 +584,9 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalGlassBackdrop provides glassBackdrop,
                     LocalGlassColors provides glassColors,
-                    LocalGlassAppearance provides GlassAppearance(liquidGlassEnabled, reduceTransparency),
+                    LocalGlassAppearance provides if (thorPreferences != null) thorLegacyGlassAppearance(LocalThorTheme.current) else GlassAppearance(liquidGlassEnabled, reduceTransparency),
                     LocalBlurBackdrop provides bottomControlsBackdrop,
-                    LocalAccentSeedColor provides accentSeedColor,
+                    LocalAccentSeedColor provides accentSeedColor.takeIf { thorPreferences == null },
                     LocalPageAppearance provides registerPageAppearance,
                     LocalColorfulPageBackgrounds provides colorfulPageBackgrounds,
                 ) {

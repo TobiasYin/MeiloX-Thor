@@ -36,17 +36,18 @@ object CaseGeometry {
         Plane(CaseFace.Bottom, listOf(3, 2, 6, 7), CaseVector(0.0, -1.0, 0.0)),
     )
 
-    fun project(pose: CasePose): List<ProjectedCaseFace> {
+    fun project(pose: CasePose, cameraDistance: Double = CameraDistance, depth: Double = Depth): List<ProjectedCaseFace> {
         if (!pose.yawDegrees.isFinite() || !pose.pitchDegrees.isFinite() || !pose.rollDegrees.isFinite()) return emptyList()
+        if (!cameraDistance.isFinite() || !depth.isFinite() || depth <= 0 || cameraDistance <= 2 + depth) return emptyList()
         val transform = rotation(pose)
-        val vertices = points.map(transform)
+        val vertices = points.map { transform(it.copy(z = it.z * depth / Depth)) }
         return planes.mapNotNull { plane ->
             val normal = transform(plane.normal)
             val quad = plane.indices.map(vertices::get)
             val center = quad.reduce(CaseVector::plus) / 4.0
-            if (normal.dot(CaseVector(0.0, 0.0, CameraDistance) - center) <= .00001) return@mapNotNull null
+            if (normal.dot(CaseVector(0.0, 0.0, cameraDistance) - center) <= .00001) return@mapNotNull null
             val corners = quad.map { point ->
-                val perspective = CameraDistance / (CameraDistance - point.z)
+                val perspective = cameraDistance / (cameraDistance - point.z)
                 CasePoint(point.x * perspective, -point.y * perspective)
             }
             val area = corners.indices.sumOf { i ->
@@ -59,15 +60,17 @@ object CaseGeometry {
 
     private fun rotation(pose: CasePose): (CaseVector) -> CaseVector {
         val yaw = Math.toRadians(pose.yawDegrees % 360)
-        val pitch = Math.toRadians(pose.pitchDegrees)
-        val roll = Math.toRadians(pose.rollDegrees)
+        // CSS rotateX(...) rotateY(...) rotateZ(...) applies Z first, then Y, then X.
+        // Model Y points upward, so CSS's downward-Y X/Z rotations change sign here.
+        val pitch = Math.toRadians(-pose.pitchDegrees)
+        val roll = Math.toRadians(-pose.rollDegrees)
         val cy = cos(yaw); val sy = sin(yaw); val cx = cos(pitch); val sx = sin(pitch); val cz = cos(roll); val sz = sin(roll)
         return { p ->
-            val x = p.x * cy + p.z * sy
-            val z = -p.x * sy + p.z * cy
-            val y = p.y * cx - z * sx
-            val pitchedZ = p.y * sx + z * cx
-            CaseVector(x * cz - y * sz, x * sz + y * cz, pitchedZ)
+            val rolledX = p.x * cz - p.y * sz
+            val rolledY = p.x * sz + p.y * cz
+            val x = rolledX * cy + p.z * sy
+            val z = -rolledX * sy + p.z * cy
+            CaseVector(x, rolledY * cx - z * sx, rolledY * sx + z * cx)
         }
     }
 }

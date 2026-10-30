@@ -64,6 +64,7 @@ import io.github.neoruaa.glasmio.glass.render.Backdrop
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
 import com.ljyh.mei.R
+import com.ljyh.mei.thor.theme.LocalThorLegacyMode
 import com.ljyh.mei.constants.BottomBarHorizontalPadding
 import com.ljyh.mei.constants.MiniPlayerHeight
 import com.ljyh.mei.constants.MiniPlayerInlineHeight
@@ -156,7 +157,7 @@ fun MiniPlayer(
     onClick: () -> Unit,
     onCoverBoundsChanged: ((Rect) -> Unit)? = null,
 ) {
-    val appearance = LocalMiniPlayerAppearance.current
+    val appearance = if (LocalThorLegacyMode.current) null else LocalMiniPlayerAppearance.current
     if (appearance == null) {
         MiniPlayerContent(modifier, backdrop, compactProgress, onClick, onCoverBoundsChanged)
     } else {

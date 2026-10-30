@@ -2,6 +2,7 @@ package com.ljyh.mei.thor.menu
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -21,14 +22,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +47,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -57,12 +59,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
 import com.ljyh.mei.thor.ThorShellViewModel
+import com.ljyh.mei.thor.components.ThorActionButton
 import com.ljyh.mei.thor.components.ThorSurfaceRole
 import com.ljyh.mei.thor.components.thorMaterial
 import com.ljyh.mei.thor.model.ThorItemKey
 import com.ljyh.mei.thor.theme.LocalThorTheme
 import com.ljyh.mei.thor.ui.ThorButton
 import com.ljyh.mei.thor.ui.ThorCover
+import com.ljyh.mei.thor.ui.thorLineIcon
+import com.ljyh.mei.thor.ui.ThorDesignIcons
 import com.ljyh.mei.thor.ui.ThorFocusRegistry
 import com.ljyh.mei.thor.ui.thorFocus
 import kotlin.math.roundToInt
@@ -99,19 +104,20 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().imePadding().onGloballyPositioned { origin = it.boundsInRoot().topLeft }) {
-        val panelWidth = minOf(280.dp, (maxWidth - 24.dp).coerceAtLeast(1.dp))
+        val panelWidth = minOf(if (menu.subject.item.key is ThorItemKey.Destination) 380.dp else 300.dp, (maxWidth - 24.dp).coerceAtLeast(1.dp))
+        val viewportPanelHeight = (maxHeight - 24.dp).coerceAtLeast(1.dp)
         fun layerHeight(level: ThorMenuLevel) = when (level) {
-            ThorMenuLevel.Actions -> 49.dp + 12.dp + 48.dp * actions.size
-            ThorMenuLevel.Playlists -> 49.dp + 12.dp + 48.dp * (playlists.size + 1)
-            ThorMenuLevel.Name -> 201.dp
-            ThorMenuLevel.ConfirmDelete -> 237.dp
+            ThorMenuLevel.Actions -> 65.dp + 8.dp + 38.dp + 48.dp * actions.size
+            ThorMenuLevel.Playlists -> 65.dp + 8.dp + 38.dp + 48.dp * (playlists.size + 1)
+            ThorMenuLevel.Name -> 315.dp
+            ThorMenuLevel.ConfirmDelete -> 301.dp
         }
         // Reserve space once, without displaying empty rows. Later target refreshes may grow
         // within the remaining viewport, but must not move this menu away from its anchor.
         val reservedHeight = remember(subjectKey, menu.anchor) {
             maxOf(layerHeight(ThorMenuLevel.Actions), layerHeight(ThorMenuLevel.Playlists), layerHeight(ThorMenuLevel.Name),
                 if (menu.subject.item.owned && menu.subject.item.key is ThorItemKey.Playlist) layerHeight(ThorMenuLevel.ConfirmDelete) else 0.dp)
-                .coerceAtMost(360.dp)
+                .coerceAtMost(viewportPanelHeight)
         }
         val placement = remember(subjectKey, menu.anchor, constraints.maxWidth, constraints.maxHeight,
             origin, density.density, density.fontScale) {
@@ -119,40 +125,40 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                 menu.anchor.x - origin.x, menu.anchor.y - origin.y,
                 constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(),
                 with(density) { panelWidth.toPx() }, with(density) { reservedHeight.toPx() },
-                with(density) { 360.dp.toPx() }, with(density) { 12.dp.toPx() },
+                with(density) { viewportPanelHeight.toPx() }, with(density) { 12.dp.toPx() },
             )
         }
         val maxPanelHeight = with(density) { placement.maxHeight.toDp() }
-        val duration = if (theme.reduceMotion) 0 else 170
+        val duration = theme.menuEnterMs
+        val easing = CubicBezierEasing(.2f, .8f, .2f, 1f)
         val errorHeight = if (menuError == null) 0.dp else (13f + 16f * errorLines * density.fontScale).dp
         val animatedHeight by animateDpAsState(
             targetValue = minOf(layerHeight(menu.level) + errorHeight, maxPanelHeight),
-            animationSpec = tween(duration), label = "menu-height",
+            animationSpec = tween(duration, easing = easing), label = "menu-height",
         )
         // A shrinking IME viewport takes effect immediately, even mid-transition.
         val panelHeight = minOf(animatedHeight, maxPanelHeight)
-        Box(Modifier.fillMaxSize().background(theme.contact.copy(alpha = .22f))
+        Box(Modifier.fillMaxSize().background(theme.background.copy(alpha = .58f))
             .pointerInput(subjectKey, menu.busy) { detectTapGestures { if (!currentMenu.busy) vm.closeMenu() } })
         Column(
             Modifier.offset { placement.offset }.width(panelWidth).height(panelHeight)
-                .clip(RoundedCornerShape(theme.cardRadius))
-                .thorMaterial(ThorSurfaceRole.Raised)
+                .thorMaterial(ThorSurfaceRole.Overlay, cornerRadius = theme.cardRadius)
                 .semantics { paneTitle = title }
                 // Register a panel hit target so blank/header touches never pass to the scrim.
                 .pointerInput(subjectKey) {
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); waitForUpOrCancellation() }
                 },
         ) {
-            Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(enabled = !menu.busy, onClick = { keyboard?.hide(); vm.back() },
-                    modifier = Modifier.size(40.dp).thorFocus(registry, "menu:back", enabled = !menu.busy,
-                        onClick = { if (!currentMenu.busy) { keyboard?.hide(); vm.back() } })) {
-                    Icon(if (menu.level == ThorMenuLevel.Actions) Icons.Outlined.Close else Icons.Outlined.ArrowBack,
-                        if (menu.level == ThorMenuLevel.Actions) "关闭菜单" else "返回", Modifier.size(20.dp), tint = theme.text)
-                }
+            Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (menu.level != ThorMenuLevel.Actions) ThorButton(registry, "menu:back", "",
+                    icon = Icons.Outlined.ChevronLeft, flat = true, enabled = !menu.busy,
+                    contentDescription = "返回上级菜单", onClick = { keyboard?.hide(); vm.back() })
                 Text(title, Modifier.weight(1f).semantics { heading() }, color = theme.text,
-                    fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (menu.busy) CircularProgressIndicator(Modifier.padding(8.dp).size(18.dp), color = theme.accent, strokeWidth = 2.dp)
+                if (menu.level == ThorMenuLevel.Actions) ThorButton(registry, "menu:back", "",
+                    icon = Icons.Outlined.Close, flat = true, enabled = !menu.busy,
+                    contentDescription = "关闭菜单", onClick = { keyboard?.hide(); vm.back() })
             }
             HorizontalDivider(color = theme.outline)
             AnimatedContent(
@@ -160,11 +166,11 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 transitionSpec = {
                     val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                    (slideInHorizontally(tween(duration)) { direction * it } +
-                        fadeIn(tween(duration))) togetherWith
-                        (slideOutHorizontally(tween(duration)) { -direction * it } +
-                            fadeOut(tween(duration))) using SizeTransform(clip = true,
-                            sizeAnimationSpec = { _, _ -> tween(duration) })
+                    // The design moves only the incoming body 22dp, not an entire panel width.
+                    (slideInHorizontally(tween(duration, easing = easing)) { with(density) { 22.dp.roundToPx() } * direction } +
+                        fadeIn(tween(duration, easing = easing), initialAlpha = .45f)) togetherWith
+                        fadeOut(tween(0)) using SizeTransform(clip = true,
+                            sizeAnimationSpec = { _, _ -> tween(duration, easing = easing) })
                 },
                 label = "menu-level",
             ) { level ->
@@ -175,24 +181,30 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                         LaunchedEffect(menu.selection, interactive) {
                             if (interactive && actions.isNotEmpty()) {
                                 val selection = menu.selection.coerceIn(actions.indices)
-                                scroll.animateScrollToItem(selection)
+                                if (theme.reduceMotion) scroll.scrollToItem(selection) else scroll.animateScrollToItem(selection)
                                 withFrameNanos { }
                                 registry.request("menu:action:$selection")
                             }
                         }
-                        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(6.dp)) {
+                        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                             itemsIndexed(actions, key = { _, row -> row.action }) { index, row ->
                                 val activate = { if (interactive) { vm.selectMenu(index); vm.activateMenu() } }
-                                Row(Modifier.fillMaxWidth().height(48.dp)
-                                    .thorFocus(registry, "menu:action:$index", enabled = interactive, onClick = activate)
-                                    .thorMaterial(ThorSurfaceRole.Panel, focused = interactive && index == menu.selection, selected = index == menu.selection)
-                                    .alpha(if (menu.busy) .45f else 1f)
-                                    .clickable(enabled = interactive, onClick = activate)
-                                    .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
+                                ThorActionButton(
+                                    onClick = activate,
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                        .thorFocus(registry, "menu:action:$index", enabled = interactive, onClick = activate),
+                                    role = ThorSurfaceRole.Flat, focused = interactive && index == menu.selection,
+                                    selected = index == menu.selection, enabled = interactive,
+                                    contentPadding = PaddingValues(horizontal = 12.dp),
                                 ) {
-                                    Text(row.title, Modifier.weight(1f), color = if (row.destructive) MaterialTheme.colorScheme.error else theme.text,
+                                    val tint = if (row.destructive) MaterialTheme.colorScheme.error
+                                        else if (index == menu.selection) theme.selectedText else theme.text
+                                    Icon(thorLineIcon(menuActionIcon(row.action)), null, Modifier.size(16.dp), tint = tint)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(row.title, Modifier.weight(1f), color = tint,
                                         fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (row.action == ThorMenuAction.AddToPlaylist || row.action == ThorMenuAction.Delete) Icon(Icons.Outlined.ChevronRight, null, Modifier.size(18.dp), tint = theme.secondary)
+                                    if (row.action == ThorMenuAction.AddToPlaylist || row.action == ThorMenuAction.Delete)
+                                        Icon(thorLineIcon(Icons.Outlined.ChevronRight), null, Modifier.size(16.dp), tint = theme.secondary)
                                 }
                             }
                         }
@@ -204,43 +216,47 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                         LaunchedEffect(selectedTarget, choices, interactive) {
                             val selection = choices.indexOf(selectedTarget)
                             if (interactive && selectedTarget != null && selection >= 0) {
-                                scroll.animateScrollToItem(selection)
+                                if (theme.reduceMotion) scroll.scrollToItem(selection) else scroll.animateScrollToItem(selection)
                                 withFrameNanos { }
                                 registry.request("menu:playlist:${selectedTarget.stableKey}")
                             }
                         }
-                        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(6.dp)) {
+                        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                             itemsIndexed(playlists, key = { _, item -> item.key.stableId }) { _, item ->
                                 val target = ThorPlaylistTarget.Existing(item.key as ThorItemKey.Playlist)
                                 val selected = target == selectedTarget
                                 val activate = { if (interactive) vm.activatePlaylistTarget(target) }
-                                Row(Modifier.fillMaxWidth().height(48.dp)
-                                    .thorFocus(registry, "menu:playlist:${target.stableKey}", enabled = interactive, onClick = activate)
-                                    .thorMaterial(ThorSurfaceRole.Panel, focused = interactive && selected, selected = selected)
-                                    .alpha(if (menu.busy) .45f else 1f)
-                                    .clickable(enabled = interactive, onClick = activate)
-                                    .padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ThorActionButton(
+                                    onClick = activate,
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                        .thorFocus(registry, "menu:playlist:${target.stableKey}", enabled = interactive, onClick = activate),
+                                    role = ThorSurfaceRole.Flat, focused = interactive && selected,
+                                    selected = selected, enabled = interactive,
+                                    contentPadding = PaddingValues(horizontal = 12.dp),
                                 ) {
-                                    ThorCover(item, Modifier.size(32.dp))
-                                    Text(item.title, Modifier.weight(1f), color = theme.text, fontSize = 14.sp,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Icon(thorLineIcon(Icons.Outlined.QueueMusic), null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(item.title, Modifier.weight(1f), color = if (selected) theme.selectedText else theme.text,
+                                        fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    item.trackCount?.let { Text("$it 首", color = theme.secondary, fontSize = 12.sp) }
                                 }
                             }
                             item(key = THOR_CREATE_PLAYLIST_TARGET_KEY) {
                                 val target = ThorPlaylistTarget.Create
                                 val selected = target == selectedTarget
                                 val activate = { if (interactive) vm.activatePlaylistTarget(target) }
-                                Row(Modifier.fillMaxWidth().height(48.dp)
-                                    .thorFocus(registry, "menu:playlist:${target.stableKey}", enabled = interactive, onClick = activate)
-                                    .thorMaterial(ThorSurfaceRole.Panel, focused = interactive && selected, selected = selected)
-                                    .alpha(if (menu.busy) .45f else 1f)
-                                    .clickable(enabled = interactive, onClick = activate)
-                                    .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ThorActionButton(
+                                    onClick = activate,
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                        .thorFocus(registry, "menu:playlist:${target.stableKey}", enabled = interactive, onClick = activate),
+                                    role = ThorSurfaceRole.Flat, focused = interactive && selected,
+                                    selected = selected, enabled = interactive,
+                                    contentPadding = PaddingValues(horizontal = 12.dp),
                                 ) {
-                                    Icon(Icons.Outlined.Add, null, Modifier.size(20.dp), tint = theme.accent)
-                                    Text("新建歌单", color = theme.text, fontSize = 15.sp)
+                                    Icon(thorLineIcon(Icons.Outlined.Add), null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("新建歌单", Modifier.weight(1f), fontSize = 15.sp)
+                                    Icon(thorLineIcon(Icons.Outlined.ChevronRight), null, Modifier.size(16.dp), tint = theme.secondary)
                                 }
                             }
                         }
@@ -251,12 +267,12 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                         LaunchedEffect(menu.selection, interactive) {
                             val choice = menu.deleteChoice()
                             if (interactive && choice != null) {
-                                scroll.animateScrollToItem(choice.ordinal + 1)
+                                if (theme.reduceMotion) scroll.scrollToItem(choice.ordinal + 1) else scroll.animateScrollToItem(choice.ordinal + 1)
                                 withFrameNanos { }
                                 registry.request("menu:delete:${choice.name}")
                             }
                         }
-                        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(6.dp)) {
+                        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                             item(key = "delete-description") {
                                 Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -272,7 +288,7 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                                 val activate = { if (interactive && target != null) vm.activateDeleteChoice(choice, target) }
                                 Row(Modifier.fillMaxWidth().height(48.dp)
                                     .thorFocus(registry, "menu:delete:${choice.name}", enabled = interactive, onClick = activate)
-                                    .thorMaterial(ThorSurfaceRole.Panel, focused = interactive && selected, selected = selected)
+                                    .thorMaterial(ThorSurfaceRole.Flat, focused = interactive && selected, selected = selected)
                                     .alpha(if (menu.busy) .45f else 1f)
                                     .clickable(enabled = interactive, onClick = activate)
                                     .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -295,6 +311,9 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                     }
                 }
             }
+            Text("↑↓ 选择 · A ${if (menu.level == ThorMenuLevel.Playlists) "加入" else "确认"} · B ${if (menu.level == ThorMenuLevel.Actions) "关闭" else "返回"}",
+                modifier = Modifier.fillMaxWidth().height(38.dp).padding(start = 16.dp, top = 4.dp, bottom = 8.dp),
+                color = theme.secondary, fontSize = 11.sp, lineHeight = 26.sp, maxLines = 1)
             if (menuError != null) {
                 HorizontalDivider(color = theme.outline)
                 Text(
@@ -340,37 +359,43 @@ internal fun ThorMenuNameEditor(
     }
     LaunchedEffect(enabled) { if (enabled) { withFrameNanos { }; registry.request("menu:name") } }
     DisposableEffect(Unit) { onDispose { onEditingChanged(false) } }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
-            value = field,
-            onValueChange = { value ->
-                if (enabled) {
-                    val text = value.text.take(80)
-                    fun clamp(range: TextRange) = TextRange(range.start.coerceIn(0, text.length), range.end.coerceIn(0, text.length))
-                    field = value.copy(text = text, selection = clamp(value.selection), composition = value.composition?.let(::clamp))
-                    onNameChanged(text)
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-                .thorFocus(registry, "menu:name", enabled = enabled, onClick = { if (enabled) keyboard?.show() })
-                .onFocusChanged { onEditingChanged(it.isFocused && enabled) },
-            label = { Text("歌单名称") }, singleLine = true, enabled = enabled,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { submit() }),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = theme.text, unfocusedTextColor = theme.text,
-                focusedBorderColor = theme.focus, unfocusedBorderColor = theme.outline,
-                focusedContainerColor = theme.inset, unfocusedContainerColor = theme.inset,
-                cursorColor = theme.accent,
-            ),
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThorButton(registry, "menu:name:cancel", "取消", Modifier.weight(1f), enabled = enabled,
+    var focused by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("歌单名称", color = theme.text, fontSize = 14.sp)
+            BasicTextField(
+                value = field,
+                onValueChange = { value ->
+                    if (enabled) {
+                        val text = value.text.take(80)
+                        fun clamp(range: TextRange) = TextRange(range.start.coerceIn(0, text.length), range.end.coerceIn(0, text.length))
+                        field = value.copy(text = text, selection = clamp(value.selection), composition = value.composition?.let(::clamp))
+                        onNameChanged(text)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+                    .thorFocus(registry, "menu:name", enabled = enabled, onClick = { if (enabled) keyboard?.show() })
+                    .onFocusChanged { focused = it.isFocused; onEditingChanged(it.isFocused && enabled) }
+                    .thorMaterial(ThorSurfaceRole.Inset, focused = focused)
+                    .border(1.dp, if (focused) theme.focus else theme.outline, RoundedCornerShape(theme.controlRadius))
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                textStyle = TextStyle(color = theme.text, fontSize = 14.sp),
+                cursorBrush = SolidColor(theme.accent), singleLine = true, enabled = enabled,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
+            )
+        }
+        HorizontalDivider(color = theme.outline)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            ThorButton(registry, "menu:name:cancel", "取消", Modifier.widthIn(min = 80.dp), enabled = enabled,
                 onClick = { if (enabled) { keyboard?.hide(); onCancel() } })
-            ThorButton(registry, "menu:name:save", saveLabel, Modifier.weight(1.4f), primary = true,
+            ThorButton(registry, "menu:name:save", saveLabel, Modifier.widthIn(min = 80.dp), primary = true,
                 enabled = enabled && field.text.isNotBlank(), onClick = submit)
         }
     }
+
 }
 
 internal data class ThorMenuPlacement(val offset: IntOffset, val maxHeight: Float)
@@ -393,12 +418,31 @@ internal fun thorMenuOffset(
     anchorX: Float, anchorY: Float, boundsWidth: Float, boundsHeight: Float,
     menuWidth: Float, menuHeight: Float, margin: Float,
 ): IntOffset {
-    fun coordinate(anchor: Float, extent: Float, available: Float): Int {
+    fun coordinate(anchor: Float, extent: Float, available: Float, vertical: Boolean): Int {
         val safeAnchor = anchor.takeIf(Float::isFinite) ?: 0f
         val minimum = margin.coerceAtLeast(0f).coerceAtMost((available - extent).coerceAtLeast(0f) / 2f)
         val maximum = (available - extent - minimum).coerceAtLeast(minimum)
-        val desired = if (safeAnchor + extent <= available - minimum) safeAnchor else safeAnchor - extent
+        val after = safeAnchor + minimum
+        val before = safeAnchor - extent - minimum
+        // Match the prototype: right of the touch, preferably above; flip only at an edge.
+        val desired = if (vertical) { if (before >= minimum) before else after }
+            else if (after + extent <= available - minimum) after else before
         return desired.coerceIn(minimum, maximum).roundToInt()
     }
-    return IntOffset(coordinate(anchorX, menuWidth, boundsWidth), coordinate(anchorY, menuHeight, boundsHeight))
+    return IntOffset(coordinate(anchorX, menuWidth, boundsWidth, false), coordinate(anchorY, menuHeight, boundsHeight, true))
+
+}
+
+
+private fun menuActionIcon(action: ThorMenuAction) = when (action) {
+    ThorMenuAction.Like -> Icons.Outlined.FavoriteBorder
+    ThorMenuAction.Collect -> Icons.Outlined.BookmarkBorder
+    ThorMenuAction.PlayNext -> ThorDesignIcons.icon("list-start")
+    ThorMenuAction.Enqueue -> ThorDesignIcons.icon("list-end")
+    ThorMenuAction.AddToPlaylist -> ThorDesignIcons.icon("list-plus")
+    ThorMenuAction.Album -> Icons.Outlined.Album
+    ThorMenuAction.RemoveFromPlaylist, ThorMenuAction.RemoveFromQueue -> ThorDesignIcons.icon("list-minus")
+    ThorMenuAction.SkipCurrent -> Icons.Outlined.SkipNext
+    ThorMenuAction.Rename -> Icons.Outlined.Edit
+    ThorMenuAction.Delete -> Icons.Outlined.DeleteOutline
 }

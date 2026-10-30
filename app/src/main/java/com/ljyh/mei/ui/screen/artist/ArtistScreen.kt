@@ -106,7 +106,8 @@ import com.ljyh.mei.ui.model.toAlbum
 import com.ljyh.mei.ui.screen.Screen
 import com.ljyh.mei.ui.screen.playlist.component.StandaloneTrackActionOverlay
 import com.ljyh.mei.ui.theme.LocalAccentSeedColor
-import com.ljyh.mei.ui.theme.MusicTheme
+import com.ljyh.mei.thor.theme.LocalThorLegacyMode
+import com.ljyh.mei.thor.theme.ThorRespectingMusicTheme
 import com.ljyh.mei.utils.color.ColorExtractionUtils
 import kotlinx.coroutines.CancellationException
 import java.util.UUID
@@ -457,7 +458,9 @@ private fun ArtistCoverTheme(
         }
     }
 
-    val isDark = (if (colorfulBackgrounds) coverIsDark else null) ?: LocalGlassColors.current.isDark
+    val respectsThorTheme = LocalThorLegacyMode.current
+    val inheritedColors = LocalGlassColors.current
+    val isDark = if (respectsThorTheme) inheritedColors.isDark else (if (colorfulBackgrounds) coverIsDark else null) ?: inheritedColors.isDark
     val setPageAppearance = LocalPageAppearance.current
     val appearanceOwner = remember(viewModel, route) { Any() }
     DisposableEffect(route, appearanceOwner, isDark, setPageAppearance) {
@@ -465,9 +468,9 @@ private fun ArtistCoverTheme(
         onDispose { setPageAppearance(route, appearanceOwner, null) }
     }
 
-    val accentSeed = LocalAccentSeedColor.current ?: defaultGlassColors(isDark).accent
-    MusicTheme(seedColor = accentSeed, isDark = isDark) {
-        val colors = defaultGlassColors(isDark, MaterialTheme.colorScheme.primary)
+    val accentSeed = if (respectsThorTheme) inheritedColors.accent else LocalAccentSeedColor.current ?: defaultGlassColors(isDark).accent
+    ThorRespectingMusicTheme(seedColor = accentSeed, isDark = isDark) {
+        val colors = if (respectsThorTheme) inheritedColors else defaultGlassColors(isDark, MaterialTheme.colorScheme.primary)
         CompositionLocalProvider(LocalGlassColors provides colors) {
             val background = rememberCoverBackground(
                 coverUrl = coverUrl,

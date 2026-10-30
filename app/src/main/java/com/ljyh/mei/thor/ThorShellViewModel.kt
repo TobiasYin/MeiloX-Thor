@@ -19,6 +19,7 @@ import com.ljyh.mei.thor.menu.*
 import com.ljyh.mei.thor.model.*
 import com.ljyh.mei.thor.playback.ThorPlaybackBridge
 import com.ljyh.mei.thor.state.*
+import com.ljyh.mei.thor.theme.decodeThorPreferences
 import com.ljyh.mei.utils.dataStore
 import com.ljyh.mei.utils.lyric.LyricManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -68,13 +69,7 @@ class ThorShellViewModel @Inject constructor(
     private val focus = mutableMapOf<String, String>()
     private val listScroll = mutableMapOf<String, Pair<String, Int>>()
 
-    private fun decodePreferences(prefs: Preferences) = ThorPreferences(
-            theme = ThorThemePack.entries.firstOrNull { it.name == prefs[ThemeKey] } ?: ThorThemePack.Ceramic,
-            appearance = when (prefs[AppAppearanceKey]) { AppAppearance.Light.name -> ThorAppearance.Day; AppAppearance.Dark.name -> ThorAppearance.Night; else -> ThorAppearance.System },
-            reduceMotion = prefs[ReduceMotionKey] ?: false,
-            reduceTransparency = prefs[ReduceTransparencyKey] ?: false,
-            airflowEnabled = prefs[AirflowKey] ?: false,
-        )
+    private fun decodePreferences(prefs: Preferences) = decodeThorPreferences(prefs)
 
     val preferences = context.dataStore.data.map(::decodePreferences)
         .stateIn(viewModelScope, SharingStarted.Eagerly, ThorPreferences())
@@ -167,6 +162,10 @@ class ThorShellViewModel @Inject constructor(
     }
 
     fun openCollection(collection: ThorCollection) { push(ThorPage.Collection(collection)); repository.refresh(collection) }
+    fun replaceCollection(collection: ThorCollection) {
+        navigate(navigation.value.replaceCollection(collection))
+        repository.refresh(collection)
+    }
     fun open(item: ThorItem) {
         when (val key = item.key) {
             is ThorItemKey.Song -> {

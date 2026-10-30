@@ -74,7 +74,7 @@
         <activity
             android:name=".thor.ThorActivity"
             android:launchMode="singleTop"
-            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|density"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|density|uiMode"
             android:exported="true"
             android:screenOrientation="landscape"
             android:label="@string/app_name"

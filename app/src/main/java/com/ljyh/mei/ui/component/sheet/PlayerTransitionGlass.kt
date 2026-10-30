@@ -12,6 +12,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.ljyh.mei.ui.component.player.LocalMiniPlayerAppearance
+import com.ljyh.mei.thor.theme.LocalThorLegacyMode
 import io.github.neoruaa.glasmio.core.LocalGlassColors
 import io.github.neoruaa.glasmio.glass.GlassMorphRenderer
 import io.github.neoruaa.glasmio.core.defaultGlassColors
@@ -23,7 +24,7 @@ internal fun PlayerTransitionGlass(
     renderer: GlassMorphRenderer,
     expandedCornerRadius: Float,
 ) {
-    val appearance = LocalMiniPlayerAppearance.current
+    val appearance = if (LocalThorLegacyMode.current) null else LocalMiniPlayerAppearance.current
     val colors = appearance?.let { defaultGlassColors(it) } ?: LocalGlassColors.current
     val recording = remember(renderer) { SheetGlassCoordinates() }
     Canvas(Modifier.fillMaxSize().onGloballyPositioned { recording.coordinates = it }) {
