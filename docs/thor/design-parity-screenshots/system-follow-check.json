@@ -1,0 +1,48 @@
+[
+  {
+    "systemNight": "yes",
+    "pixels": {
+      "upper": [
+        34,
+        35,
+        32
+      ],
+      "lower": [
+        34,
+        35,
+        32
+      ]
+    },
+    "expected": [
+      34,
+      35,
+      32
+    ],
+    "windowIds": [
+      "7d395ab"
+    ]
+  },
+  {
+    "systemNight": "no",
+    "pixels": {
+      "upper": [
+        227,
+        224,
+        217
+      ],
+      "lower": [
+        227,
+        224,
+        217
+      ]
+    },
+    "expected": [
+      227,
+      224,
+      217
+    ],
+    "windowIds": [
+      "7d395ab"
+    ]
+  }
+]

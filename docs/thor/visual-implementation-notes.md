@@ -1,3 +1,5 @@
+> 2026-10-31 按确认稿的视觉修正见 [design-parity.md](design-parity.md)。上屏目前复用歌词同步与逐字计算辅助函数，渲染使用专用列表；下文为首批模块交接记录。
+
 # Thor 原生视觉实现与验证记录
 
 此文件保留并行模块交接时的实现记录；后续统一构建、测试及设备结果见 [verification.md](verification.md)。

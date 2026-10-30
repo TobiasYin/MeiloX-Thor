@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thor Music · 静态视觉对照</title>
+  <style>
+    :root { color-scheme: light; --bg: #f5f5f5; --panel: #fff; --ink: #222; --muted: #666; --line: #d8d8d8; --error: #9b2828; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans SC", sans-serif; }
+    main { max-width: 1600px; margin: 0 auto; padding: 28px 24px 40px; }
+    h1 { margin: 0; font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; }
+    h2 { margin: 0; font-size: 17px; font-weight: 600; }
+    p { margin: 8px 0 0; }
+    .intro, .subtle { color: var(--muted); }
+    .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 24px 0; }
+    label { display: grid; gap: 6px; font-size: 13px; }
+    select { min-width: 150px; min-height: 44px; padding: 8px 34px 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+    select:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+    .selection { padding-bottom: 10px; color: var(--muted); font-size: 13px; }
+    .comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+    .column, .supplement { min-width: 0; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+    .column > p { margin-bottom: 18px; font-size: 12px; }
+    .pair { width: 100%; }
+    figure { margin: 0; min-width: 0; }
+    .capture { width: 100%; }
+    /* Every image uses the upper screen's pixel scale. No height forcing or image stretching. */
+    .capture.lower { width: calc(100% * var(--lower-scale, .6458333333333333)); margin: 20px auto 0; }
+    .media { position: relative; width: 100%; background: var(--bg); outline: 1px solid var(--line); }
+    .media img { display: block; width: 100%; height: auto; }
+    .media img[hidden] { display: none; }
+    .placeholder { display: grid; place-items: center; aspect-ratio: var(--ratio); padding: 20px; text-align: center; color: var(--muted); }
+    .placeholder[hidden] { display: none; }
+    figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-top: 7px; font-size: 12px; color: var(--muted); }
+    .status { overflow-wrap: anywhere; }
+    .status.error { color: var(--error); }
+    a { color: inherit; text-underline-offset: 3px; }
+    details { margin-top: 24px; }
+    summary { min-height: 44px; padding: 10px 0; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .supplement { margin-top: 8px; }
+    .appearance-capture { max-width: 680px; margin: 0 auto; }
+    .duo-pair { max-width: 920px; margin: 18px auto 0; --lower-scale: .6666666666666667; }
+    .duo-pair .lower { width: calc(100% * var(--lower-scale)); }
+    .supplement-gallery { margin-top: 18px; }
+    .supplement-gallery h2 { margin-bottom: 14px; }
+    .fixed-list-pair { max-width: 920px; margin: 18px auto 24px; }
+    .fixed-menu-grid { margin-top: 14px; }
+    .video-wrap { margin-top: 24px; }
+    video { display: block; width: 100%; max-width: 1000px; max-height: 75vh; margin: 14px auto 0; background: #111; }
+    .video-note { font-size: 12px; color: var(--muted); }
+    noscript { display: block; padding: 16px 0; }
+    @media (max-width: 860px) {
+      main { padding: 20px 14px 30px; }
+      .comparison { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+      .column, .supplement { padding: 12px; }
+    }
+    @media (max-width: 420px) {
+      .controls { gap: 12px; }
+      .controls label { flex: 1; min-width: 0; }
+      select { min-width: 0; width: 100%; }
+      .selection { flex-basis: 100%; padding-bottom: 0; }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { color-scheme: dark; --bg: #181818; --panel: #232323; --ink: #eee; --muted: #bbb; --line: #494949; --error: #ffb4ad; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Thor Music · 静态视觉对照</h1>
+      <p class="intro">设计稿与原生使用不同曲目内容。本页展示静态截图，实际交互在模拟器中验证。</p>
+    </header>
+    <div class="controls" role="group" aria-label="截图主题选择">
+      <label for="pack">主题材质
+        <select id="pack">
+          <option value="ceramic">微砂陶瓷 · Ceramic</option>
+          <option value="glass">晶雾玻璃 · Glass</option>
+          <option value="titanium">钛金 · Titanium</option>
+        </select>
+      </label>
+      <label for="mode">昼夜模式
+        <select id="mode">
+          <option value="day">白天 · Day</option>
+          <option value="night">夜间 · Night</option>
+        </select>
+      </label>
+      <span class="selection" id="selection" aria-live="polite"></span>
+    </div>
+    <section class="comparison" aria-label="Thor 双屏静态对照">
+      <article class="column">
+        <h2>设计稿示例内容</h2>
+        <p class="subtle">Thor · 上屏 1920 × 1080，下屏 1240 × 1080</p>
+        <div class="pair" id="design-pair"></div>
+      </article>
+      <article class="column">
+        <h2>原生本地测试曲目</h2>
+        <p class="subtle">Thor · 上屏 1920 × 1080，下屏 1240 × 1080</p>
+        <div class="pair" id="native-pair"></div>
+      </article>
+    </section>
+    <details>
+      <summary>查看当前主题的原生外观设置页</summary>
+      <div class="supplement">
+        <div class="appearance-capture" id="appearance"></div>
+      </div>
+    </details>
+    <details>
+      <summary>查看 RP Duo 模拟器截图 · 钛金／夜间</summary>
+      <div class="supplement">
+        <p class="subtle">上屏 1920 × 1080，下屏 1280 × 960；上下屏采用相同像素缩放。</p>
+        <div class="pair duo-pair" id="duo-pair"></div>
+      </div>
+    </details>
+    <details>
+      <summary>补充图库 · 固定截图</summary>
+      <div class="supplement">
+        <p class="subtle">以下为固定截图，不随上方主题与昼夜选择切换。</p>
+        <div class="comparison supplement-gallery">
+          <section aria-label="减少动态与透明的固定截图">
+            <h2>减少动态与透明</h2>
+            <div class="pair" id="reduced-pair"></div>
+          </section>
+          <section aria-label="本地测试曲目的已喜欢菜单固定截图">
+            <h2>本地测试曲目的已喜欢菜单</h2>
+            <div class="pair" id="liked-menu"></div>
+          </section>
+        </div>
+      </div>
+    </details>
+    <details>
+      <summary>本地列表与分级菜单 · 微砂陶瓷／白天 · 固定截图</summary>
+      <div class="supplement">
+        <p class="subtle">仅使用 QA 音频，未执行加入或创建操作。以下固定截图不随上方主题与昼夜选择切换。</p>
+        <h2>本地音乐列表</h2>
+        <div class="pair fixed-list-pair" id="local-list-pair"></div>
+        <h2>主菜单与二级菜单</h2>
+        <div class="comparison fixed-menu-grid" id="local-menu-pair"></div>
+      </div>
+    </details>
+    <section class="video-wrap" aria-label="封面交互录像">
+      <h2>封面交互录像</h2>
+      <p class="video-note" id="video-note">模拟器录像 · 使用播放器控件播放。</p>
+      <video id="interaction-video" controls preload="none" playsinline aria-label="原生封面拖动与动效的模拟器录像">
+        <source src="./design-parity-screenshots/artwork-interaction.mp4" type="video/mp4">
+        浏览器不支持内嵌视频，请使用下方原文件链接。
+      </video>
+      <p class="video-note"><a href="./design-parity-screenshots/artwork-interaction.mp4" target="_blank" rel="noopener">打开录像原文件 ↗</a></p>
+    </section>
+    <noscript>截图选择与尺寸校验需要 JavaScript。原图保存在同目录的 design-parity-screenshots 文件夹。</noscript>
+  </main>
+  <script>
+    (() => {
+      'use strict';
+      const folder = './design-parity-screenshots/';
+      const packs = { ceramic: '微砂陶瓷', glass: '晶雾玻璃', titanium: '钛金' };
+      const modes = { day: '白天', night: '夜间' };
+      const packSelect = document.getElementById('pack');
+      const modeSelect = document.getElementById('mode');
+
+      function capture(filename, label, width, height, lower = false) {
+        const figure = document.createElement('figure');
+        figure.className = 'capture' + (lower ? ' lower' : '');
+        const media = document.createElement('div');
+        media.className = 'media';
+        const placeholder = document.createElement('div');
+        placeholder.className = 'placeholder';
+        placeholder.style.setProperty('--ratio', width + ' / ' + height);
+        placeholder.textContent = '正在载入' + label + '截图…';
+        const image = document.createElement('img');
+        image.alt = label;
+        image.width = width;
+        image.height = height;
+        image.hidden = true;
+        image.decoding = 'async';
+        const caption = document.createElement('figcaption');
+        const status = document.createElement('span');
+        status.className = 'status';
+        status.textContent = label + ' · 尺寸待校验';
+        const original = document.createElement('a');
+        original.href = folder + filename;
+        original.target = '_blank';
+        original.rel = 'noopener';
+        original.textContent = '原图 ↗';
+        image.addEventListener('load', () => {
+          image.hidden = false;
+          placeholder.hidden = true;
+          const actual = image.naturalWidth + ' × ' + image.naturalHeight;
+          const matches = image.naturalWidth === width && image.naturalHeight === height;
+          status.textContent = label + ' · ' + actual + (matches ? ' · 尺寸正确' : ' · 预期 ' + width + ' × ' + height);
+          status.classList.toggle('error', !matches);
+        });
+        image.addEventListener('error', () => {
+          image.hidden = true;
+          placeholder.hidden = false;
+          placeholder.textContent = '截图文件尚未就绪：' + filename;
+          status.textContent = label + ' · 未载入，无法校验尺寸';
+          status.classList.add('error');
+        });
+        media.append(image, placeholder);
+        caption.append(status, original);
+        figure.append(media, caption);
+        image.src = folder + filename;
+        return figure;
+      }
+
+      function renderSelection() {
+        const pack = packSelect.value;
+        const mode = modeSelect.value;
+        const title = packs[pack] + '／' + modes[mode];
+        document.getElementById('selection').textContent = title + ' · Thor';
+        document.getElementById('design-pair').replaceChildren(
+          capture('design-player-' + pack + '-' + mode + '-upper.png', '设计稿上屏 · ' + title, 1920, 1080),
+          capture('design-player-' + pack + '-' + mode + '-lower.png', '设计稿下屏 · ' + title, 1240, 1080, true)
+        );
+        document.getElementById('native-pair').replaceChildren(
+          capture(pack + '-' + mode + '-player-upper.png', '原生上屏 · ' + title, 1920, 1080),
+          capture(pack + '-' + mode + '-player-lower.png', '原生下屏 · ' + title, 1240, 1080, true)
+        );
+        document.getElementById('appearance').replaceChildren(
+          capture(pack + '-' + mode + '-appearance.png', '原生外观设置 · ' + title, 1240, 1080)
+        );
+      }
+
+      packSelect.addEventListener('change', renderSelection);
+      modeSelect.addEventListener('change', renderSelection);
+      renderSelection();
+      document.getElementById('duo-pair').replaceChildren(
+        capture('duo-titanium-night-player-upper.png', 'RP Duo 上屏 · 钛金／夜间', 1920, 1080),
+        capture('duo-titanium-night-player-lower.png', 'RP Duo 下屏 · 钛金／夜间', 1280, 960, true)
+      );
+      document.getElementById('reduced-pair').replaceChildren(
+        capture('reduced-both-upper.png', '减少动态与透明 · 固定上屏', 1920, 1080),
+        capture('reduced-both-lower.png', '减少动态与透明 · 固定下屏', 1240, 1080, true)
+      );
+      document.getElementById('liked-menu').replaceChildren(
+        capture('liked-menu-lower.png', '本地测试曲目的已喜欢菜单 · 固定下屏', 1240, 1080, true)
+      );
+      document.getElementById('local-list-pair').replaceChildren(
+        capture('local-list-upper.png', 'QA 本地列表 · 固定上屏', 1920, 1080),
+        capture('local-list-lower.png', 'QA 本地列表 · 固定下屏', 1240, 1080, true)
+      );
+      document.getElementById('local-menu-pair').replaceChildren(
+        capture('local-menu-lower.png', 'QA 本地曲目主菜单 · 固定下屏', 1240, 1080),
+        capture('local-submenu-lower.png', 'QA 本地曲目二级菜单 · 固定下屏', 1240, 1080)
+      );
+      const video = document.getElementById('interaction-video');
+      const videoNote = document.getElementById('video-note');
+      const videoError = () => { videoNote.textContent = '录像尚未就绪，或当前浏览器无法读取该视频。'; };
+      video.addEventListener('error', videoError);
+      video.querySelector('source').addEventListener('error', videoError);
+      video.addEventListener('loadedmetadata', () => {
+        videoNote.textContent = '模拟器录像 · ' + video.videoWidth + ' × ' + video.videoHeight + ' · 使用播放器控件播放。';
+      });
+    })();
+  </script>
+</body>
+</html>

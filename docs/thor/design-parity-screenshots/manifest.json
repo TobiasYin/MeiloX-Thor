@@ -1,0 +1,236 @@
+[
+  {
+    "file": "ceramic-day-appearance.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "ceramic-day-player-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "ceramic-day-player-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "ceramic-night-appearance.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "ceramic-night-player-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "ceramic-night-player-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "design-player-ceramic-day-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-ceramic-day-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-ceramic-night-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-ceramic-night-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-glass-day-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-glass-day-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-glass-night-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-glass-night-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-titanium-day-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-titanium-day-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-titanium-night-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "design-player-titanium-night-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "approved-browser-prototype"
+  },
+  {
+    "file": "duo-titanium-night-player-lower.png",
+    "width": 1280,
+    "height": 960,
+    "source": "android-emulator"
+  },
+  {
+    "file": "duo-titanium-night-player-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "glass-day-appearance.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "glass-day-player-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "glass-day-player-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "glass-night-appearance.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "glass-night-player-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "glass-night-player-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "liked-menu-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "local-list-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "local-list-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "local-menu-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "local-submenu-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "reduced-both-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "reduced-both-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "titanium-day-appearance.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "titanium-day-player-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "titanium-day-player-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "titanium-night-appearance.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "titanium-night-player-lower.png",
+    "width": 1240,
+    "height": 1080,
+    "source": "android-emulator"
+  },
+  {
+    "file": "titanium-night-player-upper.png",
+    "width": 1920,
+    "height": 1080,
+    "source": "android-emulator"
+  }
+]

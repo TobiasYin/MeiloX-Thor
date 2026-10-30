@@ -1,0 +1,122 @@
+[
+  {
+    "theme": "ceramic",
+    "mode": "day",
+    "canvas": [
+      239,
+      238,
+      232
+    ],
+    "expected": [
+      239,
+      238,
+      232
+    ],
+    "max_channel_error": 0,
+    "player_primary_sample": [
+      21,
+      106,
+      86
+    ]
+  },
+  {
+    "theme": "ceramic",
+    "mode": "night",
+    "canvas": [
+      23,
+      30,
+      28
+    ],
+    "expected": [
+      23,
+      30,
+      28
+    ],
+    "max_channel_error": 0,
+    "player_primary_sample": [
+      161,
+      216,
+      187
+    ]
+  },
+  {
+    "theme": "glass",
+    "mode": "day",
+    "canvas": [
+      233,
+      237,
+      244
+    ],
+    "expected": [
+      233,
+      237,
+      244
+    ],
+    "max_channel_error": 0,
+    "player_primary_sample": [
+      53,
+      91,
+      192
+    ]
+  },
+  {
+    "theme": "glass",
+    "mode": "night",
+    "canvas": [
+      21,
+      28,
+      43
+    ],
+    "expected": [
+      21,
+      28,
+      43
+    ],
+    "max_channel_error": 0,
+    "player_primary_sample": [
+      172,
+      193,
+      248
+    ]
+  },
+  {
+    "theme": "titanium",
+    "mode": "day",
+    "canvas": [
+      227,
+      224,
+      217
+    ],
+    "expected": [
+      227,
+      224,
+      217
+    ],
+    "max_channel_error": 0,
+    "player_primary_sample": [
+      133,
+      68,
+      29
+    ]
+  },
+  {
+    "theme": "titanium",
+    "mode": "night",
+    "canvas": [
+      34,
+      35,
+      32
+    ],
+    "expected": [
+      34,
+      35,
+      32
+    ],
+    "max_channel_error": 0,
+    "player_primary_sample": [
+      235,
+      192,
+      131
+    ]
+  }
+]
