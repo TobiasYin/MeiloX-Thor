@@ -1,0 +1,136 @@
+# Thor Music 原生开发计划
+
+状态：设计基线已提交（`7ee22c6f`）；本计划依据现有代码审查完成。计划完成后立即按下述所有权并发开发，阶段状态随集成证据更新。
+
+## 1. 交付范围与完成标准
+
+目标是同一个 Android 应用里的 Thor 专用体验，复用原有 MusicService、PlayerConnection、账号 DataStore、网络 Repository、Room 和歌词系统。主目标为 Thor 上屏 1920×1080、下屏 1240×1080；次目标为标准 RP Duo 上屏 1920×1080、下屏 1280×960。逻辑尺寸由各窗口的真实密度决定，不把硬件像素写成 dp。
+
+产品、故事和页面细节以 [design.md](design.md) 为准。开发必须保留已确认的高密度横向布局、仅一级页的右侧导航、三种材质的完整日夜模式、独立浏览焦点、同锚点分级菜单、队列 entry 身份、可拖动和力度驱动的 3D CD 盒。
+
+第一条可运行闭环：真实本地/网络列表 → 聚焦预览 → A 播放但留在列表 → Start 播放控制台 → Select 队列 → X/长按管理 → 返回恢复焦点。后续覆盖全部页面和服务状态，不能以虚构演示数据替代实际能力。无法连接服务、没有权限、未登录、离线和空库均应有实际可执行的下一步。
+
+原生完成标准包含：编译与有意义的自动测试通过、专用模拟器两屏可运行、实际音频控制及队列身份正确、两套设备档和日夜布局验证、安装包与操作说明。模拟器结果和实体设备待验项分别记录，不能将前者当作手柄/麦克风/合盖硬件通过。
+
+## 2. 架构与生命周期
+
+新增 `com.ljyh.mei.thor` 包，先做包级分层，不新增 Gradle 模块或大体量渲染依赖。入口由 `ThorActivity` 承担；原客户端业务与登录代码保留复用。根集成负责人统一修改 Activity、Manifest、Gradle、公共模型和共享旧代码。
+
+```text
+ThorActivity（上屏 DEFAULT_DISPLAY，Hilt / 单一生命周期所有者）
+ ├─ 唯一 PlayerConnection → 现有 MusicService
+ ├─ ThorShellViewModel / 导航 / 焦点 / 菜单 / 主题偏好
+ ├─ ThorMusicRepository → 现有账号、音乐仓库与 Room
+ ├─ 上屏 Composition → 展示模型 / 专辑资料 / 同步歌词
+ └─ ThorDisplayHost → 下屏 Presentation（自己的 Context / 密度）
+                         └─ 下屏 Composition → 列表 / 播放 / 菜单
+```
+
+默认显示器不能承载普通 TYPE_PRESENTATION，因此不能采用“下屏 Activity + 上屏 Presentation”的假设。平台模块先验证上屏 Activity + 下屏 Presentation；若系统策略拒绝下屏窗口，记录实际原因再采用两 Activity 备选。单屏是明确的兼容状态，不能静默冒充双屏成功。
+
+Presentation 显式获得 ViewTree Lifecycle / ViewModelStore / SavedStateRegistry owner，dismiss 时释放 Composition；下屏不再默认调用 hiltViewModel。显示变化根据实际角色/尺寸/密度比较，无变化不重置页面。onStop 释放展示窗口与录音/绘制资源，音乐服务继续播放。重新连接恢复选中 key、滚动与页面；不重新 playQueue。
+
+PlayerConnection 仅由 Activity 所有者创建一次；传入独立 child SupervisorJob，断开或销毁时 dispose 并取消子 scope，避免现有长期 collect 泄漏。上下屏只订阅同一投影；进度单一 ticker，盒体逐帧姿态留在渲染模块，不更新全局 UiState。
+
+## 3. 公共契约
+
+由根负责人先创建 `thor/model`，其后新增字段通过根负责人协调，worker 不自行修改公共文件。
+
+- `ThorItemKey`：Song、Album、Playlist、QueueEntry 等分别建模；队列 key 必须包含既有 entryId。
+- `ThorItem`：公开展示字段、封面、简介、曲目数、元信息快照、所有权/收藏能力；不含凭据。
+- `ThorAccountState`：公开资料与 None/Web/Mobile 能力、账号 generation；不含 Cookie 或 session fingerprint。
+- `ThorLibraryState`：本地歌曲/专辑、喜欢歌曲、收藏专辑、创建/收藏歌单、首页/发现内容、加载与错误。
+- `ThorArtworkSpec`：稳定 key、正反封面 URI、名称、艺术家。无真实背封时正反共用图片，背面不镜像。
+- `ThorCommand`：上下左右、确认、返回、更多、一级 Tab、播放页、队列、播放暂停、上一/下一首。
+- `ThorMenuSubject`：打开菜单时冻结实体、来源焦点、来源歌单/队列 entry；异步操作不能作用于后来聚焦的项目。
+- `ThorPreferences`：主题包、System/Day/Night、减少动态/透明、吹气开关（默认关闭）；设备档与内容导航不属于主题。
+
+数据 worker 输出 `ThorMusicRepository` 的真实 Flow 与 suspend 操作；页面只接 state 和回调。平台模块输出显示快照/归一化输入/气流强度，不直接选歌曲。上屏模块只消费 artwork、歌词与播放时间，不绑定服务。菜单只发语义动作，业务成功后才给成功反馈。
+
+## 4. 现有代码复用及必要补充
+
+| 能力 | 复用入口 | 实施约束 |
+|---|---|---|
+| 账号/手机号/短信/Web 登录 | MeloXRepository、NeteaseLoginViewModel、原登录页面 | 使用统一 settings DataStore 与 logoutNetease；不做第二套会话 |
+| 公开账号/绑定/设备 | AccountHomeViewModel、AccountFeatureRepository | 绑定安全账号和音乐源连接分别呈现；不显示凭据 |
+| 账号音乐库 | LibraryCollectionsRepository、LibraryViewModel 的行为与仓库 | 换号取消旧请求/清旧投影，复用 albumChanges / collectionChanges / likeChanges |
+| 喜欢歌曲 | PlayerRepository.songLikes / toggleLike / ensureSongLikes | 内部捕获 expectedSession，复用通知栏和播放器共享状态 |
+| 收藏专辑 | LibraryCollectionsRepository.setAlbumSubscription | 不绕过其账号 guard 和变更通知 |
+| 歌单创建/增删歌曲/收藏/删除/排序 | PlaylistRepository | 使用现有 Added/AlreadyExists/Failed 结果；只给自己创建的歌单写权限 |
+| 本地音乐与扫描 | SongRepository、LocalLibraryViewModel / 扫描器 | 复用权限和本地 URI 映射，不向在线解析提交本地 ID |
+| 下载 | DownloadRepository / DownloadManager | 操作实际任务，不能只改 DAO 状态 |
+| 播放、模式、队列 | PlayerConnection / PlaybackQueueManager / ListQueue | entryId 标识重复项，原始冻结列表精确 startIndex |
+| 歌词/偏移/缓存 | LyricManager、PlayerLyricsView | 只有现有加载链，日间显式 textColor 与 SrcOver 混合 |
+| 睡眠定时 | MusicService.sleepTimer | 复用 start / clear，真实显示剩余状态 |
+
+必须补齐的能力和边界：
+
+1. 本地喜欢/收藏与本地歌单没有完整现成业务层。应在现有 Room 数据库上增加明确的来源/账号隔离和事务；不能把旧 Like(id) 或专辑元数据表直接当作云收藏，也不能新建平行数据库。迁移必须保留现有内容。
+2. 没有现成远程歌单重命名接口。复用项目既有网络请求规范，在确认远程接口后实现共享 Repository 能力；在能力未实现时不显示可成功重命名的伪操作。本地重命名先支持真实事务。
+3. 在线新建并加入是两个服务请求。创建成功、加入失败时只对本次新建且仍为空、同账号的歌单尝试补偿；补偿失败显示真实的部分成功和重试入口，不能宣称原子成功或删除用户后续编辑的歌单。取消名称输入不发送创建请求。
+4. 账号 mutation 应在操作前后验证账号一致。现有 create/delete 缺 expectedSession 参数时在共享 Repository 补 guard，不在 Thor 内复制网络认证链。
+5. 排队及普通管理提供撤销。撤销下一首/入队仅移除本次仍待播放的 entry；若已成为当前项保留音频。删除当前播放来源时播放不突然停止。
+
+## 5. 页面落地顺序与用户可见验收
+
+| 页面组 | 主要故事/布局 | 验收重点 |
+|---|---|---|
+| 首页 | 继续播放、最近收听、推荐；聚焦更新上屏 | 真实服务/本地数据；无账号可继续用本地库 |
+| 发现与搜索 | 推荐/分类/搜索结果；下屏列表、上屏预览 | 输入激活不截获文字键；结果过期取消；无结果可重试 |
+| 音乐库一级 | 喜欢歌曲、专辑、歌单、本地/下载等入口 | 收藏跨页面即时一致；右栏仅一级存在 |
+| 喜欢/收藏列表 | 页头和类别横向合并、计数靠右 | 最后一项移除后可聚焦空态动作；可撤销 |
+| 专辑/歌单详情 | 名称左/共 N 首右；底部播放/更多 | A 播放后留列表；收藏、批量加入、只读权限正确 |
+| 本地/下载/历史 | 导入、扫描、下载管理和最近播放 | 调真实 scanner / DownloadManager；权限与失败可恢复 |
+| 我的/连接/登录 | 当前公开账号、原登录流程、音乐源和设置 | 单份登录态；重新登录/退出立即清掉旧账号音乐库 |
+| 主题/手柄/吹气设置 | 三种材质×日夜、映射、吹气开关/校准 | 持久化；主题切换不重建导航；麦克风仅明确启用后请求 |
+| 播放页 | 标题/艺术家+喜欢/更多；紧凑进度与主控制；下一首；三次级按钮 | 无旧迷你播放器叠加；真实跳转/模式/定时；日夜均完整 |
+| 队列/歌词定位 | 用 entryId 列表、移除/跳转、歌词 seek | 重复歌曲不误删/误选；取消 seek 不改变真实进度 |
+| 管理弹层 | 对象菜单 → 加入歌单 → 新建名称 | 同锚点同宽、170ms水平过渡、手柄全路径、返回精确恢复 |
+
+## 6. 输入、菜单与 3D
+
+Activity 和 Presentation 均将事件交给同一 InputRouter。A 确认、B 最内层返回、X 更多、Y 播放暂停、Start 进出播放器并恢复来源、Select 队列、L2/R2 上一/下一首；L1/R1 仅一级切 Tab。A/B/X 等单次动作不跟随 repeat；D-pad 和摇杆统一出口，死区/连发/失焦清理；兼容 BRAKE/GAS 扳机并去重数字和轴事件。
+
+列表稳定 key 注册 FocusRequester/边界与选中态。手柄路由和 Compose 默认导航只选一种消费路径，避免一次移动两格。菜单背景不可交互；长按约460ms、移动超过8dp取消，不触发释放后的点击。触摸锚定按压位置，手柄锚定被选项目，边缘自动翻转/限制。父子同宽同锚点；A/Right进入，B/Left回父，返回记忆；子项A立即加入并关闭，无复选确认步骤。
+
+3D 使用 Canvas 真正六面薄盒 + 透视投影 + 正背贴图，不引入额外 GL surface。纹理提前由 Coil 缓存解码，Matrix.setPolyToPoly 将 Bitmap 映射四角；不使用 API35 才有的 Matrix44。侧面、书脊、反光与投影用程序绘制。
+
+动力学为纯 Kotlin：气流平滑 attack80ms/release180ms，目标正向转速600×s^1.45度/秒，初始加速200、减速420；停止投影180ms后以omega8/damping16软吸附到−16°+k×180°。拖动立即接管，水平 yaw、有限垂直倾斜、惯性归位。减少动态时弱化/关闭持续运动，隐藏/后台不保持帧循环。麦克风只输出强度，绝不选择或确认内容。
+
+## 7. 并行实施与文件所有权
+
+并发上限为4个运行 agent（含集成负责人），持续保持可用的最高有效并行；不通过多人改同一入口制造冲突。worker 不操作 Git 索引/commit、不并发运行 Gradle，集成负责人统一提交与构建。
+
+| 工作流 | 第一波独占范围 | 后续交接 |
+|---|---|---|
+| 根集成 | `thor/model`、Shell/导航/菜单/下屏页面、播放桥、Activity/Manifest/Gradle | 统一评审、构建、真实数据贯通、安装验收 |
+| 数据与账号 agent | `thor/data`、必要的新 Thor Room业务层/迁移（旧共享文件先协调） | 喜欢/收藏/歌单/本地/首页/发现/搜索与会话回归 |
+| 视觉与模型 agent | `thor/theme`、`thor/components`、`thor/artwork`、`thor/upper` | 主题材质、上屏/歌词、物理测试、视觉验收 |
+| 平台与输入 agent | 环境准备、`thor/display`、`thor/input`、`thor/audio` | 两屏生命周期、手柄与麦克风、模拟器验收支持 |
+
+第一波开工条件：设计已commit、此计划已完成、公共模型已落盘。根负责人先提供最小公共模型与编译入口；agent 可在各自独立文件按契约开发。跨边界修改先发消息，由所有者实施或明确移交。某工作流完成后，立即转到菜单细节、数据回归、UI验收等独立待办，不空等慢任务。
+
+依赖关系：环境准备与公共契约并行；主题/模型/平台/数据并行；下屏先用真实数据模型而非示例实现；播放器与菜单依赖数据/播放桥；最后集中集成与修复。每个阶段记录实际交付，未集成模块不记为用户功能完成。
+
+## 8. 里程碑与验证门槛
+
+| 阶段 | 交付 | 验证门槛 | 当前状态 |
+|---|---|---|---|
+| M0 | 设计与本计划提交、所有权与接口冻结 | 文档链接/Token/预览有效，Git diff检查 | 设计已提交；计划完成 |
+| M1 | 精确构建环境、Thor入口与两屏容器 | debug可构建；上1920×1080/下1240×1080实际窗口；断开与恢复 | 待实施 |
+| M2 | 主题、焦点、真实本地列表与预览模型 | 三材质日夜；触摸/方向/A；两设备档不裁切 | 待实施 |
+| M3 | 真实播放、队列、歌词、控制台 | 不改变浏览焦点；重复entry跳转/删除；seek确认/取消 | 待实施 |
+| M4 | 喜欢/收藏/歌单与分级菜单 | 账号切换隔离；事务/失败状态；父子焦点与锚点；撤销 | 待实施 |
+| M5 | 首页/发现/搜索/我的/本地与下载 | 真实数据，登录与会话复用，错误/空态可操作 | 待实施 |
+| M6 | 吹气/拖动/设置/运行时恢复 | 力度、惯性、最终正面；权限默认关闭；后台停止录音 | 待实施 |
+| M7 | 集成回归、安装包与记录 | 针对性测试、模拟器双屏操作、剩余真机项明确 | 待实施 |
+
+自动测试优先覆盖真实风险：输入单次/重复/轴去重，焦点/菜单状态机，3D稳定性与吸附，账号切换与旧请求，事务/歌单重复添加，队列身份与撤销。复用已有账号/Session/Repository测试；不为颜色常量或低影响样式镜像实现写测试。
+
+统一运行Gradle，先精确版本依赖解析与debug编译，再跑变更相关单元测试；有新变更/失败再扩大检查。原生API33约束与API36模拟器分别核对。使用已有 `thor_agent_dual_api36` 和参考脚本，显式adb serial，不清用户设备数据。设备档布局验证可使用受控模拟器显示配置，完成后恢复Thor配置。
+
+## 9. 工程环境与风险
+
+本地最初缺少API37/NDK27.1.12297006/Gradle9.6缓存以及同级Glasmio。按项目CI固定版本准备：JDK21、`platforms;android-37.0`、`build-tools;37.0.0`、`ndk;27.1.12297006`、CMake3.22.1；Glasmio固定 `NEORUAA/Glasmio@bbba63b2f2584c4819bd88043332e241820d1ca0`。不为了本机缓存静默降级项目依赖。
+
+风险处理：远程接口失效保留真实错误与重试；账号敏感值不进入UI/日志；渲染帧时不解码图像；显示断连不重建音频；长按与拖动分区；服务或硬件未实际验收的能力明确标注。实体Thor/RP Duo上的真实按键码、吹气抗环境噪声、扬声器反馈、合盖和音频路由仍需真机验证，模拟器不能给出这些结论。
