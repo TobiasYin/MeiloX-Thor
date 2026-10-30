@@ -27,6 +27,7 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -41,6 +43,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -55,11 +58,14 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -93,6 +99,15 @@ private data class FocusState(
     val allIndices: List<Int>,
     val activeInterludeIndex: Int?,
     val activeIntro: Boolean
+)
+
+/** Optional opaque text roles. Null retains the existing player's upstream alpha/animation behavior. */
+@Immutable
+data class ReadableLyricsPalette(
+    val active: Color,
+    val inactive: Color,
+    val translation: Color,
+    val phonetic: Color,
 )
 
 /** Renders lyrics while the caller owns automatic scrolling and manual browsing state. */
@@ -138,7 +153,33 @@ internal fun PlayerLyricsView(
     bottomFadeHeight: Dp = 100.dp,
     contentModifier: Modifier = Modifier,
     controlsFadeRange: (Float) -> ClosedFloatingPointRange<Float>? = { null },
+    readablePalette: ReadableLyricsPalette? = null,
+    readableInactiveLineTextStyle: TextStyle? = null,
+    interactive: Boolean = true,
 ) {
+    if (readablePalette != null) {
+        ReadablePlayerLyricsView(
+            listState = listState,
+            lyrics = lyrics,
+            currentPosition = currentPosition,
+            onLineClicked = onLineClicked,
+            onLinePressed = onLinePressed,
+            modifier = modifier,
+            listModifier = listModifier,
+            palette = readablePalette,
+            activeStyle = normalLineTextStyle,
+            inactiveStyle = readableInactiveLineTextStyle ?: normalLineTextStyle,
+            accompanimentStyle = accompanimentLineTextStyle,
+            translationStyle = translationLineTextStyle,
+            phoneticStyle = phoneticTextStyle,
+            showTranslation = showTranslation,
+            showPhonetic = showPhonetic,
+            verbatim = isVerbatim,
+            offset = offset,
+            interactive = interactive,
+        )
+        return
+    }
     val stableNormalTextStyle = remember(normalLineTextStyle) { normalLineTextStyle }
     val stableAccompanimentTextStyle =
         remember(accompanimentLineTextStyle) { accompanimentLineTextStyle }
@@ -483,6 +524,125 @@ internal fun PlayerLyricsView(
             }
         }
     }
+}
+
+/**
+ * The upstream renderer fixes unsung-word alpha at .2 and translation/phonetic alpha at .4/.6.
+ * This opt-in renderer keeps the existing lyric model/timing while allowing fully opaque roles.
+ * Word emphasis changes color only; text does not bounce, blur or become illegible in day mode.
+ */
+@Composable
+private fun ReadablePlayerLyricsView(
+    listState: LazyListState,
+    lyrics: SyncedLyrics,
+    currentPosition: () -> Int,
+    onLineClicked: (ISyncedLine) -> Unit,
+    onLinePressed: (ISyncedLine) -> Unit,
+    modifier: Modifier,
+    listModifier: Modifier,
+    palette: ReadableLyricsPalette,
+    activeStyle: TextStyle,
+    inactiveStyle: TextStyle,
+    accompanimentStyle: TextStyle,
+    translationStyle: TextStyle,
+    phoneticStyle: TextStyle,
+    showTranslation: Boolean,
+    showPhonetic: Boolean,
+    verbatim: Boolean,
+    offset: Dp,
+    interactive: Boolean,
+) {
+    val owners = remember(lyrics.lines) { lyricAccompanimentOwners(lyrics.lines) }
+    val focused by remember(lyrics, currentPosition) {
+        derivedStateOf { lyricFocusLineIndex(lyrics.lines, currentPosition(), owners) }
+    }
+    Box(modifier.clipToBounds()) {
+        LazyColumn(
+            state = listState,
+            modifier = listModifier.fillMaxSize(),
+            userScrollEnabled = interactive,
+            contentPadding = PaddingValues(top = offset, bottom = 260.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            itemsIndexed(lyrics.lines, key = { index, line -> "${line.start}-${line.end}-$index" }) { index, line ->
+                val focus = index == focused || owners[index] == focused
+                val content = remember(line) {
+                    when (line) {
+                        is KaraokeLine -> line.syllables.joinToString("") { it.content }
+                        is SyncedLine -> line.content
+                        else -> ""
+                    }
+                }
+                val translation = when (line) { is KaraokeLine -> line.translation; is SyncedLine -> line.translation; else -> null }
+                val phonetic = if (line is KaraokeLine) line.phonetic
+                    ?: line.syllables.mapNotNull { it.phonetic }.takeIf { it.isNotEmpty() }?.joinToString("") else null
+                val style = if (line is KaraokeLine.AccompanimentKaraokeLine) accompanimentStyle else if (focus) activeStyle else inactiveStyle
+                val textAlign = if (content.isRtl()) TextAlign.End else TextAlign.Start
+                val rowModifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .then(if (interactive) Modifier.combinedClickable(onClick = { onLineClicked(line) }, onLongClick = { onLinePressed(line) }) else Modifier)
+                    .padding(vertical = 8.dp, horizontal = 12.dp)
+                Column(rowModifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (line is KaraokeLine && verbatim && focus) {
+                        val glyphOffsets = remember(line) { line.syllables.map { readableGlyphOffsets(it.content) } }
+                        val time = currentPosition()
+                        val styled = buildAnnotatedString {
+                            line.syllables.forEachIndexed { syllableIndex, syllable ->
+                                val start = length
+                                append(syllable.content)
+                                val offsets = glyphOffsets[syllableIndex]
+                                val progress = readableKaraokeProgress(time, syllable.start, syllable.end, offsets.size - 1)
+                                for (glyph in 0 until offsets.lastIndex) {
+                                    val emphasis = (progress - glyph).coerceIn(0.0, 1.0).toFloat()
+                                    addStyle(SpanStyle(color = lerp(palette.inactive, palette.active, emphasis)), start + offsets[glyph], start + offsets[glyph + 1])
+                                }
+                            }
+                        }
+                        Text(styled, style = style.copy(lineHeight = 1.3.em), color = palette.active, textAlign = textAlign)
+                    } else {
+                        Text(content, style = style.copy(lineHeight = 1.3.em), color = if (focus) palette.active else palette.inactive, textAlign = textAlign)
+                    }
+                    if (showTranslation && !translation.isNullOrBlank()) {
+                        Text(translation, style = translationStyle.copy(lineHeight = 1.3.em), color = palette.translation, textAlign = textAlign)
+                    }
+                    if (showPhonetic && !phonetic.isNullOrBlank()) {
+                        Text(phonetic, style = phoneticStyle.copy(lineHeight = 1.3.em), color = palette.phonetic, textAlign = textAlign)
+                    }
+                    if (line is KaraokeLine.MainKaraokeLine) {
+                        // Some sources attach backing voices to their main line instead of listing
+                        // them separately. Retain those voices without the library's opacity mask.
+                        line.accompanimentLines.orEmpty().filter { backing ->
+                            backing !in lyrics.lines && currentPosition() >= backing.start - 600 && currentPosition() <= backing.end + 600
+                        }.forEach { backing ->
+                            Text(
+                                backing.syllables.joinToString("") { it.content },
+                                style = accompanimentStyle.copy(lineHeight = 1.3.em), color = palette.inactive, textAlign = textAlign,
+                            )
+                            if (showTranslation && !backing.translation.isNullOrBlank()) {
+                                Text(backing.translation!!, style = translationStyle.copy(lineHeight = 1.3.em), color = palette.translation, textAlign = textAlign)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Unicode code-point boundaries keep animated spans from splitting surrogate pairs. */
+internal fun readableGlyphOffsets(text: String): List<Int> = buildList {
+    var index = 0
+    while (index < text.length) {
+        add(index)
+        index += Character.charCount(Character.codePointAt(text, index))
+    }
+    add(text.length)
+}
+
+internal fun readableKaraokeProgress(time: Int, start: Int, end: Int, glyphCount: Int): Double {
+    if (glyphCount <= 0) return 0.0
+    if (end <= start) return if (time >= end) glyphCount.toDouble() else 0.0
+    return ((time.toLong() - start.toLong()).toDouble() / (end.toLong() - start.toLong()))
+        .coerceIn(0.0, 1.0) * glyphCount
 }
 
 @Composable
