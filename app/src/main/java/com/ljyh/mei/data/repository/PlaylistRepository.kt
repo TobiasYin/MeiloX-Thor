@@ -392,17 +392,23 @@ class PlaylistRepository(
     suspend fun createPlaylist(
         name: String,
         privacy: Boolean, // 0 普通歌单, 10 隐私歌单
-        type: String = "NORMAL" // 默认 NORMAL, VIDEO 视频歌单, SHARED 共享歌单
+        type: String = "NORMAL", // 默认 NORMAL, VIDEO 视频歌单, SHARED 共享歌单
+        expectedSession: String? = null,
     ): Resource<CreatePlaylistResult> {
         return withContext(Dispatchers.IO) {
             safeApiCall {
+                if (expectedSession != null) requireOrderSession(expectedSession)
                 apiService.createPlaylist(
                     CreatePlaylist(
                         name = name,
                         privacy = if (privacy) "10" else "0",
                         type = type
-                    )
-                ).also { if (it.code == 200) _collectionChanges.emit(Unit) }
+                    ),
+                    expectedSession,
+                ).also {
+                    if (expectedSession != null) requireOrderSession(expectedSession)
+                    if (it.code == 200) _collectionChanges.emit(Unit)
+                }
             }
         }
     }
@@ -410,6 +416,25 @@ class PlaylistRepository(
     suspend fun subscribePlaylist(
         id: String
     ): Resource<BaseResponse> = changePlaylistSubscription(id, subscribed = true)
+
+    /** Endpoint contract: NeteaseMusic-API/module/playlist_name_update.js (id, name). */
+    suspend fun renamePlaylist(
+        id: String,
+        name: String,
+        ownerUserId: Long,
+        expectedSession: String,
+    ): Resource<BaseResponse> = withContext(ioDispatcher) {
+        safeApiCall {
+            require(name.isNotBlank()) { "歌单名称不能为空" }
+            loadPlaylistForOrder(id, ownerUserId, expectedSession)
+            requireOrderSession(expectedSession)
+            apiService.renamePlaylist(mapOf("id" to id, "name" to name.trim()), expectedSession).also {
+                requireOrderSession(expectedSession)
+                check(it.code == 200) { "歌单重命名失败 (${it.code})" }
+                _collectionChanges.emit(Unit)
+            }
+        }
+    }
 
     suspend fun unSubscribePlaylist(
         id: String
@@ -442,16 +467,20 @@ class PlaylistRepository(
     }
 
     suspend fun deletePlaylist(
-        id: String
+        id: String,
+        expectedSession: String? = null,
     ): Resource<BaseMessageResponse> {
         val account = subscriptionAccount()
         return withContext(ioDispatcher) {
             safeApiCall {
+                if (expectedSession != null) requireOrderSession(expectedSession)
                 apiService.deletePlaylist(
                     DeletePlaylist(
                         ids = "[$id]"
-                    )
+                    ),
+                    expectedSession,
                 ).also {
+                    if (expectedSession != null) requireOrderSession(expectedSession)
                     if (it.code == 200 && account.isNotBlank() && subscriptionAccount() == account) {
                         _collectionChanges.emit(Unit)
                     }

@@ -30,14 +30,19 @@ import com.ljyh.mei.di.dao.PlaylistDao
 import com.ljyh.mei.di.dao.PlaylistSongCrossRefDao
 import com.ljyh.mei.di.dao.QQSongDao
 import com.ljyh.mei.di.dao.SongDao
+import com.ljyh.mei.thor.data.local.ThorFavoriteEntity
+import com.ljyh.mei.thor.data.local.ThorPlaylistEntity
+import com.ljyh.mei.thor.data.local.ThorPlaylistTrackEntity
+import com.ljyh.mei.thor.data.local.ThorLocalDao
 
 @Database(
     entities = [
         CacheColor::class, Song::class, Like::class, QQSong::class, Playlist::class,
         PlaybackHistory::class, AlbumEntity::class, ArtistEntity::class, AlbumArtistCrossRef::class,
-        CachedLyric::class, DownloadTask::class, PlaylistSongCrossRef::class, PlaybackCount::class
+        CachedLyric::class, DownloadTask::class, PlaylistSongCrossRef::class, PlaybackCount::class,
+        ThorFavoriteEntity::class, ThorPlaylistEntity::class, ThorPlaylistTrackEntity::class
     ],
-    version = 18
+    version = 19
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -51,6 +56,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedLyricDao(): CachedLyricDao
     abstract fun downloadDao(): DownloadDao
     abstract fun playlistSongCrossRefDao(): PlaylistSongCrossRefDao
+    abstract fun thorLocalDao(): ThorLocalDao
 
     companion object {
         val MIGRATION_8_9 = object : Migration(8, 9) {
@@ -177,13 +183,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS thor_favorite (
+                    scope TEXT NOT NULL, kind TEXT NOT NULL, itemId INTEGER NOT NULL,
+                    local INTEGER NOT NULL, title TEXT NOT NULL, subtitle TEXT NOT NULL,
+                    artworkUri TEXT, description TEXT NOT NULL, tracksJson TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL, PRIMARY KEY(scope, kind, itemId, local))""".trimIndent())
+                db.execSQL("""CREATE TABLE IF NOT EXISTS thor_local_playlist (
+                    id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)""".trimIndent())
+                db.execSQL("""CREATE TABLE IF NOT EXISTS thor_local_playlist_track (
+                    playlistId TEXT NOT NULL, songKey TEXT NOT NULL, position INTEGER NOT NULL,
+                    metadataJson TEXT NOT NULL, PRIMARY KEY(playlistId, songKey),
+                    FOREIGN KEY(playlistId) REFERENCES thor_local_playlist(id) ON UPDATE NO ACTION ON DELETE CASCADE)""".trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_thor_local_playlist_track_playlistId ON thor_local_playlist_track(playlistId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "app_database"
-                ).addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                ).addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
                     .build()
                     .also { INSTANCE = it }
             }
