@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "1.0.0",
+  "defaultTheme": "ceramic",
+  "defaultAppearance": "system",
+  "scope": "Design prototype; independent from device geometry and playback state",
+  "foundation": {
+    "fontFamily": "Inter, 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif",
+    "spacing": [4, 8, 12, 16, 20, 24, 32, 48],
+    "minimumTouchTarget": 48,
+    "typography": {
+      "display": {"size": 38, "weight": 500},
+      "pageTitle": {"size": 20, "weight": 500},
+      "playerTitle": {"size": 24, "weight": 500},
+      "body": {"size": 16, "weight": 500},
+      "secondary": {"size": 12, "weight": 400},
+      "control": {"size": 14, "weight": 400},
+      "caption": {"size": 11, "weight": 400},
+      "lyricCurrent": {"size": 28, "weight": 500},
+      "lyricAdjacent": {"size": 19, "weight": 400},
+      "lyricTranslation": {"size": 14, "weight": 400}
+    },
+    "motion": {
+      "pressMs": 120, "surfaceMs": 180, "caseMs": 320, "menuEnterMs": 170,
+      "blow": {
+        "axis": "positive-y",
+        "maximumDegreesPerSecond": 600,
+        "strengthExponent": 1.45,
+        "inputAttackMs": 80,
+        "inputReleaseMs": 180,
+        "accelerationMs": 200,
+        "decelerationMs": 420,
+        "demoPulseMs": 1200,
+        "restDegrees": -16,
+        "settleOmega": 8,
+        "settleDamping": 16,
+        "momentumProjectionMs": 180,
+        "dragDegreesPerWidth": 360,
+        "dragMaximumSpeed": 900
+      }
+    },
+    "state": {"disabledOpacity": 0.45, "selectionStroke": 1.5},
+    "componentMaterials": {
+      "MusicRow": "flat; selected surface when selected",
+      "CompactHeader": "panel",
+      "NavRail": "panel",
+      "NowPlayingBar": "panel",
+      "PlayerDeck": "inset",
+      "ActionButton": "raised",
+      "PrimaryActionButton": "enamel",
+      "ProgressTrack": "inset",
+      "Overlay": "opaque elevated panel",
+      "ContextMenu": "anchored opaque elevated panel; semantic liked/collected/focus states",
+      "PlaylistSubmenu": "same-anchor opaque elevated panel; select one target and commit",
+      "Feedback": "surface with optional undo action"
+    }
+  },
+  "themes": {
+    "ceramic": {
+      "label": "微砂陶瓷",
+      "styleReference": "Soft UI Evolution",
+      "shape": {"control": 12, "card": 14, "small": 6, "deck": 24},
+      "lighting": {"shadowBlur": 12, "shadowLift": 4, "glintAngle": 155},
+      "appearances": {
+        "day": {
+          "canvas": "#EFEEE8", "surface": "#FAFAF5", "inset": "#E3E5DE",
+          "ink": "#202B28", "muted": "#526059", "line": "#CFD4CB", "edge": "#B1BBB1",
+          "accent": "#126B58", "onAccent": "#FFFFFF", "selected": "#DEECE3", "selectedInk": "#075843", "focus": "#00624C",
+          "raisedTop": "#FFFFFF", "raisedBottom": "#EEEFE7", "primaryTop": "#19745F", "primaryBottom": "#105A49",
+          "highlight": "#FFFFFFD9", "contact": "#25392E24", "shadow": "#263C2D14", "primaryHighlight": "#FFFFFF52", "primaryLowlight": "#002B1F38",
+          "paneGlint": "#FFFFFF7A", "grain": "#273D2F04", "ambient": "#D1DFD3", "bezel": "#D8DCD4",
+          "caseEdge": "#E1EBE8E8", "caseBase": "#C9D8D2", "caseHighlight": "#FFFFFFBB", "caseReflection": "#FFFFFF45", "caseSpineLight": "#EFF5EF", "caseSpineDark": "#8FA9A0", "caseInk": "#253B32", "caseShadow": "#1A342E35"
+        },
+        "night": {
+          "canvas": "#171E1C", "surface": "#252E29", "inset": "#101714",
+          "ink": "#EEF3EB", "muted": "#B8C5B8", "line": "#3A473D", "edge": "#59685B",
+          "accent": "#9AD9BA", "onAccent": "#112C21", "selected": "#2B4335", "selectedInk": "#B6E9CC", "focus": "#A4E5C4",
+          "raisedTop": "#333D35", "raisedBottom": "#242D27", "primaryTop": "#B1E3C6", "primaryBottom": "#88C8A9",
+          "highlight": "#D6E9CA1F", "contact": "#020C0870", "shadow": "#020A063D", "primaryHighlight": "#F0FFF099", "primaryLowlight": "#214F3738",
+          "paneGlint": "#CAE2CB12", "grain": "#D2E4CE04", "ambient": "#253E30", "bezel": "#303A32",
+          "caseEdge": "#BBCFC5C9", "caseBase": "#435E51", "caseHighlight": "#E3F2E466", "caseReflection": "#E3F5EB2B", "caseSpineLight": "#ADC7B5", "caseSpineDark": "#3A5D4C", "caseInk": "#12291E", "caseShadow": "#000A085C"
+        }
+      }
+    },
+    "glass": {
+      "label": "晶雾玻璃",
+      "styleReference": "Glassmorphism; opaque reading surfaces",
+      "shape": {"control": 14, "card": 16, "small": 8, "deck": 26},
+      "lighting": {"shadowBlur": 16, "shadowLift": 5, "glintAngle": 118},
+      "appearances": {
+        "day": {
+          "canvas": "#E9EDF4", "surface": "#F7F9FE", "inset": "#DEE5F0",
+          "ink": "#202D43", "muted": "#4D5D75", "line": "#CCD6E6", "edge": "#A6B7D3",
+          "accent": "#315BC5", "onAccent": "#FFFFFF", "selected": "#DCE6FB", "selectedInk": "#234C9D", "focus": "#204FAF",
+          "raisedTop": "#FFFFFF", "raisedBottom": "#E7EDF8", "primaryTop": "#3D66CF", "primaryBottom": "#284BA8",
+          "highlight": "#FFFFFFF0", "contact": "#263C6A24", "shadow": "#1A397E17", "primaryHighlight": "#FFFFFF66", "primaryLowlight": "#10266347",
+          "paneGlint": "#FFFFFFB3", "grain": "#4667B104", "ambient": "#C6D7F1", "bezel": "#D4DCE9",
+          "caseEdge": "#DDE8FAE6", "caseBase": "#C3D4EA", "caseHighlight": "#FFFFFFCC", "caseReflection": "#FFFFFF66", "caseSpineLight": "#F0F7FF", "caseSpineDark": "#869FBD", "caseInk": "#25384F", "caseShadow": "#1A2A5338"
+        },
+        "night": {
+          "canvas": "#151C2B", "surface": "#252F44", "inset": "#0E1523",
+          "ink": "#EDF2FF", "muted": "#BCC9E3", "line": "#3E4E6B", "edge": "#607397",
+          "accent": "#A5BEFF", "onAccent": "#17274B", "selected": "#2D426B", "selectedInk": "#CCD9FF", "focus": "#B8CBFF",
+          "raisedTop": "#35415B", "raisedBottom": "#242E43", "primaryTop": "#BED0FF", "primaryBottom": "#91ABEE",
+          "highlight": "#D7E5FF30", "contact": "#03091C80", "shadow": "#040B2347", "primaryHighlight": "#F1F6FFB3", "primaryLowlight": "#2A47734D",
+          "paneGlint": "#BDD3FF26", "grain": "#D3E2FF04", "ambient": "#243C63", "bezel": "#303C54",
+          "caseEdge": "#BED0F5D4", "caseBase": "#42597A", "caseHighlight": "#E7F1FF8C", "caseReflection": "#DBECFF38", "caseSpineLight": "#B3C9EA", "caseSpineDark": "#35517B", "caseInk": "#152440", "caseShadow": "#02071A66"
+        }
+      }
+    },
+    "titanium": {
+      "label": "钛金 Hi-Fi",
+      "styleReference": "Restrained Skeuomorphism",
+      "shape": {"control": 8, "card": 10, "small": 4, "deck": 18},
+      "lighting": {"shadowBlur": 8, "shadowLift": 3, "glintAngle": 175},
+      "appearances": {
+        "day": {
+          "canvas": "#E3E0D9", "surface": "#F4F1E9", "inset": "#D4D2CC",
+          "ink": "#2C2A25", "muted": "#58554C", "line": "#C2BEB4", "edge": "#A7A195",
+          "accent": "#87461F", "onAccent": "#FFFFFF", "selected": "#EBDECA", "selectedInk": "#743B16", "focus": "#743815",
+          "raisedTop": "#FCFAF4", "raisedBottom": "#D8D6CF", "primaryTop": "#944D22", "primaryBottom": "#6E3617",
+          "highlight": "#FFFFFFE0", "contact": "#302A2240", "shadow": "#30251B1A", "primaryHighlight": "#FFE7C770", "primaryLowlight": "#3C1C005C",
+          "paneGlint": "#FFFFFF52", "grain": "#3C352B0A", "ambient": "#D5C7AF", "bezel": "#C8C5BC",
+          "caseEdge": "#E6E3D6E8", "caseBase": "#C9C7BA", "caseHighlight": "#FFFFF5BF", "caseReflection": "#FFFFFF40", "caseSpineLight": "#F5F1DC", "caseSpineDark": "#99967F", "caseInk": "#383524", "caseShadow": "#31291B47"
+        },
+        "night": {
+          "canvas": "#222320", "surface": "#32342E", "inset": "#161813",
+          "ink": "#F2EFE5", "muted": "#C4C2B4", "line": "#4A4D40", "edge": "#6C6F60",
+          "accent": "#EFBC7B", "onAccent": "#33220D", "selected": "#4A3D28", "selectedInk": "#F7D4A3", "focus": "#F6C990",
+          "raisedTop": "#44463C", "raisedBottom": "#2D3028", "primaryTop": "#F5D09A", "primaryBottom": "#DCA65F",
+          "highlight": "#FFF7DD30", "contact": "#02050099", "shadow": "#02040052", "primaryHighlight": "#FFF7E1BF", "primaryLowlight": "#6B49154D",
+          "paneGlint": "#FFF3CA17", "grain": "#F0E4BF09", "ambient": "#493F2B", "bezel": "#3D4034",
+          "caseEdge": "#D9D7BED4", "caseBase": "#62654F", "caseHighlight": "#FBF6D680", "caseReflection": "#FFF5D62E", "caseSpineLight": "#CECFAF", "caseSpineDark": "#5C6141", "caseInk": "#252B14", "caseShadow": "#00040073"
+        }
+      }
+    }
+  }
+}
