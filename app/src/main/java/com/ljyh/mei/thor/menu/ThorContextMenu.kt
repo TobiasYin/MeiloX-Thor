@@ -244,47 +244,14 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                         }
                     }
                     ThorMenuLevel.Name -> {
-                        var field by remember(subjectKey, menu.renaming) {
-                            mutableStateOf(TextFieldValue(menu.name, TextRange(0, menu.name.length)))
-                        }
-                        LaunchedEffect(menu.name) {
-                            if (field.text != menu.name) field = TextFieldValue(menu.name, TextRange(menu.name.length))
-                        }
-                        LaunchedEffect(interactive) {
-                            if (interactive) { withFrameNanos { }; registry.request("menu:name") }
-                        }
-                        DisposableEffect(Unit) { onDispose { vm.textEditing.value = false } }
-                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedTextField(
-                                value = field,
-                                onValueChange = { value ->
-                                    if (interactive) {
-                                        val text = value.text.take(80)
-                                        field = value.copy(text = text, selection = TextRange(value.selection.start.coerceAtMost(text.length), value.selection.end.coerceAtMost(text.length)))
-                                        vm.setMenuName(text)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                                    .thorFocus(registry, "menu:name", enabled = interactive, onClick = { if (interactive) keyboard?.show() })
-                                    .onFocusChanged { if (level == currentMenu.level) vm.textEditing.value = it.isFocused && interactive },
-                                label = { Text("歌单名称") }, singleLine = true, enabled = interactive,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { if (interactive) { keyboard?.hide(); vm.saveMenuName() } }),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = theme.text, unfocusedTextColor = theme.text,
-                                    focusedBorderColor = theme.focus, unfocusedBorderColor = theme.outline,
-                                    focusedContainerColor = theme.inset, unfocusedContainerColor = theme.inset,
-                                    cursorColor = theme.accent,
-                                ),
-                            )
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ThorButton(registry, "menu:name:cancel", "取消", Modifier.weight(1f), enabled = interactive,
-                                    onClick = { if (interactive) { keyboard?.hide(); vm.back() } })
-                                ThorButton(registry, "menu:name:save", if (menu.renaming) "保存" else if (menu.subject.item.key is ThorItemKey.Destination) "创建" else "创建并加入", Modifier.weight(1.4f),
-                                    primary = true, enabled = interactive && menu.name.isNotBlank(),
-                                    onClick = { if (interactive && menu.name.isNotBlank()) { keyboard?.hide(); vm.saveMenuName() } })
-                            }
-                        }
+                        ThorMenuNameEditor(
+                            entryKey = subjectKey, renaming = menu.renaming, initialName = menu.name,
+                            saveLabel = if (menu.renaming) "保存" else if (menu.subject.item.key is ThorItemKey.Destination) "创建" else "创建并加入",
+                            registry = registry, enabled = interactive,
+                            onNameChanged = vm::setMenuName, onSubmit = vm::saveMenuName,
+                            onCancel = { vm.back() },
+                            onEditingChanged = { if (level == currentMenu.level) vm.textEditing.value = it },
+                        )
                     }
                 }
             }
@@ -301,6 +268,67 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                     onTextLayout = { errorLines = it.lineCount.coerceIn(1, 2) },
                 )
             }
+        }
+    }
+}
+
+/** The local IME value owns this edit session; delayed parent echoes cannot replace it. */
+@Composable
+internal fun ThorMenuNameEditor(
+    entryKey: String,
+    renaming: Boolean,
+    initialName: String,
+    saveLabel: String,
+    registry: ThorFocusRegistry,
+    enabled: Boolean,
+    onNameChanged: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onCancel: () -> Unit,
+    onEditingChanged: (Boolean) -> Unit,
+) {
+    val theme = LocalThorTheme.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    var field by remember(entryKey, renaming) {
+        mutableStateOf(TextFieldValue(initialName.take(80), TextRange(0, initialName.take(80).length)))
+    }
+    val submit = {
+        if (enabled && field.text.isNotBlank()) {
+            onNameChanged(field.text)
+            keyboard?.hide()
+            onSubmit()
+        }
+    }
+    LaunchedEffect(enabled) { if (enabled) { withFrameNanos { }; registry.request("menu:name") } }
+    DisposableEffect(Unit) { onDispose { onEditingChanged(false) } }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = field,
+            onValueChange = { value ->
+                if (enabled) {
+                    val text = value.text.take(80)
+                    fun clamp(range: TextRange) = TextRange(range.start.coerceIn(0, text.length), range.end.coerceIn(0, text.length))
+                    field = value.copy(text = text, selection = clamp(value.selection), composition = value.composition?.let(::clamp))
+                    onNameChanged(text)
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+                .thorFocus(registry, "menu:name", enabled = enabled, onClick = { if (enabled) keyboard?.show() })
+                .onFocusChanged { onEditingChanged(it.isFocused && enabled) },
+            label = { Text("歌单名称") }, singleLine = true, enabled = enabled,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = theme.text, unfocusedTextColor = theme.text,
+                focusedBorderColor = theme.focus, unfocusedBorderColor = theme.outline,
+                focusedContainerColor = theme.inset, unfocusedContainerColor = theme.inset,
+                cursorColor = theme.accent,
+            ),
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThorButton(registry, "menu:name:cancel", "取消", Modifier.weight(1f), enabled = enabled,
+                onClick = { if (enabled) { keyboard?.hide(); onCancel() } })
+            ThorButton(registry, "menu:name:save", saveLabel, Modifier.weight(1.4f), primary = true,
+                enabled = enabled && field.text.isNotBlank(), onClick = submit)
         }
     }
 }

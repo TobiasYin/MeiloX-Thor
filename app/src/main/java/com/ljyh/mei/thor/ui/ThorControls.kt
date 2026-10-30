@@ -3,9 +3,9 @@ package com.ljyh.mei.thor.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,7 +26,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -46,6 +45,7 @@ import com.ljyh.mei.thor.components.thorMaterial
 import com.ljyh.mei.thor.menu.ThorMenuAnchor
 import com.ljyh.mei.thor.model.ThorItem
 import com.ljyh.mei.thor.model.ThorDirection
+import kotlinx.coroutines.flow.collect
 
 class ThorFocusEntry(
     val requester: FocusRequester,
@@ -189,6 +189,10 @@ internal fun ThorCover(item: ThorItem?, modifier: Modifier = Modifier) {
     }
 }
 
+private class ThorRowPressPosition {
+    var active: PressInteraction.Press? = null
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ThorMusicRow(
@@ -198,8 +202,35 @@ internal fun ThorMusicRow(
     onFocused: () -> Unit = {},
 ) {
     val theme = com.ljyh.mei.thor.theme.LocalThorTheme.current
-    var bounds by remember { mutableStateOf(Rect.Zero) }
-    var press by remember { mutableStateOf(Offset.Zero) }
+    var bounds by remember(key) { mutableStateOf(Rect.Zero) }
+    val interactions = remember(key) { MutableInteractionSource() }
+    val press = remember(key) { ThorRowPressPosition() }
+    val currentClick by rememberUpdatedState(onClick)
+    val currentMenu by rememberUpdatedState(onMenu)
+    val click = remember(key, registry) {
+        { if (!registry.blocked) { registry.select(key); currentClick() } }
+    }
+    val longClick = remember(key, registry) {
+        {
+            if (!registry.blocked) {
+                val local = press.active?.pressPosition?.takeIf { it.x.isFinite() && it.y.isFinite() }
+                    ?: Offset(bounds.width / 2f, bounds.height / 2f)
+                val anchor = ThorMenuAnchor(bounds.left + local.x, bounds.top + local.y)
+                registry.select(key)
+                currentMenu(anchor)
+            }
+        }
+    }
+    LaunchedEffect(interactions) {
+        interactions.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> press.active = interaction
+                is PressInteraction.Release -> if (press.active === interaction.press) press.active = null
+                is PressInteraction.Cancel -> if (press.active === interaction.press) press.active = null
+                else -> Unit
+            }
+        }
+    }
     val configuration = LocalViewConfiguration.current
     val rowTouchSlopPx = with(LocalDensity.current) { 8.dp.toPx() }
     val rowConfiguration = remember(configuration, rowTouchSlopPx) {
@@ -215,17 +246,12 @@ internal fun ThorMusicRow(
             .onFocusChanged { if (it.isFocused) onFocused() }
             .onGloballyPositioned { bounds = it.boundsInRoot() }
             .thorMaterial(ThorSurfaceRole.Panel, focused = selected, selected = selected)
-            .pointerInput(key) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    press = down.position
-                    waitForUpOrCancellation()
-                }
-            }
             .combinedClickable(
+                interactionSource = interactions,
+                indication = LocalIndication.current,
                 enabled = !registry.blocked,
-                onClick = { if (!registry.blocked) { registry.select(key); onClick() } },
-                onLongClick = { if (!registry.blocked) { registry.select(key); onMenu(ThorMenuAnchor(bounds.left + press.x, bounds.top + press.y)) } },
+                onClick = click,
+                onLongClick = longClick,
                 onLongClickLabel = "更多操作",
             ).padding(horizontal = 9.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
