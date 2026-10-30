@@ -252,10 +252,10 @@ class ThorShellViewModel @Inject constructor(
         mutableMenu.value = ThorMenuState(subject.copy(currentQueueEntry = subject.queueEntryId != null && subject.queueEntryId == playback.state.value.currentEntryId), anchor)
     }
     fun closeMenu() { mutableMenu.value = null; menuGeneration++ }
-    fun moveMenu(delta: Int) {
+    fun moveMenu(delta: Int, repeated: Boolean = false) {
         val current = menu.value ?: return
         mutableMenu.value = if (current.level == ThorMenuLevel.Playlists) current.movePlaylist(delta, playlistKeys(current, library.value))
-            else current.move(delta, if (current.level == ThorMenuLevel.Actions) menuRows().size else 2)
+            else current.move(delta, if (current.level == ThorMenuLevel.Actions) menuRows().size else 2, repeated)
     }
     fun selectMenu(index: Int) {
         val current = menu.value ?: return
@@ -265,6 +265,12 @@ class ThorShellViewModel @Inject constructor(
         val current = menu.value ?: return
         if (current.busy || current.level != ThorMenuLevel.Playlists) return
         mutableMenu.value = current.selectPlaylistTarget(target, playlistKeys(current, library.value))
+        activateMenu()
+    }
+    fun activateDeleteChoice(choice: ThorDeleteChoice, target: ThorItemKey.Playlist) {
+        val current = menu.value ?: return
+        if (current.busy || current.level != ThorMenuLevel.ConfirmDelete || current.subject.item.key != target) return
+        mutableMenu.value = current.selectDeleteChoice(choice, target)
         activateMenu()
     }
     fun menuRows(): List<ThorMenuRow> {
@@ -294,6 +300,14 @@ class ThorShellViewModel @Inject constructor(
         if (current.busy) return
         when (current.level) {
             ThorMenuLevel.Name -> saveMenuName()
+            ThorMenuLevel.ConfirmDelete -> when (current.deleteChoice()) {
+                ThorDeleteChoice.Cancel -> mutableMenu.value = current.back()
+                ThorDeleteChoice.Delete -> {
+                    val target = current.confirmedDeleteKey() ?: return
+                    menuOperation(current, loadTracks = false) { repository.deletePlaylist(target) }
+                }
+                null -> Unit
+            }
             ThorMenuLevel.Playlists -> {
                 when (val target = current.resolvePlaylistTarget(playlistKeys(current, library.value))) {
                     ThorPlaylistTarget.Create -> {
@@ -312,7 +326,10 @@ class ThorShellViewModel @Inject constructor(
                     mutableMenu.value = current.intoPlaylists(playlistKeys(current, library.value))
                     repository.refresh(ThorCollection.OwnedPlaylists)
                 }
-                ThorMenuAction.Rename -> mutableMenu.value = current.copy(parentSelection = current.selection).intoName(true)
+                ThorMenuAction.Rename -> {
+                    if (notice.value?.success == false) mutableNotice.value = null
+                    mutableMenu.value = current.copy(parentSelection = current.selection).intoName(true)
+                }
                 ThorMenuAction.Album -> {
                     var album: ThorItem? = null
                     menuOperation(current, onSuccess = { album?.let(::open) }) { item ->
@@ -327,7 +344,10 @@ class ThorShellViewModel @Inject constructor(
                 ThorMenuAction.RemoveFromPlaylist -> menuOperation(current) { item -> repository.removeFromPlaylist(current.subject.sourcePlaylist!!, item.tracks) }
                 ThorMenuAction.RemoveFromQueue -> menuOperation(current, loadTracks = false) { playback.remove(current.subject.queueEntryId!!) }
                 ThorMenuAction.SkipCurrent -> menuOperation(current, loadTracks = false) { playback.skip(current.subject.queueEntryId!!) }
-                ThorMenuAction.Delete -> menuOperation(current, loadTracks = false) { repository.deletePlaylist(current.subject.item.key as ThorItemKey.Playlist) }
+                ThorMenuAction.Delete -> {
+                    if (notice.value?.success == false) mutableNotice.value = null
+                    mutableMenu.value = current.intoDeleteConfirmation()
+                }
                 null -> Unit
             }
         }
@@ -384,9 +404,9 @@ class ThorShellViewModel @Inject constructor(
                         navigate(navigation.value.replaceDetail(updated))
                         if (preview.value?.key == updated.key) mutablePreview.value = updated
                     }
-                    if (generation == menuGeneration && current.subject.item.key is ThorItemKey.Playlist && current.level == ThorMenuLevel.Actions && action == ThorMenuAction.Delete &&
-                        (navigation.value.page as? ThorPage.Detail)?.item?.key == current.subject.item.key && navigation.value.overlay == null) back()
-                    if (current.renaming) navigate(navigation.value.replaceDetail(current.subject.item.copy(title = current.name.trim())))
+                    if (generation == menuGeneration && current.shouldPopDeletedDetail(
+                        (navigation.value.page as? ThorPage.Detail)?.item?.key, navigation.value.overlay != null)) back()
+                    if (current.level == ThorMenuLevel.Name && current.renaming) navigate(navigation.value.replaceDetail(current.subject.item.copy(title = current.name.trim())))
                     if (action == ThorMenuAction.RemoveFromPlaylist) refreshOpenDetail(current.subject.sourcePlaylist)
                     onSuccess?.invoke(item)
                 } else if (generation == menuGeneration) mutableMenu.value = current.syncPlaylistTargets(playlistKeys(current, library.value))

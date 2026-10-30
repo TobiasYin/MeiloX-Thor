@@ -4,7 +4,8 @@ import com.ljyh.mei.thor.model.ThorItemKey
 import com.ljyh.mei.thor.model.ThorMenuSubject
 
 data class ThorMenuAnchor(val x: Float, val y: Float)
-enum class ThorMenuLevel { Actions, Playlists, Name }
+enum class ThorMenuLevel { Actions, Playlists, Name, ConfirmDelete }
+enum class ThorDeleteChoice { Cancel, Delete }
 enum class ThorMenuAction {
     Like, Collect, PlayNext, Enqueue, AddToPlaylist, Album, RemoveFromPlaylist, RemoveFromQueue, SkipCurrent, Rename, Delete,
 }
@@ -36,7 +37,9 @@ data class ThorMenuState(
     val renaming: Boolean = false,
     val busy: Boolean = false,
 ) {
-    fun move(delta: Int, count: Int): ThorMenuState = if (busy || count == 0 || level == ThorMenuLevel.Playlists) this else copy(selection = (selection + delta).mod(count))
+    fun move(delta: Int, count: Int, repeated: Boolean = false): ThorMenuState =
+        if (busy || count == 0 || level == ThorMenuLevel.Playlists || level == ThorMenuLevel.ConfirmDelete && repeated) this
+        else copy(selection = (selection + delta).mod(count))
     fun intoPlaylists(targets: List<ThorItemKey.Playlist> = emptyList()): ThorMenuState = copy(
         level = ThorMenuLevel.Playlists, parentSelection = selection,
         playlistTarget = playlistTarget ?: targets.firstOrNull()?.let { ThorPlaylistTarget.Existing(it) } ?: ThorPlaylistTarget.Create,
@@ -72,11 +75,29 @@ data class ThorMenuState(
         level = ThorMenuLevel.Name, playlistSelection = if (level == ThorMenuLevel.Playlists) selection else playlistSelection, selection = 0,
         renaming = rename, name = if (rename) subject.item.title else "",
     )
+    fun intoDeleteConfirmation(): ThorMenuState =
+        if (busy || level != ThorMenuLevel.Actions || subject.item.key !is ThorItemKey.Playlist || !subject.item.owned ||
+            actionRows(false).getOrNull(selection)?.action != ThorMenuAction.Delete) this
+        else copy(level = ThorMenuLevel.ConfirmDelete, parentSelection = selection, selection = ThorDeleteChoice.Cancel.ordinal, renaming = false)
+
+    fun selectDeleteChoice(choice: ThorDeleteChoice, target: ThorItemKey.Playlist): ThorMenuState =
+        if (busy || level != ThorMenuLevel.ConfirmDelete || target != subject.item.key) this else copy(selection = choice.ordinal)
+
+    fun deleteChoice(): ThorDeleteChoice? =
+        if (busy || level != ThorMenuLevel.ConfirmDelete) null else ThorDeleteChoice.entries.getOrNull(selection)
+
+    fun confirmedDeleteKey(): ThorItemKey.Playlist? =
+        if (deleteChoice() == ThorDeleteChoice.Delete && subject.item.owned) subject.item.key as? ThorItemKey.Playlist else null
+
+    fun shouldPopDeletedDetail(detailKey: ThorItemKey?, overlayVisible: Boolean): Boolean =
+        !overlayVisible && confirmedDeleteKey()?.let { it == detailKey } == true
+
     fun back(): ThorMenuState? = if (busy) this else when (level) {
         ThorMenuLevel.Actions -> null
         ThorMenuLevel.Playlists -> copy(level = ThorMenuLevel.Actions, playlistSelection = selection, selection = parentSelection)
         ThorMenuLevel.Name -> if (renaming) copy(level = ThorMenuLevel.Actions, selection = parentSelection)
             else copy(level = ThorMenuLevel.Playlists, selection = playlistSelection)
+        ThorMenuLevel.ConfirmDelete -> copy(level = ThorMenuLevel.Actions, selection = parentSelection)
     }
 
     private fun playlistChoices(targets: List<ThorItemKey.Playlist>): List<ThorPlaylistTarget> =

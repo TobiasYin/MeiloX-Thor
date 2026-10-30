@@ -87,6 +87,7 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
         ThorMenuLevel.Actions -> menu.subject.item.title
         ThorMenuLevel.Playlists -> "加入歌单"
         ThorMenuLevel.Name -> if (menu.renaming) "重命名歌单" else "新建歌单"
+        ThorMenuLevel.ConfirmDelete -> "删除歌单"
     }
     val currentMenu by rememberUpdatedState(menu)
     SideEffect { registry.blocked = menu.busy }
@@ -103,11 +104,13 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
             ThorMenuLevel.Actions -> 49.dp + 12.dp + 48.dp * actions.size
             ThorMenuLevel.Playlists -> 49.dp + 12.dp + 48.dp * (playlists.size + 1)
             ThorMenuLevel.Name -> 201.dp
+            ThorMenuLevel.ConfirmDelete -> 237.dp
         }
         // Reserve space once, without displaying empty rows. Later target refreshes may grow
         // within the remaining viewport, but must not move this menu away from its anchor.
         val reservedHeight = remember(subjectKey, menu.anchor) {
-            maxOf(layerHeight(ThorMenuLevel.Actions), layerHeight(ThorMenuLevel.Playlists), layerHeight(ThorMenuLevel.Name))
+            maxOf(layerHeight(ThorMenuLevel.Actions), layerHeight(ThorMenuLevel.Playlists), layerHeight(ThorMenuLevel.Name),
+                if (menu.subject.item.owned && menu.subject.item.key is ThorItemKey.Playlist) layerHeight(ThorMenuLevel.ConfirmDelete) else 0.dp)
                 .coerceAtMost(360.dp)
         }
         val placement = remember(subjectKey, menu.anchor, constraints.maxWidth, constraints.maxHeight,
@@ -182,7 +185,6 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                                 val activate = { if (interactive) { vm.selectMenu(index); vm.activateMenu() } }
                                 Row(Modifier.fillMaxWidth().height(48.dp)
                                     .thorFocus(registry, "menu:action:$index", enabled = interactive, onClick = activate)
-                                    .onFocusChanged { if (it.isFocused && interactive) vm.selectMenu(index) }
                                     .thorMaterial(ThorSurfaceRole.Panel, focused = interactive && index == menu.selection, selected = index == menu.selection)
                                     .alpha(if (menu.busy) .45f else 1f)
                                     .clickable(enabled = interactive, onClick = activate)
@@ -190,7 +192,7 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                                 ) {
                                     Text(row.title, Modifier.weight(1f), color = if (row.destructive) MaterialTheme.colorScheme.error else theme.text,
                                         fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (row.action == ThorMenuAction.AddToPlaylist) Icon(Icons.Outlined.ChevronRight, null, Modifier.size(18.dp), tint = theme.secondary)
+                                    if (row.action == ThorMenuAction.AddToPlaylist || row.action == ThorMenuAction.Delete) Icon(Icons.Outlined.ChevronRight, null, Modifier.size(18.dp), tint = theme.secondary)
                                 }
                             }
                         }
@@ -239,6 +241,44 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                                 ) {
                                     Icon(Icons.Outlined.Add, null, Modifier.size(20.dp), tint = theme.accent)
                                     Text("新建歌单", color = theme.text, fontSize = 15.sp)
+                                }
+                            }
+                        }
+                    }
+                    ThorMenuLevel.ConfirmDelete -> {
+                        val target = menu.subject.item.key as? ThorItemKey.Playlist
+                        val scroll = rememberLazyListState()
+                        LaunchedEffect(menu.selection, interactive) {
+                            val choice = menu.deleteChoice()
+                            if (interactive && choice != null) {
+                                scroll.animateScrollToItem(choice.ordinal + 1)
+                                withFrameNanos { }
+                                registry.request("menu:delete:${choice.name}")
+                            }
+                        }
+                        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(6.dp)) {
+                            item(key = "delete-description") {
+                                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(menu.subject.item.title, color = theme.text, fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(if (target?.local == true) "只删除歌单和成员记录，不删除歌曲文件。" else "删除后无法撤销。",
+                                        color = theme.secondary, fontSize = 13.sp, lineHeight = 18.sp,
+                                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            itemsIndexed(ThorDeleteChoice.entries, key = { _, choice -> choice.name }) { _, choice ->
+                                val selected = menu.selection == choice.ordinal
+                                val activate = { if (interactive && target != null) vm.activateDeleteChoice(choice, target) }
+                                Row(Modifier.fillMaxWidth().height(48.dp)
+                                    .thorFocus(registry, "menu:delete:${choice.name}", enabled = interactive, onClick = activate)
+                                    .thorMaterial(ThorSurfaceRole.Panel, focused = interactive && selected, selected = selected)
+                                    .alpha(if (menu.busy) .45f else 1f)
+                                    .clickable(enabled = interactive, onClick = activate)
+                                    .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (choice == ThorDeleteChoice.Cancel) "取消" else "删除歌单",
+                                        color = if (choice == ThorDeleteChoice.Delete) MaterialTheme.colorScheme.error else theme.text,
+                                        fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
                         }

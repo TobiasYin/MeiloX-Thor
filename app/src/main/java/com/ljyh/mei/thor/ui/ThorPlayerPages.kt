@@ -106,6 +106,7 @@ internal fun ThorPlayerPage(
                         progress = { ((seek ?: playback.positionMs).toFloat() / playback.durationMs.coerceAtLeast(1)).coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                         color = theme.accent, trackColor = theme.inset,
+                        drawStopIndicator = {},
                     )
                 }
             }

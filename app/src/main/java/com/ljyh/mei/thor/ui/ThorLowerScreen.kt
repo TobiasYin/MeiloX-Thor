@@ -70,14 +70,16 @@ fun ThorLowerScreen(
             if (currentMenu != null) {
                 when (command) {
                     ThorCommand.Back -> viewModel.back()
-                    ThorCommand.Confirm -> if (currentMenu.level == ThorMenuLevel.Name) {
-                        if (!menuRegistry.confirm()) viewModel.saveMenuName()
-                    } else viewModel.activateMenu()
+                    ThorCommand.Confirm -> when (currentMenu.level) {
+                        ThorMenuLevel.Name -> if (!menuRegistry.confirm()) viewModel.saveMenuName()
+                        ThorMenuLevel.Actions, ThorMenuLevel.Playlists, ThorMenuLevel.ConfirmDelete -> viewModel.activateMenu()
+                    }
                     is ThorCommand.Move -> when (command.direction) {
-                        ThorDirection.Up -> if (currentMenu.level == ThorMenuLevel.Name) focusManager.moveFocus(FocusDirection.Up) else viewModel.moveMenu(-1)
-                        ThorDirection.Down -> if (currentMenu.level == ThorMenuLevel.Name) focusManager.moveFocus(FocusDirection.Down) else viewModel.moveMenu(1)
+                        ThorDirection.Up -> if (currentMenu.level == ThorMenuLevel.Name) focusManager.moveFocus(FocusDirection.Up) else viewModel.moveMenu(-1, command.repeated)
+                        ThorDirection.Down -> if (currentMenu.level == ThorMenuLevel.Name) focusManager.moveFocus(FocusDirection.Down) else viewModel.moveMenu(1, command.repeated)
                         ThorDirection.Left -> if (currentMenu.level != ThorMenuLevel.Name) viewModel.back()
-                        ThorDirection.Right -> if (currentMenu.level == ThorMenuLevel.Actions && viewModel.menuRows().getOrNull(currentMenu.selection)?.action == ThorMenuAction.AddToPlaylist) viewModel.activateMenu()
+                        ThorDirection.Right -> if (currentMenu.level == ThorMenuLevel.Actions &&
+                            viewModel.menuRows().getOrNull(currentMenu.selection)?.action in setOf(ThorMenuAction.AddToPlaylist, ThorMenuAction.Delete)) viewModel.activateMenu()
                     }
                     else -> Unit
                 }
