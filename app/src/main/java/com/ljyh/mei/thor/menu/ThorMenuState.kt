@@ -9,7 +9,7 @@ enum class ThorDeleteChoice { Cancel, Delete }
 enum class ThorMenuAction {
     Like, Collect, PlayNext, Enqueue, AddToPlaylist, Album, RemoveFromPlaylist, RemoveFromQueue, SkipCurrent, Rename, Delete,
 }
-data class ThorMenuRow(val action: ThorMenuAction, val title: String, val destructive: Boolean = false)
+data class ThorMenuRow(val action: ThorMenuAction, val title: String, val destructive: Boolean = false, val toggled: Boolean? = null)
 
 const val THOR_CREATE_PLAYLIST_TARGET_KEY = "menu:create-playlist"
 
@@ -107,9 +107,9 @@ data class ThorMenuState(
 fun ThorMenuState.actionRows(liked: Boolean): List<ThorMenuRow> = buildList {
     val item = subject.item
     val song = item.key is ThorItemKey.Song || item.key is ThorItemKey.QueueEntry
-    if (song) add(ThorMenuRow(ThorMenuAction.Like, if (liked) "取消喜欢" else "喜欢"))
+    if (song) add(ThorMenuRow(ThorMenuAction.Like, if (liked) "取消喜欢" else "喜欢", toggled = liked))
     if (item.key is ThorItemKey.Album || item.key is ThorItemKey.Playlist && !item.owned) {
-        add(ThorMenuRow(ThorMenuAction.Collect, if (item.collected) "取消收藏" else "收藏"))
+        add(ThorMenuRow(ThorMenuAction.Collect, if (item.collected) "取消收藏" else "收藏", toggled = item.collected))
     }
     add(ThorMenuRow(ThorMenuAction.PlayNext, "下一首播放"))
     add(ThorMenuRow(ThorMenuAction.Enqueue, "加入播放队列"))

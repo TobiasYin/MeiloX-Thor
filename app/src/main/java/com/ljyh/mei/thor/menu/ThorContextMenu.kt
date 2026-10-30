@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange
@@ -192,14 +193,15 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                                 ThorActionButton(
                                     onClick = activate,
                                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                                        .thorFocus(registry, "menu:action:$index", enabled = interactive, onClick = activate),
+                                        .thorFocus(registry, "menu:action:$index", enabled = interactive, onClick = activate)
+                                        .semantics { row.toggled?.let { stateDescription = if (it) { if (row.action == ThorMenuAction.Like) "已喜欢" else "已收藏" } else { if (row.action == ThorMenuAction.Like) "未喜欢" else "未收藏" } } },
                                     role = ThorSurfaceRole.Flat, focused = interactive && index == menu.selection,
                                     selected = index == menu.selection, enabled = interactive,
                                     contentPadding = PaddingValues(horizontal = 12.dp),
                                 ) {
                                     val tint = if (row.destructive) MaterialTheme.colorScheme.error
-                                        else if (index == menu.selection) theme.selectedText else theme.text
-                                    Icon(thorLineIcon(menuActionIcon(row.action)), null, Modifier.size(16.dp), tint = tint)
+                                        else if (index == menu.selection || row.toggled == true) theme.selectedText else theme.text
+                                    Icon(thorLineIcon(menuActionIcon(row.action, row.toggled == true)), null, Modifier.size(16.dp), tint = tint)
                                     Spacer(Modifier.width(12.dp))
                                     Text(row.title, Modifier.weight(1f), color = tint,
                                         fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -434,9 +436,9 @@ internal fun thorMenuOffset(
 }
 
 
-private fun menuActionIcon(action: ThorMenuAction) = when (action) {
-    ThorMenuAction.Like -> Icons.Outlined.FavoriteBorder
-    ThorMenuAction.Collect -> Icons.Outlined.BookmarkBorder
+private fun menuActionIcon(action: ThorMenuAction, filled: Boolean = false) = when (action) {
+    ThorMenuAction.Like -> ThorDesignIcons.icon("heart", filled)
+    ThorMenuAction.Collect -> ThorDesignIcons.icon("bookmark", filled)
     ThorMenuAction.PlayNext -> ThorDesignIcons.icon("list-start")
     ThorMenuAction.Enqueue -> ThorDesignIcons.icon("list-end")
     ThorMenuAction.AddToPlaylist -> ThorDesignIcons.icon("list-plus")

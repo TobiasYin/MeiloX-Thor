@@ -90,6 +90,17 @@ class ThorNavigationMenuTest {
         assertTrue(ownActions.contains(ThorMenuAction.Delete))
     }
 
+    @Test fun toggleDecorationReflectsLikesAndCollectionsIndependentlyOfMenuNavigation() {
+        val song = ThorMenuState(ThorMenuSubject(ThorItem(ThorItemKey.Song(71), "歌曲"), "origin"), ThorMenuAnchor(20f, 20f), selection = 3)
+        assertEquals(false, song.actionRows(false).first { it.action == ThorMenuAction.Like }.toggled)
+        assertEquals(true, song.actionRows(true).first { it.action == ThorMenuAction.Like }.toggled)
+        val album = ThorMenuState(ThorMenuSubject(ThorItem(ThorItemKey.Album(72), "专辑", collected = true), "origin"), ThorMenuAnchor(20f, 20f), selection = 2)
+        assertEquals(true, album.actionRows(false).first { it.action == ThorMenuAction.Collect }.toggled)
+        assertEquals(3, song.selection)
+        assertEquals(2, album.selection)
+        assertNull(album.actionRows(false).first { it.action == ThorMenuAction.Enqueue }.toggled)
+    }
+
     @Test fun menuDirectionWrapsAndBusyDoesNotExecuteAnotherSelection() {
         assertEquals(4, menu().copy(selection = 0).move(-1, 5).selection)
         val busy = menu().copy(busy = true)
