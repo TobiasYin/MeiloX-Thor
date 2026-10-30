@@ -1,5 +1,6 @@
 # Thor 原生视觉实现与验证记录
 
+此文件保留并行模块交接时的实现记录；后续统一构建、测试及设备结果见 [verification.md](verification.md)。
 更新于 2026-10-30。本文记录原生主题、材质、CD 盒和上屏的实际实现，设计基线仍是 [design.md](design.md) 与 [theme-system.md](theme-system.md)。HTML 概念预览不算原生验收证据。
 
 ## 已实现的公共契约

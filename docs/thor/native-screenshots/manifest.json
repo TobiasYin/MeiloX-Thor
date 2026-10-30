@@ -1,0 +1,62 @@
+[
+  {
+    "file": "thor-browse-day-upper.png",
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "file": "thor-browse-day-lower.png",
+    "width": 1240,
+    "height": 1080
+  },
+  {
+    "file": "thor-player-day-upper.png",
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "file": "thor-player-day-lower.png",
+    "width": 1240,
+    "height": 1080
+  },
+  {
+    "file": "thor-browse-night-upper.png",
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "file": "thor-browse-night-lower.png",
+    "width": 1240,
+    "height": 1080
+  },
+  {
+    "file": "thor-player-night-upper.png",
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "file": "thor-player-night-lower.png",
+    "width": 1240,
+    "height": 1080
+  },
+  {
+    "file": "duo-browse-night-upper.png",
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "file": "duo-browse-night-lower.png",
+    "width": 1280,
+    "height": 960
+  },
+  {
+    "file": "duo-player-night-upper.png",
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "file": "duo-player-night-lower.png",
+    "width": 1280,
+    "height": 960
+  }
+]

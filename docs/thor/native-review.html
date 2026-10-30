@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN" data-appearance="day">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Thor Music · 原生双屏截图</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f1f2ed;
+      --surface: #fafbf7;
+      --ink: #23312a;
+      --muted: #53645a;
+      --line: #ccd5cc;
+      --accent: #155b43;
+      --error: #a52c27;
+      --shadow: 0 12px 44px #263b2618;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Noto Sans CJK SC", sans-serif;
+    }
+    :root[data-appearance="night"] {
+      color-scheme: dark;
+      --page: #111713;
+      --surface: #1b241e;
+      --ink: #edf3e9;
+      --muted: #b6c4b6;
+      --line: #3a493c;
+      --accent: #b4d8b5;
+      --error: #ffb5ac;
+      --shadow: 0 12px 44px #0007;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--page); color: var(--ink); }
+    button, select, a { -webkit-tap-highlight-color: transparent; }
+    button, select { font: inherit; color: inherit; }
+    button, select, a { touch-action: manipulation; }
+    button:focus-visible, select:focus-visible, a:focus-visible {
+      outline: 3px solid var(--accent); outline-offset: 4px;
+    }
+    .shell {
+      height: 100svh; min-height: 440px;
+      display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+    header, footer { width: min(100%, 1160px); margin-inline: auto; padding-inline: 24px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 20px; padding-block: 18px 14px;
+    }
+    h1 { font-size: 19px; letter-spacing: -.02em; margin: 0 0 5px; font-weight: 650; }
+    .caption, .scope { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.6; }
+    .controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+    }
+    select, button {
+      min-height: 44px; border: 1px solid var(--line); border-radius: 12px;
+      background: var(--surface); box-shadow: 0 1px 0 #ffffff12 inset;
+    }
+    select { width: 228px; padding: 8px 12px; cursor: pointer; }
+    button { padding: 8px 13px; cursor: pointer; }
+    button:hover, select:hover { border-color: var(--accent); }
+    .viewport {
+      min-width: 0; min-height: 0; display: grid; place-items: center;
+      padding: 12px 20px 18px;
+    }
+    .pair-holder { position: relative; flex: none; }
+    .pair {
+      width: 1920px; display: flex; flex-direction: column; align-items: center;
+      gap: 32px; transform-origin: 0 0;
+      position: absolute; left: 0; top: 0;
+    }
+    .shot {
+      position: relative; flex: none; margin: 0; width: 100%; height: 1080px;
+      background: var(--surface); outline: 1px solid var(--line); box-shadow: var(--shadow);
+    }
+    /* One group transform scales both images. The lower image shares the upper pixel scale. */
+    .pair[data-device="thor"] .shot.lower { width: 64.583333333333%; height: 1080px; }
+    .pair[data-device="duo"] .shot.lower { width: 66.666666666667%; height: 960px; }
+    .shot img { display: block; width: 100%; height: auto; }
+    .placeholder {
+      height: 100%; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 18px; color: var(--muted);
+    }
+    .placeholder strong { font-size: 56px; font-weight: 500; color: var(--ink); }
+    .placeholder span { font-size: 40px; }
+    footer { padding-block: 0 15px; }
+    .inspection {
+      border-top: 1px solid var(--line); padding-top: 9px;
+      display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; gap: 16px;
+    }
+    .measure { min-width: 0; }
+    .measure-title { font-size: 12px; display: flex; align-items: center; gap: 12px; }
+    .measure-title strong { font-weight: 600; }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    .original { min-height: 36px; display: inline-flex; align-items: center; }
+    .dimensions { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
+    .dimensions[data-state="invalid"], .dimensions[data-state="error"] { color: var(--error); }
+    .scale { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .scope { margin-top: 8px; font-size: 11px; }
+    @media (max-width: 680px) {
+      header { align-items: flex-start; flex-direction: column; gap: 10px; padding: 14px 16px 8px; }
+      .controls { width: 100%; }
+      select { width: auto; flex: 1; min-width: 0; }
+      .viewport { padding-inline: 14px; }
+      footer { padding-inline: 16px; padding-bottom: 10px; }
+      .inspection { grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+      .scale { grid-column: 1 / -1; margin-top: 4px; }
+      .scope { margin-top: 5px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>Thor Music · 原生双屏截图</h1>
+        <p class="caption">静态原生模拟器截图；实际交互请在 Android Emulator 中进行。</p>
+      </div>
+      <div class="controls">
+        <label class="sr-only" for="scene">查看场景</label>
+        <select id="scene">
+          <option value="thor-browse-day">Thor · 浏览 · 白天</option>
+          <option value="thor-player-day">Thor · 播放 · 白天</option>
+          <option value="thor-browse-night">Thor · 浏览 · 夜间</option>
+          <option value="thor-player-night">Thor · 播放 · 夜间</option>
+          <option value="duo-browse-night">RP Duo · 浏览 · 夜间</option>
+          <option value="duo-player-night">RP Duo · 播放 · 夜间</option>
+        </select>
+        <button id="reload" type="button" title="重新读取当前场景的两张截图">重新读取</button>
+      </div>
+    </header>
+    <main class="viewport" id="viewport">
+      <div class="pair-holder" id="pair-holder">
+        <div class="pair" id="pair" data-device="thor" role="group" aria-label="同一像素比例的上下屏原生截图">
+          <figure class="shot upper" id="upper-slot" aria-label="上屏截图"></figure>
+          <figure class="shot lower" id="lower-slot" aria-label="下屏截图"></figure>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <div class="inspection">
+        <div class="measure">
+          <div class="measure-title"><strong>上屏</strong><a class="original" id="upper-original" target="_blank" rel="noopener">打开原图 ↗</a></div>
+          <p class="dimensions" id="upper-dimensions" aria-live="polite">naturalWidth × naturalHeight：等待载入</p>
+        </div>
+        <div class="measure">
+          <div class="measure-title"><strong>下屏</strong><a class="original" id="lower-original" target="_blank" rel="noopener">打开原图 ↗</a></div>
+          <p class="dimensions" id="lower-dimensions" aria-live="polite">naturalWidth × naturalHeight：等待载入</p>
+        </div>
+        <span class="scale" id="scale">上下屏共同缩放</span>
+      </div>
+      <p class="scope">按截图像素等比例呈现，不代表掌机实物大小。图像无拉伸、无裁剪；可打开原图检查细节。</p>
+    </footer>
+  </div>
+  <noscript><p style="padding:16px">此查看器需 JavaScript 切换静态截图；图片位于相邻的 native-screenshots 目录。</p></noscript>
+  <script>
+    (() => {
+      'use strict';
+      const scenes = Object.freeze({
+        'thor-browse-day':   { device: 'thor', appearance: 'day',   title: 'Thor · 浏览 · 白天' },
+        'thor-player-day':   { device: 'thor', appearance: 'day',   title: 'Thor · 播放 · 白天' },
+        'thor-browse-night': { device: 'thor', appearance: 'night', title: 'Thor · 浏览 · 夜间' },
+        'thor-player-night': { device: 'thor', appearance: 'night', title: 'Thor · 播放 · 夜间' },
+        'duo-browse-night':  { device: 'duo',  appearance: 'night', title: 'RP Duo · 浏览 · 夜间' },
+        'duo-player-night':  { device: 'duo',  appearance: 'night', title: 'RP Duo · 播放 · 夜间' },
+      });
+      const select = document.getElementById('scene');
+      const viewport = document.getElementById('viewport');
+      const holder = document.getElementById('pair-holder');
+      const pair = document.getElementById('pair');
+      const scaleLabel = document.getElementById('scale');
+      let currentScene = scenes[location.hash.slice(1)] ? location.hash.slice(1) : 'thor-browse-day';
+      let generation = 0;
+
+      function fitPair() {
+        const style = getComputedStyle(viewport);
+        const width = Math.max(0, viewport.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+        const height = Math.max(0, viewport.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom));
+        const groupHeight = scenes[currentScene].device === 'duo' ? 1080 + 32 + 960 : 1080 + 32 + 1080;
+        const scale = Math.min(1, width / 1920, height / groupHeight);
+        holder.hidden = scale <= 0;
+        holder.style.width = `${1920 * scale}px`;
+        holder.style.height = `${groupHeight * scale}px`;
+        pair.style.transform = `scale(${scale})`;
+        scaleLabel.textContent = `上下屏共同缩放 ${(scale * 100).toFixed(1)}%`;
+      }
+
+      function placeholder(slot, title, detail) {
+        const box = document.createElement('div');
+        box.className = 'placeholder';
+        const heading = document.createElement('strong');
+        heading.textContent = title;
+        const description = document.createElement('span');
+        description.textContent = detail;
+        box.append(heading, description);
+        slot.replaceChildren(box);
+      }
+
+      function loadPicture(sceneId, role, ticket, refresh) {
+        const config = scenes[sceneId];
+        const expected = role === 'upper' ? [1920, 1080] : config.device === 'duo' ? [1280, 960] : [1240, 1080];
+        const slot = document.getElementById(`${role}-slot`);
+        const status = document.getElementById(`${role}-dimensions`);
+        const original = document.getElementById(`${role}-original`);
+        const label = role === 'upper' ? '上屏' : '下屏';
+        const url = new URL(`./native-screenshots/${sceneId}-${role}.png`, location.href);
+        if (refresh) url.searchParams.set('v', String(Date.now()));
+        original.href = url.href;
+        original.setAttribute('aria-label', `打开${config.title}${label}原图`);
+        slot.setAttribute('aria-busy', 'true');
+        status.dataset.state = 'loading';
+        status.textContent = `等待载入 · 期望 ${expected[0]} × ${expected[1]}`;
+        placeholder(slot, `正在读取${label}`, `${expected[0]} × ${expected[1]}`);
+        const image = new Image();
+        image.decoding = 'async';
+        image.alt = `${config.title}，${label}，Android Emulator 原生截图`;
+        image.onload = () => {
+          if (ticket !== generation) return;
+          slot.setAttribute('aria-busy', 'false');
+          const actual = `${image.naturalWidth} × ${image.naturalHeight}`;
+          const valid = image.naturalWidth === expected[0] && image.naturalHeight === expected[1];
+          status.dataset.state = valid ? 'valid' : 'invalid';
+          status.textContent = `naturalWidth × naturalHeight：${actual} · ${valid ? '已校验' : `不符，期望 ${expected[0]} × ${expected[1]}`}`;
+          if (valid) slot.replaceChildren(image);
+          else placeholder(slot, `${label}尺寸不符`, `实际 ${actual}；请通过原图链接检查`);
+        };
+        image.onerror = () => {
+          if (ticket !== generation) return;
+          slot.setAttribute('aria-busy', 'false');
+          status.dataset.state = 'error';
+          status.textContent = `未载入 · 期望 ${expected[0]} × ${expected[1]}`;
+          placeholder(slot, `${label}截图尚未就绪`, '放置对应 PNG 后重新读取');
+        };
+        image.src = url.href;
+      }
+
+      function showScene(sceneId, refresh = false) {
+        if (!scenes[sceneId]) return;
+        currentScene = sceneId;
+        const config = scenes[sceneId];
+        const ticket = ++generation;
+        select.value = sceneId;
+        pair.dataset.device = config.device;
+        pair.setAttribute('aria-label', `${config.title}，同一像素比例的上下屏原生截图`);
+        document.documentElement.dataset.appearance = config.appearance;
+        document.title = `${config.title} · 原生双屏截图`;
+        // Shareable scene links without adding a browser-history step for every selection.
+        try { history.replaceState(null, '', `#${sceneId}`); } catch (_) { /* file preview may restrict history */ }
+        fitPair();
+        loadPicture(sceneId, 'upper', ticket, refresh);
+        loadPicture(sceneId, 'lower', ticket, refresh);
+      }
+
+      select.addEventListener('change', () => showScene(select.value));
+      document.getElementById('reload').addEventListener('click', () => showScene(currentScene, true));
+      window.addEventListener('resize', fitPair);
+      window.addEventListener('hashchange', () => {
+        const requested = location.hash.slice(1);
+        if (requested !== currentScene && scenes[requested]) showScene(requested);
+      });
+      if ('ResizeObserver' in window) new ResizeObserver(fitPair).observe(viewport);
+      showScene(currentScene);
+    })();
+  </script>
+</body>
+</html>
