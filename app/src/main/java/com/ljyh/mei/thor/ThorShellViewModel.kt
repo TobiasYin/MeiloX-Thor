@@ -358,22 +358,24 @@ class ThorShellViewModel @Inject constructor(
         onSuccess: ((ThorItem) -> Unit)? = null,
         operation: suspend (ThorItem) -> ThorOperationResult,
     ) {
+        val ticket = repository.captureAccountTicket(library.value.account)
+        if (ticket == null) { showMessage("账号已变化，请稍后重新操作", false); return }
         if (notice.value?.success == false) mutableNotice.value = null
         mutableMenu.value = current.copy(busy = true)
         val generation = menuGeneration
-        val accountGeneration = library.value.account.generation
         val action = if (current.level == ThorMenuLevel.Actions) menuRowsFor(current).getOrNull(current.selection)?.action else null
         viewModelScope.launch {
             try {
-                if (accountGeneration != library.value.account.generation) return@launch
-                val subject = current.subject.item
-                val needsTracks = subject.key is ThorItemKey.Album || subject.key is ThorItemKey.Playlist ||
-                    (subject.key is ThorItemKey.Song && subject.tracks.isEmpty())
-                val item = if (loadTracks && needsTracks) repository.load(subject) else subject
-                // Closing a menu does not cancel accepted work. Switching accounts does.
-                if (accountGeneration != library.value.account.generation) return@launch
-                val result = operation(item)
-                if (accountGeneration != library.value.account.generation) return@launch
+                val (item, result) = repository.withAccountTicket(ticket) {
+                    val subject = current.subject.item
+                    val needsTracks = subject.key is ThorItemKey.Album || subject.key is ThorItemKey.Playlist ||
+                        (subject.key is ThorItemKey.Song && subject.tracks.isEmpty())
+                    val loaded = if (loadTracks && needsTracks) repository.load(subject) else subject
+                    // B may close this menu; the accepted account ticket stays authoritative.
+                    check(repository.isTicketCurrent(ticket)) { "账号已变化，请重试" }
+                    loaded to operation(loaded)
+                }
+                if (!repository.isTicketCurrent(ticket)) return@launch
                 if (result.message.isNotBlank()) mutableNotice.value = ThorNotice(result.message, result.undoToken, result.success)
                 if (result.success) {
                     if (generation == menuGeneration) mutableMenu.value = null
@@ -390,7 +392,7 @@ class ThorShellViewModel @Inject constructor(
                 } else if (generation == menuGeneration) mutableMenu.value = current.syncPlaylistTargets(playlistKeys(current, library.value))
             } catch (cancellation: CancellationException) { throw cancellation }
             catch (error: Exception) {
-                if (accountGeneration != library.value.account.generation) return@launch
+                if (!repository.isTicketCurrent(ticket)) return@launch
                 if (generation == menuGeneration) mutableMenu.value = current.syncPlaylistTargets(playlistKeys(current, library.value))
                 showMessage(error.message ?: "操作失败，请重试", false)
             }

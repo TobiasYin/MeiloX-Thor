@@ -8,6 +8,7 @@ import com.ljyh.mei.data.network.Resource
 import com.ljyh.mei.data.network.api.ApiService
 import com.ljyh.mei.data.network.api.EApiService
 import com.ljyh.mei.data.network.api.WeApiService
+import com.ljyh.mei.data.network.neteaseSessionFingerprint
 import java.io.IOException
 import java.lang.reflect.Proxy
 import kotlin.coroutines.Continuation
@@ -182,12 +183,14 @@ class PlaylistSubscriptionLifecycleTest {
         assertEquals(200, unsubscribe.await().code())
         assertFalse(detail.await().subscribed())
         assertEquals(3, fixture.tokenCalls)
+        assertTrue(fixture.writes.all { it.expectedSession == neteaseSessionFingerprint(fixture.account) })
     }
 
     @Test(timeout = 10_000)
     fun accountSwitchDuringTokenGenerationRejectsTheOldAccountWrite() = runTest(dispatcher) {
         fixture.tokenGate = CompletableDeferred()
-        val write = async { fixture.repository.subscribePlaylist("42") }
+        val expected = neteaseSessionFingerprint(fixture.account)
+        val write = async { fixture.repository.subscribePlaylist("42", expectedSession = expected) }
         runCurrent()
         fixture.account = "replacement-session"
         fixture.tokenGate!!.complete(Unit)
@@ -195,6 +198,50 @@ class PlaylistSubscriptionLifecycleTest {
         assertTrue(write.await() is Resource.Error)
         assertTrue(fixture.writes.isEmpty())
         assertFalse(fixture.repository.getPlaylistDetail("42").subscribed())
+    }
+
+    @Test(timeout = 10_000)
+    fun oldCallerSessionCannotRegisterASubscriptionOrUnsubscriptionForANewAccount() = runTest(dispatcher) {
+        val expected = neteaseSessionFingerprint(fixture.account)
+        fixture.account = "replacement-session"
+        assertTrue(fixture.repository.subscribePlaylist("42", expectedSession = expected) is Resource.Error)
+        assertTrue(fixture.repository.unSubscribePlaylist("42", expectedSession = expected) is Resource.Error)
+        runCurrent()
+        assertEquals(0, fixture.tokenCalls)
+        assertTrue(fixture.writes.isEmpty())
+        assertTrue(fixture.cleanedPlaylists.isEmpty())
+    }
+
+    @Test(timeout = 10_000)
+    fun queuedUnsubscriptionKeepsTheOldSessionWhenTheAccountChangesWhileWaiting() = runTest(dispatcher) {
+        val expected = neteaseSessionFingerprint(fixture.account)
+        val subscribe = async { fixture.repository.subscribePlaylist("42", expectedSession = expected) }
+        val unsubscribe = async { fixture.repository.unSubscribePlaylist("42", expectedSession = expected) }
+        runCurrent()
+        assertEquals(1, fixture.writes.size)
+        assertEquals(expected, fixture.writes.single().expectedSession)
+        fixture.account = "replacement-session"
+        fixture.writes.single().response.complete(200)
+        runCurrent()
+        subscribe.await()
+        assertTrue(unsubscribe.await() is Resource.Error)
+        assertEquals(1, fixture.writes.size)
+        assertTrue(fixture.cleanedPlaylists.isEmpty())
+    }
+
+    @Test(timeout = 10_000)
+    fun unsubscriptionRejectsAnAccountSwitchDuringItsSecurityTokenWait() = runTest(dispatcher) {
+        val expected = neteaseSessionFingerprint(fixture.account)
+        fixture.tokenGate = CompletableDeferred()
+        val unsubscribe = async { fixture.repository.unSubscribePlaylist("42", expectedSession = expected) }
+        runCurrent()
+        assertEquals(1, fixture.tokenCalls)
+        fixture.account = "replacement-session"
+        fixture.tokenGate!!.complete(Unit)
+        runCurrent()
+        assertTrue(unsubscribe.await() is Resource.Error)
+        assertTrue(fixture.writes.isEmpty())
+        assertTrue(fixture.cleanedPlaylists.isEmpty())
     }
 
     @Test(timeout = 10_000)
@@ -270,6 +317,7 @@ class PlaylistSubscriptionLifecycleTest {
             val write = PendingWrite(
                 subscribed = method.name == "subscribePlaylist",
                 body = arguments!![0] as EApiSubscribePlaylist,
+                expectedSession = arguments[2] as? String,
             )
             writes += write
             suspendResponse(arguments.last()) {
@@ -304,7 +352,7 @@ class PlaylistSubscriptionLifecycleTest {
         )
     }
 
-    private class PendingWrite(val subscribed: Boolean, val body: EApiSubscribePlaylist) {
+    private class PendingWrite(val subscribed: Boolean, val body: EApiSubscribePlaylist, val expectedSession: String?) {
         val response = CompletableDeferred<Int>()
     }
 

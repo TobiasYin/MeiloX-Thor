@@ -34,8 +34,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.coroutines.AbstractCoroutineContextElement
-import kotlin.coroutines.CoroutineContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -47,7 +45,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -60,8 +57,6 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** The only Thor boundary allowed to inspect the existing account session. */
@@ -83,11 +78,11 @@ class ThorMusicRepository @Inject constructor(
     private val collectionFlags = MutableStateFlow<Map<ThorItemKey, Boolean>>(emptyMap())
     private val likeOverrides = MutableStateFlow(ThorLikeOverrides())
     private val likeRevision = AtomicLong()
-    private val mutationMutex = Mutex()
+    private val accountFence = ThorAccountFence()
     private val jobs = mutableMapOf<String, Job>()
     private val revisions = mutableMapOf<String, Long>()
     private val undoActions = linkedMapOf<String, suspend () -> ThorOperationResult>()
-    @Volatile private var activeAccount: LibraryAccount? = null
+    private val activeAccount get() = accountFence.account
 
     private data class LocalSnapshot(
         val songs: List<com.ljyh.mei.data.model.room.Song> = emptyList(),
@@ -124,9 +119,9 @@ class ThorMusicRepository @Inject constructor(
                 val changed = !initialized || activeAccount != account
                 initialized = true
                 if (changed) {
-                    activeAccount = account
+                    accountFence.changeAccount(account)
                     collectionFlags.value = emptyMap()
-                    likeOverrides.update { it.forGeneration(remote.value.account.generation + 1) }
+                    likeOverrides.update { it.forGeneration(accountFence.generation) }
                     playerRepository.resetLikeState()
                     synchronized(jobs) { jobs.values.forEach(Job::cancel); jobs.clear() }
                 }
@@ -140,7 +135,7 @@ class ThorMusicRepository @Inject constructor(
                             NeteaseSessionType.Web -> ThorSessionType.Web
                             NeteaseSessionType.None -> ThorSessionType.None
                         },
-                        generation = old.account.generation + if (changed) 1 else 0,
+                        generation = accountFence.generation,
                     )
                     if (changed) ThorLibraryState(account = publicAccount)
                     else old.copy(account = publicAccount)
@@ -266,13 +261,16 @@ class ThorMusicRepository @Inject constructor(
         }
     }
 
+    fun captureAccountTicket(publicAccount: ThorAccountState): ThorAccountTicket? = accountFence.capture(publicAccount)
+    fun isTicketCurrent(ticket: ThorAccountTicket): Boolean = accountFence.isCurrent(ticket)
+    suspend fun <T> withAccountTicket(ticket: ThorAccountTicket, action: suspend () -> T): T =
+        accountFence.withTicket(ticket, action)
+
     suspend fun load(item: ThorItem): ThorItem = withContext(Dispatchers.IO) {
-        val account = activeAccount
-        val generation = remote.value.account.generation
-        fun checkReadAccount() {
-            checkAccount(account)
-            check(remote.value.account.generation == generation) { "账号已变化，请重试" }
-        }
+        val ticket = accountFence.ticketForCall()
+        val account = ticket.account
+        fun checkReadAccount() = accountFence.checkCurrent(ticket)
+        checkReadAccount()
         when (val key = item.key) {
             is ThorItemKey.Song -> if (key.local) {
                 state.value[ThorCollection.LocalSongs].firstOrNull { it.key == key } ?: error("本地歌曲已不存在")
@@ -353,7 +351,7 @@ class ThorMusicRepository @Inject constructor(
             requireAccount(account)
             val liked = playerRepository.toggleLike(song.id.toString(), account.sessionFingerprint).valueOrThrow()
             checkAccount(account)
-            val generation = currentCoroutineContext()[ExpectedThorAccount]?.generation ?: remote.value.account.generation
+            val generation = accountFence.ticketForCall().generation
             val pending = ThorLikeOverride(likeRevision.incrementAndGet(), song.toThorItem(), liked)
             likeOverrides.update { current ->
                 if (activeAccount != account || remote.value.account.generation != generation) current
@@ -398,7 +396,8 @@ class ThorMusicRepository @Inject constructor(
             when (val key = item.key) {
                 is ThorItemKey.Album -> collections.setAlbumSubscription(account, key.id, collected)
                 is ThorItemKey.Playlist -> {
-                    val result = if (collected) playlists.subscribePlaylist(key.id) else playlists.unSubscribePlaylist(key.id)
+                    val result = if (collected) playlists.subscribePlaylist(key.id, expectedSession = account.sessionFingerprint)
+                        else playlists.unSubscribePlaylist(key.id, expectedSession = account.sessionFingerprint)
                     check(result.valueOrThrow().code == 200) { "歌单收藏失败" }
                 }
                 else -> Unit
@@ -570,7 +569,8 @@ class ThorMusicRepository @Inject constructor(
         require(tracks.isNotEmpty()) { "没有歌曲" }
         require(tracks.all { !it.isLocal && it.id > 0 }) { "本地歌曲请加入本地歌单" }
         requireAccount(account)
-        val result = playlists.manipulateTrack(op, id, tracks.distinctBy { it.id }.joinToString(",") { it.id.toString() }).valueOrThrow()
+        val result = playlists.manipulateTrack(op, id, tracks.distinctBy { it.id }.joinToString(",") { it.id.toString() },
+            expectedSession = account.sessionFingerprint).valueOrThrow()
         check(result.code == 200 || (op == "add" && result.code == 502)) { "歌单更新失败 (${result.code})" }
         checkAccount(account)
         refresh(ThorCollection.OwnedPlaylists)
@@ -593,40 +593,26 @@ class ThorMusicRepository @Inject constructor(
     } catch (_: Exception) { false }
 
     private suspend fun mutate(operation: suspend (LibraryAccount?) -> ThorOperationResult): ThorOperationResult {
-        // Undo retains the original context even if it waits behind another mutation.
-        val expected = currentCoroutineContext()[ExpectedThorAccount] ?: ExpectedThorAccount(activeAccount, remote.value.account.generation)
-        return withContext(Dispatchers.IO + expected) {
-            mutationMutex.withLock {
-                try {
-                    checkAccount(expected.account)
-                    check(remote.value.account.generation == expected.generation) { "账号已变化，请重试" }
-                    expected.guard()
-                    checkAccount(expected.account)
-                    check(remote.value.account.generation == expected.generation) { "账号已变化，请重试" }
-                    operation(expected.account)
-                } catch (error: CancellationException) { throw error }
-                catch (error: Exception) { failure(publicOperationError(error)) }
-            }
-        }
+        // Enter before dispatching to IO: ordinary callers also freeze identity before waiting.
+        return try { accountFence.mutate(operation) }
+        catch (error: CancellationException) { throw error }
+        catch (error: Exception) { failure(publicOperationError(error)) }
     }
 
     private suspend fun requireAccount(account: LibraryAccount) {
         checkAccount(account)
-        val expected = currentCoroutineContext()[ExpectedThorAccount]
-        if (expected != null) check(remote.value.account.generation == expected.generation) { "账号已变化，请重试" }
+        val ticket = accountFence.ticketForCall()
+        accountFence.checkCurrent(ticket)
         check(collections.accounts.first() == account) { "账号已变化，请重试" }
         checkAccount(account)
-        if (expected != null) check(remote.value.account.generation == expected.generation) { "账号已变化，请重试" }
+        accountFence.checkCurrent(ticket)
     }
     private fun checkAccount(account: LibraryAccount?) = check(activeAccount == account) { "账号已变化，请重试" }
     private suspend fun rememberUndo(
         guard: suspend () -> Unit = {},
         action: suspend () -> ThorOperationResult,
     ): String {
-        val expected = currentCoroutineContext()[ExpectedThorAccount] ?: ExpectedThorAccount(activeAccount, remote.value.account.generation)
-        val fencedAction: suspend () -> ThorOperationResult = {
-            withContext(ExpectedThorAccount(expected.account, expected.generation, guard)) { action() }
-        }
+        val fencedAction = accountFence.freezeUndo(guard, action)
         return synchronized(undoActions) {
             val key = UUID.randomUUID().toString()
             undoActions[key] = fencedAction
@@ -749,14 +735,6 @@ class ThorMusicRepository @Inject constructor(
         private val ACCOUNT_COLLECTIONS = ACCOUNT_PLAYLIST_COLLECTIONS + ThorCollection.CollectedAlbums
         private val DEVICE_READ_COLLECTIONS = setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums, ThorCollection.Downloads, ThorCollection.History)
     }
-}
-
-private class ExpectedThorAccount(
-    val account: LibraryAccount?,
-    val generation: Long,
-    val guard: suspend () -> Unit = {},
-) : AbstractCoroutineContextElement(Key) {
-    companion object Key : CoroutineContext.Key<ExpectedThorAccount>
 }
 
 internal fun songIdentity(song: MediaMetadata): String = "${if (song.isLocal) "local" else "netease"}:${song.id}"

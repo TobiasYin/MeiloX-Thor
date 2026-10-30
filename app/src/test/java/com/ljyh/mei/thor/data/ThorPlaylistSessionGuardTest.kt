@@ -5,6 +5,7 @@ import com.ljyh.mei.data.model.PlaylistDetail
 import com.ljyh.mei.data.model.api.BaseMessageResponse
 import com.ljyh.mei.data.model.api.BaseResponse
 import com.ljyh.mei.data.model.api.CreatePlaylistResult
+import com.ljyh.mei.data.model.api.ManipulateTrackResult
 import com.ljyh.mei.data.network.Resource
 import com.ljyh.mei.data.network.api.ApiService
 import com.ljyh.mei.data.network.api.EApiService
@@ -53,13 +54,40 @@ class ThorPlaylistSessionGuardTest {
         assertEquals(0, fixture.renameCalls)
     }
 
+    @Test fun anExplicitOldSessionRejectsTrackMutationBeforeSending() = runBlocking {
+        val fixture = Fixture()
+        val expected = neteaseSessionFingerprint(fixture.session)
+        fixture.session = "another-synthetic-session"
+        assertTrue(fixture.repository.manipulateTrack("add", "99", "7", expectedSession = expected) is Resource.Error)
+        assertEquals(0, fixture.trackCalls)
+    }
+
+    @Test fun trackMutationCarriesTheCallerSessionAndRejectsAChangedReturn() = runBlocking {
+        val fixture = Fixture()
+        val expected = neteaseSessionFingerprint(fixture.session)
+        fixture.changeDuringTrack = true
+        assertTrue(fixture.repository.manipulateTrack("del", "99", "7", expectedSession = expected) is Resource.Error)
+        assertEquals(1, fixture.trackCalls)
+        assertEquals(expected, fixture.lastExpectedSession)
+    }
+
+    @Test fun trackMutationWithoutAnExplicitSessionKeepsExistingCallersWorking() = runBlocking {
+        val fixture = Fixture()
+        val expected = neteaseSessionFingerprint(fixture.session)
+        assertTrue(fixture.repository.manipulateTrack("add", "99", "7") is Resource.Success)
+        assertEquals(1, fixture.trackCalls)
+        assertEquals(expected, fixture.lastExpectedSession)
+    }
+
     private class Fixture {
         var session = "synthetic-account-session"
         var changeDuringCreate = false
         var changeDuringDetail = false
+        var changeDuringTrack = false
         var createCalls = 0
         var deleteCalls = 0
         var renameCalls = 0
+        var trackCalls = 0
         var lastExpectedSession: String? = null
         private val gson = Gson()
         private val api: ApiService = proxy(ApiService::class.java) { method, args ->
@@ -86,6 +114,12 @@ class ThorPlaylistSessionGuardTest {
                     renameCalls++
                     lastExpectedSession = args[1] as? String
                     gson.fromJson("""{"code":200}""", BaseResponse::class.java)
+                }
+                "manipulateTracks" -> {
+                    trackCalls++
+                    lastExpectedSession = args[1] as? String
+                    if (changeDuringTrack) session = "another-synthetic-session"
+                    gson.fromJson("""{"code":200}""", ManipulateTrackResult::class.java)
                 }
                 else -> error("Unexpected synthetic transport call: $method")
             }

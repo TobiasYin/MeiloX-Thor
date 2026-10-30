@@ -174,9 +174,11 @@ class PlaylistRepository(
         }
     }
 
-    private suspend fun changePlaylistSubscription(id: String, subscribed: Boolean): Resource<BaseResponse> {
+    private suspend fun changePlaylistSubscription(id: String, subscribed: Boolean, expectedSession: String?): Resource<BaseResponse> {
         val key = SubscriptionKey(subscriptionAccount(), id)
         if (key.account.isBlank()) return Resource.Error("NetEase account is not signed in")
+        val session = expectedSession ?: neteaseSessionFingerprint(key.account)
+        if (session != neteaseSessionFingerprint(key.account)) return Resource.Error("NetEase account changed before playlist subscription")
         val operation = synchronized(subscriptionLock) {
             val entry = subscriptions.getOrPut(key, ::SubscriptionEntry)
             val previous = entry.pending
@@ -192,16 +194,20 @@ class PlaylistRepository(
                             val bodyToken = freshCheckToken()
                             val headerToken = freshCheckToken()
                             check(subscriptionAccount() == key.account) { "NetEase account changed before playlist subscription" }
+                            requireOrderSession(session)
                             eApiService.subscribePlaylist(
                                 EApiSubscribePlaylist(id = id.toLong(), checkToken = bodyToken),
                                 antiCheatToken = headerToken,
+                                expectedSession = session,
                             )
                         } else {
                             val headerToken = freshCheckToken()
                             check(subscriptionAccount() == key.account) { "NetEase account changed before playlist subscription" }
+                            requireOrderSession(session)
                             val response = eApiService.unSubscribePlaylist(
                                 EApiSubscribePlaylist(id = id.toLong()),
                                 antiCheatToken = headerToken,
+                                expectedSession = session,
                             )
                             if (response.code == 200) {
                                 try {
@@ -338,14 +344,16 @@ class PlaylistRepository(
         op: String,
         pid: String,
         trackIds: String,
-        imme: Boolean = true
+        imme: Boolean = true,
+        expectedSession: String? = null,
     ): Resource<ManipulateTrackResult> {
         val account = subscriptionAccount()
         if (account.isBlank()) return Resource.Error("An authenticated session is required")
-        val expectedSession = neteaseSessionFingerprint(account)
+        val session = expectedSession ?: neteaseSessionFingerprint(account)
         return withContext(ioDispatcher) {
             val result = safeApiCall {
                 check(subscriptionAccount() == account) { "NetEase account changed during playlist update" }
+                requireOrderSession(session)
                 val response = apiService.manipulateTracks(
                     ManipulateTrack(
                         op = op,
@@ -353,9 +361,10 @@ class PlaylistRepository(
                         trackIds = trackIds,
                         imme = imme
                     ),
-                    expectedSession,
+                    session,
                 )
                 check(subscriptionAccount() == account) { "NetEase account changed during playlist update" }
+                requireOrderSession(session)
                 response
             }
             if (result is Resource.Success &&
@@ -365,7 +374,7 @@ class PlaylistRepository(
                 if (ids.isNotEmpty()) {
                     try {
                         // Finish syncing an accepted write even if its screen has closed.
-                        withContext(NonCancellable) { onTracksChanged(ids, expectedSession) }
+                        withContext(NonCancellable) { onTracksChanged(ids, session) }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Exception) {
@@ -414,8 +423,9 @@ class PlaylistRepository(
     }
 
     suspend fun subscribePlaylist(
-        id: String
-    ): Resource<BaseResponse> = changePlaylistSubscription(id, subscribed = true)
+        id: String,
+        expectedSession: String? = null,
+    ): Resource<BaseResponse> = changePlaylistSubscription(id, subscribed = true, expectedSession = expectedSession)
 
     /** Endpoint contract: NeteaseMusic-API/module/playlist_name_update.js (id, name). */
     suspend fun renamePlaylist(
@@ -437,8 +447,9 @@ class PlaylistRepository(
     }
 
     suspend fun unSubscribePlaylist(
-        id: String
-    ): Resource<BaseResponse> = changePlaylistSubscription(id, subscribed = false)
+        id: String,
+        expectedSession: String? = null,
+    ): Resource<BaseResponse> = changePlaylistSubscription(id, subscribed = false, expectedSession = expectedSession)
 
 
     suspend fun subscribeAlbum(id: String): Resource<BaseResponse> {
