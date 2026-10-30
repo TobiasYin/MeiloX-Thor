@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.Preferences
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
@@ -103,6 +104,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -145,6 +148,26 @@ class MeloXRepository @Inject constructor(
     private val neteaseLoginSecurity: NeteaseLoginSecurity,
     private val neteaseUrsSmsLogin: NeteaseUrsSmsLogin,
 ) {
+    private val devicePreparationMutex = Mutex()
+    private val deviceIdentityBootstrap = NeteaseDeviceIdentityBootstrap(
+        readPreferences = { context.dataStore.data.first() },
+        writePending = { expectedSession, pending ->
+            context.dataStore.edit { settings ->
+                settings.requireExpectedNeteaseSession(expectedSession)
+                if (pending) settings[NeteaseDeviceBootstrapPendingKey] = true
+                else settings.remove(NeteaseDeviceBootstrapPendingKey)
+            }
+        },
+        prepare = { expectedSession -> prepareNeteaseLoginDevice(expectedSession) },
+    )
+
+    /** Prepare this installation only when an existing Mobile session has no local identity.
+     * Healthy installations take the preferences-only path: no SDK prewarm or registration.
+     * Session cookies and session type are never modified by this recovery.
+     */
+    suspend fun ensureNeteaseDeviceIdentity(expectedSession: String? = null) =
+        deviceIdentityBootstrap.awaitReady(expectedSession)
+
     suspend fun podcastHome(): PodcastHome = coroutineScope {
         val categories = async {
             request("/api/djradio/category/get").array("categories").mapNotNull(::parsePodcastCategory)
@@ -411,14 +434,18 @@ class MeloXRepository @Inject constructor(
         check(preferences[UserIdKey]?.toLongOrNull()?.let { it > 0 } == true) {
             "NetEase account user ID is unavailable"
         }
-        prepareNeteaseLoginDevice()
+        prepareNeteaseLoginDevice(neteaseSessionFingerprint(checkNotNull(preferences[CookieKey])))
     }
 
-    internal suspend fun prepareNeteaseLoginDevice(): String {
+    internal suspend fun prepareNeteaseLoginDevice(expectedSession: String? = null): String = devicePreparationMutex.withLock {
+        context.dataStore.data.first().requireExpectedNeteaseSession(expectedSession)
         ensureOfficialDeviceIdentity()
+        context.dataStore.data.first().requireExpectedNeteaseSession(expectedSession)
         val ydDeviceToken = neteaseLoginSecurity.prepareForPcQrLogin()
-        ensureNeteaseDeviceRegistered(ydDeviceToken)
-        return ydDeviceToken
+        context.dataStore.data.first().requireExpectedNeteaseSession(expectedSession)
+        ensureNeteaseDeviceRegistered(ydDeviceToken, expectedSession)
+        context.dataStore.data.first().requireExpectedNeteaseSession(expectedSession)
+        ydDeviceToken
     }
 
     suspend fun markPcQrScanned(key: String, clientTraceId: String?): String =
@@ -553,8 +580,9 @@ class MeloXRepository @Inject constructor(
         )
     }
 
-    private suspend fun ensureNeteaseDeviceRegistered(ydDeviceToken: String) {
+    private suspend fun ensureNeteaseDeviceRegistered(ydDeviceToken: String, expectedSession: String? = null) {
         val current = context.dataStore.data.first()
+        current.requireExpectedNeteaseSession(expectedSession)
         if (
             !current[SDeviceIdKey].isNullOrBlank() &&
             current[NeteaseSecurityIdentityKey] == NETEASE_SECURITY_IDENTITY
@@ -587,6 +615,7 @@ class MeloXRepository @Inject constructor(
                 "oaid" to "",
             ),
             cryptoMode = "eapi",
+            headers = expectedSession?.let { mapOf(NETEASE_EXPECTED_SESSION_HEADER to it) }.orEmpty(),
         )
         val code = response.int("code") ?: 0
         val data = response.objectOrNull("data")
@@ -605,6 +634,7 @@ class MeloXRepository @Inject constructor(
                 ?: "NetEase device fingerprint registration failed ($code)"
         }
         context.dataStore.edit { settings ->
+            settings.requireExpectedNeteaseSession(expectedSession)
             settings[SDeviceIdKey] = sDeviceId
             settings[NeteaseSecurityIdentityKey] = NETEASE_SECURITY_IDENTITY
             settings[NeteaseDeviceRegisteredModelKey] = Build.MODEL
@@ -1378,6 +1408,37 @@ class NeteaseMobileLoginException(
 private const val PC_QR_LOG_TAG = "PcQrLogin"
 private const val NETEASE_SECURITY_IDENTITY = "official-9.5.70-v4"
 private const val NETEASE_LOCAL_ID_LENGTH = 16
+
+internal val NeteaseDeviceBootstrapPendingKey = booleanPreferencesKey("netease_device_bootstrap_pending")
+
+/** A failed/ cancelled registration must not look complete merely because it wrote DeviceId.
+ * The durable pending bit is device-local; the accepted account is checked around suspension.
+ */
+internal class NeteaseDeviceIdentityBootstrap(
+    private val readPreferences: suspend () -> Preferences,
+    private val writePending: suspend (expectedSession: String?, pending: Boolean) -> Unit,
+    private val prepare: suspend (expectedSession: String?) -> Unit,
+) {
+    private val mutex = Mutex()
+
+    suspend fun awaitReady(expectedSession: String? = null) = mutex.withLock {
+        val current = readPreferences()
+        current.requireExpectedNeteaseSession(expectedSession)
+        if (current.neteaseSessionType() != NeteaseSessionType.Mobile) return@withLock
+        if (!current[DeviceIdKey].isNullOrBlank() && current[NeteaseDeviceBootstrapPendingKey] != true) {
+            return@withLock
+        }
+        writePending(expectedSession, true)
+        prepare(expectedSession)
+        val prepared = readPreferences()
+        prepared.requireExpectedNeteaseSession(expectedSession)
+        check(!prepared[DeviceIdKey].isNullOrBlank() && !prepared[SDeviceIdKey].isNullOrBlank() &&
+            prepared[NeteaseSecurityIdentityKey] == NETEASE_SECURITY_IDENTITY) {
+            "网易云设备初始化未完成，请重试"
+        }
+        writePending(expectedSession, false)
+    }
+}
 
 internal data class PlaybackBodyParseResult(
     val code: Int?,

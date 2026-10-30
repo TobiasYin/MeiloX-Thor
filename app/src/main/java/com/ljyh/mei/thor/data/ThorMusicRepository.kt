@@ -19,6 +19,7 @@ import com.ljyh.mei.data.network.neteaseSessionType
 import com.ljyh.mei.data.repository.HomeRepository
 import com.ljyh.mei.data.repository.LibraryAccount
 import com.ljyh.mei.data.repository.LibraryCollectionsRepository
+import com.ljyh.mei.data.repository.MeloXRepository
 import com.ljyh.mei.data.repository.PlayerRepository
 import com.ljyh.mei.data.repository.PlaylistRepository
 import com.ljyh.mei.data.repository.SearchRepository
@@ -70,6 +71,7 @@ class ThorMusicRepository @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val home: HomeRepository,
     private val searchRepository: SearchRepository,
+    private val meloXRepository: MeloXRepository,
     private val gson: Gson,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -142,7 +144,20 @@ class ThorMusicRepository @Inject constructor(
                 }
                 if (changed) {
                     refresh()
-                    if (credential.isNotBlank() && account == null) collections.restoreAccountIfNeeded()
+                    if (credential.isNotBlank() && account == null) {
+                        val ticket = accountFence.ticketForCall()
+                        // Keep observing account changes while the target device initializes.
+                        scope.launch {
+                            try {
+                                ensureRemoteReady(ticket)
+                                collections.restoreAccountIfNeeded()
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                // Preserve the session. A refresh/sign-in can retry preparation.
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -209,8 +224,9 @@ class ThorMusicRepository @Inject constructor(
         affected: Set<ThorCollection>,
         operation: suspend (LibraryAccount?) -> Map<ThorCollection, List<ThorItem>>,
     ) {
-        val account = activeAccount
-        val generation = remote.value.account.generation
+        val ticket = accountFence.capture(remote.value.account) ?: return
+        val account = ticket.account
+        val generation = ticket.generation
         val flagsAtStart = collectionFlags.value
         val likesAtStart = likeOverrides.value
         synchronized(jobs) {
@@ -223,7 +239,10 @@ class ThorMusicRepository @Inject constructor(
             }
             jobs[key] = scope.launch {
                 try {
-                    val result = operation(account)
+                    val result = accountFence.withTicket(ticket) {
+                        ensureRemoteReady(ticket)
+                        operation(account)
+                    }
                     remote.update {
                         if (activeAccount != account || it.account.generation != generation ||
                             synchronized(jobs) { revisions[key] != revision }) it
@@ -275,6 +294,7 @@ class ThorMusicRepository @Inject constructor(
             is ThorItemKey.Song -> if (key.local) {
                 state.value[ThorCollection.LocalSongs].firstOrNull { it.key == key } ?: error("本地歌曲已不存在")
             } else if (item.tracks.isNotEmpty()) item else {
+                ensureRemoteReady(ticket)
                 val tracks = playerRepository.getSongDetail(key.id.toString()).valueOrThrow()
                 checkReadAccount()
                 check(tracks.code == 200) { "歌曲读取失败" }
@@ -284,6 +304,7 @@ class ThorMusicRepository @Inject constructor(
                 if (key.local) return@withContext state.value[ThorCollection.LocalAlbums].firstOrNull { it.key == key }
                     ?: error("本地专辑已不存在，请重新扫描")
                 if (hasCompleteTracks(item)) return@withContext decorate(item)
+                ensureRemoteReady(ticket)
                 val detail = playlists.getAlbumDetail(key.id.toString()).valueOrThrow()
                 checkReadAccount()
                 check(detail.code == 200) { "专辑读取失败" }
@@ -294,6 +315,7 @@ class ThorMusicRepository @Inject constructor(
             }
             is ThorItemKey.Playlist -> {
                 if (key.local) return@withContext localPlaylist(key.id)
+                ensureRemoteReady(ticket)
                 val detail = playlists.getPlaylistDetail(key.id, account?.sessionFingerprint).valueOrThrow()
                 val tracks = playlists.getCompletePlaylistTracks(detail, account?.sessionFingerprint)
                 checkReadAccount()
@@ -309,15 +331,18 @@ class ThorMusicRepository @Inject constructor(
     suspend fun search(query: String): List<ThorItem> = withContext(Dispatchers.IO) {
         val term = query.trim()
         if (term.isBlank()) return@withContext emptyList()
-        val account = activeAccount
-        val generation = remote.value.account.generation
+        val ticket = accountFence.ticketForCall()
+        val account = ticket.account
+        val generation = ticket.generation
         val device = state.value
         val matching = (device[ThorCollection.LocalSongs] + device[ThorCollection.LocalAlbums] +
             device[ThorCollection.OwnedPlaylists].filter { (it.key as? ThorItemKey.Playlist)?.local == true })
             .filter { "${it.title} ${it.subtitle} ${it.description}".contains(term, true) }
+        ensureRemoteReady(ticket)
         val responses = coroutineScope { listOf(1, 10, 1000).map { type ->
             async { searchRepository.search(term, type, 40) }
         }.awaitAll() }
+        accountFence.checkCurrent(ticket)
         checkAccount(account)
         check(remote.value.account.generation == generation) { "账号已变化，请重试" }
         val online = responses.filterIsInstance<Resource.Success<com.ljyh.mei.data.model.api.SearchResult>>()
@@ -434,6 +459,7 @@ class ThorMusicRepository @Inject constructor(
         } else {
             val signedIn = account ?: error("请先连接网易云")
             require(incoming.all { !it.isLocal && it.id > 0 }) { "本地歌曲请加入本地歌单" }
+            requireAccount(signedIn)
             val detail = playlists.loadPlaylistForOrder(playlist.id, signedIn.userId.toLong(), signedIn.sessionFingerprint)
             val previous = detail.playlist.trackIds.mapTo(hashSetOf()) { it.id }
             val added = incoming.filter { it.id !in previous }
@@ -462,6 +488,7 @@ class ThorMusicRepository @Inject constructor(
         } else {
             val signedIn = account ?: error("请先连接网易云")
             require(tracks.all { !it.isLocal && it.id > 0 }) { "本地歌曲请加入本地歌单" }
+            requireAccount(signedIn)
             val detail = playlists.loadPlaylistForOrder(playlist.id, signedIn.userId.toLong(), signedIn.sessionFingerprint)
             val previous = detail.playlist.trackIds.map { it.id }
             val removed = tracks.filter { it.id in previous }.distinctBy { it.id }
@@ -501,6 +528,7 @@ class ThorMusicRepository @Inject constructor(
             return@mutate ThorOperationResult(true, "已创建本地歌单", undo, ThorItemKey.Playlist(id, true))
         }
         val account = capturedAccount ?: error("请先连接网易云")
+        requireAccount(account)
         val result = playlists.createPlaylist(normalized, false, expectedSession = account.sessionFingerprint).valueOrThrow()
         check(result.code == 200 && result.id > 0) { "创建歌单失败" }
         val key = ThorItemKey.Playlist(result.id.toString())
@@ -532,11 +560,13 @@ class ThorMusicRepository @Inject constructor(
             } })
         } else {
             val signedIn = account ?: error("请先连接网易云")
+            requireAccount(signedIn)
             val previous = playlists.loadPlaylistForOrder(playlist.id, signedIn.userId.toLong(), signedIn.sessionFingerprint)
             playlists.renamePlaylist(playlist.id, normalized, signedIn.userId.toLong(), signedIn.sessionFingerprint).valueOrThrow()
             checkAccount(signedIn)
             refresh(ThorCollection.OwnedPlaylists)
             ok("已重命名", rememberUndo(guard = {
+                requireAccount(signedIn)
                 val current = playlists.loadPlaylistForOrder(playlist.id, signedIn.userId.toLong(), signedIn.sessionFingerprint)
                 check(current.playlist.name == normalized) { "歌单已变化，无法撤销" }
             }) { renamePlaylist(playlist, previous.playlist.name) })
@@ -551,6 +581,7 @@ class ThorMusicRepository @Inject constructor(
             ok("已删除歌单", rememberUndo { mutate { dao.create(previous, tracks); ok("已撤销") } })
         } else {
             val signedIn = account ?: error("请先连接网易云")
+            requireAccount(signedIn)
             playlists.loadPlaylistForOrder(playlist.id, signedIn.userId.toLong(), signedIn.sessionFingerprint)
             check(playlists.deletePlaylist(playlist.id, signedIn.sessionFingerprint).valueOrThrow().code == 200) { "删除失败" }
             checkAccount(signedIn)
@@ -603,10 +634,14 @@ class ThorMusicRepository @Inject constructor(
         checkAccount(account)
         val ticket = accountFence.ticketForCall()
         accountFence.checkCurrent(ticket)
+        ensureRemoteReady(ticket)
         check(collections.accounts.first() == account) { "账号已变化，请重试" }
         checkAccount(account)
         accountFence.checkCurrent(ticket)
     }
+
+    private suspend fun ensureRemoteReady(ticket: ThorAccountTicket) =
+        awaitThorDeviceIdentity(accountFence, ticket, meloXRepository::ensureNeteaseDeviceIdentity)
     private fun checkAccount(account: LibraryAccount?) = check(activeAccount == account) { "账号已变化，请重试" }
     private suspend fun rememberUndo(
         guard: suspend () -> Unit = {},
@@ -793,6 +828,17 @@ internal fun parseHomeResources(elements: List<JsonElement>): List<ThorItem> {
     }
     elements.forEach(::visit)
     return result.distinctBy { it.key }
+}
+
+/** Keep the accepted generation across SDK/registration suspension, including A -> B -> A. */
+internal suspend fun awaitThorDeviceIdentity(
+    fence: ThorAccountFence,
+    ticket: ThorAccountTicket,
+    prepare: suspend (expectedSession: String?) -> Unit,
+) {
+    fence.checkCurrent(ticket)
+    prepare(ticket.account?.sessionFingerprint)
+    fence.checkCurrent(ticket)
 }
 
 private fun JsonObject.stringValue(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive }

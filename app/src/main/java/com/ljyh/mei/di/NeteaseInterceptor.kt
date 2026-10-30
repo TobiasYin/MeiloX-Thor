@@ -218,6 +218,12 @@ class NeteaseInterceptor internal constructor(
         val storedMusicU = webSessionOverride ?: preferences[CookieKey].orEmpty()
         val hasMobileSession = webSessionOverride == null &&
             preferences.neteaseSessionType() == NeteaseSessionType.Mobile
+        val storedDeviceId = preferences[DeviceIdKey]?.takeIf(String::isNotBlank)
+        if (hasMobileSession && storedDeviceId == null) {
+            // An incomplete/restored account is a recoverable request failure. Runtime errors
+            // escape OkHttp's async dispatcher and can terminate the entire application.
+            throw IOException("NetEase mobile device identity is unavailable")
+        }
         val usesAndroidEapiIdentity = (cryptoMode == "eapi" && eapiProfile == OFFICIAL_ANDROID_PROFILE) || usesOfficialAndroidIdentity(
             cryptoMode = cryptoMode,
             encodedPath = originalRequest.url.encodedPath,
@@ -230,8 +236,7 @@ class NeteaseInterceptor internal constructor(
         }
         val requestOs = cookieOsOverride ?: config["os"]!!
 
-        val deviceId = preferences[DeviceIdKey]?.takeIf(String::isNotBlank)
-            ?: if (hasMobileSession) error("NetEase mobile device identity is unavailable") else getDeviceId()
+        val deviceId = storedDeviceId ?: getDeviceId()
         val storedSDeviceId = preferences[SDeviceIdKey].orEmpty()
         val sDeviceId = storedSDeviceId
         val musicU = if (withoutAccount) {
