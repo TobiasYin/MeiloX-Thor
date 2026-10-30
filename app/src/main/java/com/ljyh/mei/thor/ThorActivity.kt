@@ -227,6 +227,7 @@ class ThorActivity : ComponentActivity() {
         viewModel.updatePreferences { it.copy(airflowEnabled = enabled && accepted) }
         if (!enabled) airflow.stop()
         if (!accepted) viewModel.showMessage(airflow.error.value ?: "麦克风暂不可用", false)
+        else viewModel.showMessage(if (enabled) "吹气已开启" else "吹气已关闭")
     }
     private fun calibrate() {
         if (airflow.calibrationStep.value != null) return
