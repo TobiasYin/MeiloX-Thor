@@ -116,6 +116,7 @@ sealed interface ThorCommand {
     data object TabNext : ThorCommand
     data object TogglePlayer : ThorCommand
     data object ToggleQueue : ThorCommand
+    data object PageActions : ThorCommand
     data object TogglePlayback : ThorCommand
     data object PreviousTrack : ThorCommand
     data object NextTrack : ThorCommand

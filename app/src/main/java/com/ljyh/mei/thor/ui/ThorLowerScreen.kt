@@ -11,7 +11,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -31,6 +34,15 @@ import com.ljyh.mei.thor.menu.*
 import com.ljyh.mei.thor.model.*
 import com.ljyh.mei.thor.state.*
 import com.ljyh.mei.thor.theme.LocalThorTheme
+import kotlinx.coroutines.launch
+
+private data class ThorPageActionSession(
+    val scene: String,
+    val account: Long,
+    val playbackEntry: String?,
+    val actions: List<ThorPageAction>,
+    val selectedId: String?,
+)
 
 /** A new lower window can take input before the previous composition has disposed. */
 class ThorCommandDispatcher {
@@ -55,34 +67,100 @@ fun ThorLowerScreen(
     airflowStrength: Float = 0f,
     airflowCalibrationLabel: String = "校准",
     airflowCalibrationProgress: Float = 0f,
+    onControllerScopeChanged: () -> Unit = {},
 ) {
     val navigation by viewModel.navigation.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val playback by viewModel.playback.state.collectAsStateWithLifecycle()
+    val preferences by viewModel.preferences.collectAsStateWithLifecycle()
+    val libraryCategory by viewModel.libraryCategory.collectAsStateWithLifecycle()
+    val searchEntry by viewModel.searchEntry.collectAsStateWithLifecycle()
+    val latestScopeChange by rememberUpdatedState(onControllerScopeChanged)
     val seek by viewModel.seekPreview.collectAsStateWithLifecycle()
     val menu by viewModel.menu.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val theme = LocalThorTheme.current
     val registry = remember { ThorFocusRegistry() }
     val menuRegistry = remember { ThorFocusRegistry() }
+    val pageActionRegistry = remember { ThorFocusRegistry() }
+    val pageActionBindings = remember { ThorPageActionBindings() }
+    var pageActionSession by remember { mutableStateOf<ThorPageActionSession?>(null) }
+    val coroutineScope = rememberCoroutineScope()
     val owner = remember { Any() }
     val sceneStates = rememberSaveableStateHolder()
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val sourcePlaylist = if (navigation.overlay == null) (navigation.page as? ThorPage.Detail)?.item?.takeIf { it.owned }?.key as? ThorItemKey.Playlist else null
-    val onBack = { if (!viewModel.back()) onExit() }
+    fun closePageActions(action: ThorPageAction? = null) {
+        val session = pageActionSession ?: return
+        pageActionSession = null
+        focusManager.clearFocus(force = true)
+        coroutineScope.launch {
+            withFrameNanos { }
+            registry.blocked = viewModel.menu.value != null
+            registry.request(viewModel.rememberedFocus(viewModel.navigation.value.sceneKey)) || registry.requestFirst()
+            if (session.scene == viewModel.navigation.value.sceneKey &&
+                session.account == viewModel.library.value.account.generation &&
+                (session.playbackEntry == null || session.playbackEntry == viewModel.playback.state.value.currentEntryId)
+            ) action?.takeIf { it.enabled }?.onClick?.invoke()
+        }
+    }
+    val onBack = { if (pageActionSession != null) closePageActions() else if (!viewModel.back()) onExit() }
+    fun currentPageActionSession(): ThorPageActionSession? {
+        val currentNavigation = viewModel.navigation.value
+        val currentLibrary = viewModel.library.value
+        val currentPlayback = viewModel.playback.state.value
+        val actions = thorPageActions(viewModel, currentNavigation, currentLibrary,
+            currentPlayback, viewModel.preferences.value, onLegacyRoute, onRequestAirflow,
+            onCalibrateAirflow, isScanning, airflowCalibrationLabel, pageActionBindings).toMutableList()
+        viewModel.notice.value?.let { shown ->
+            val token = shown.undoToken
+            if (token != null) actions += ThorPageAction("notice:undo", "撤销") {
+                if (viewModel.notice.value?.undoToken == token) viewModel.undo()
+            }
+            actions += ThorPageAction("notice:close", "关闭提示") {
+                if (viewModel.notice.value == shown) viewModel.clearNotice()
+            }
+        }
+        if (actions.isEmpty()) return null
+        return ThorPageActionSession(currentNavigation.sceneKey, currentLibrary.account.generation,
+            currentPlayback.currentEntryId.takeIf { currentNavigation.overlay != null },
+            actions, actions.firstOrNull { it.enabled }?.id)
+    }
 
     SideEffect {
-        registry.blocked = menu != null
+        registry.blocked = menu != null || pageActionSession != null
         registry.onFocus = { key, item ->
-            if (!key.startsWith("notice:")) viewModel.rememberFocus(navigation.sceneKey, key)
+            if (registry.isAllowed(key)) viewModel.rememberFocus(navigation.sceneKey, key)
             item?.let(viewModel::preview)
         }
         dispatcher.install(owner) commandHandler@{ command ->
+            if (command != ThorCommand.Back) viewModel.clearExitGuard()
             if (command == ThorCommand.TogglePlayer) {
                 focusManager.clearFocus(force = true)
                 keyboard?.hide()
-                viewModel.togglePlayer()
+                if (pageActionSession != null) { pageActionSession = null; viewModel.showPlayer() }
+                else viewModel.togglePlayer()
+                return@commandHandler true
+            }
+            if (command == ThorCommand.PageActions) {
+                if (pageActionSession != null) closePageActions()
+                else if (viewModel.menu.value == null && viewModel.seekPreview.value == null && !viewModel.textEditing.value) {
+                    currentPageActionSession()?.let { session ->
+                        focusManager.clearFocus(force = true)
+                        keyboard?.hide()
+                        pageActionSession = session
+                    }
+                }
+                return@commandHandler true
+            }
+            pageActionSession?.let { session ->
+                if (command is ThorCommand.Move) return@commandHandler pageActionRegistry.move(command.direction, command.repeated)
+                when (command) {
+                    ThorCommand.Back -> closePageActions()
+                    ThorCommand.Confirm -> session.actions.firstOrNull { it.id == session.selectedId && it.enabled }?.let { closePageActions(it) }
+                    else -> Unit
+                }
                 return@commandHandler true
             }
             if (command is ThorCommand.Shoulder) {
@@ -97,9 +175,9 @@ fun ThorLowerScreen(
                         ThorMenuLevel.Name -> if (!menuRegistry.confirm()) viewModel.saveMenuName()
                         ThorMenuLevel.Actions, ThorMenuLevel.Playlists, ThorMenuLevel.ConfirmDelete -> viewModel.activateMenu()
                     }
-                    is ThorCommand.Move -> when (command.direction) {
-                        ThorDirection.Up -> if (currentMenu.level == ThorMenuLevel.Name) focusManager.moveFocus(FocusDirection.Up) else viewModel.moveMenu(-1, command.repeated)
-                        ThorDirection.Down -> if (currentMenu.level == ThorMenuLevel.Name) focusManager.moveFocus(FocusDirection.Down) else viewModel.moveMenu(1, command.repeated)
+                    is ThorCommand.Move -> if (currentMenu.level == ThorMenuLevel.Name) menuRegistry.move(command.direction, command.repeated) else when (command.direction) {
+                        ThorDirection.Up -> viewModel.moveMenu(-1, command.repeated)
+                        ThorDirection.Down -> viewModel.moveMenu(1, command.repeated)
                         ThorDirection.Left -> if (currentMenu.level != ThorMenuLevel.Name) viewModel.back()
                         ThorDirection.Right -> if (currentMenu.level == ThorMenuLevel.Actions &&
                             viewModel.menuRows().getOrNull(currentMenu.selection)?.action in setOf(ThorMenuAction.AddToPlaylist, ThorMenuAction.Delete)) viewModel.activateMenu()
@@ -110,13 +188,11 @@ fun ThorLowerScreen(
             } else if (viewModel.seekPreview.value != null) {
                 when (command) {
                     ThorCommand.Back -> viewModel.cancelSeek()
-                    ThorCommand.Confirm -> if (registry.selectedKey == "player:progress") viewModel.applySeek()
-                        else if (!registry.confirm()) viewModel.applySeek()
+                    ThorCommand.Confirm -> viewModel.applySeek()
                     is ThorCommand.Move -> when (command.direction) {
                         ThorDirection.Left -> viewModel.adjustSeek(-10_000)
                         ThorDirection.Right -> viewModel.adjustSeek(10_000)
-                        ThorDirection.Up -> focusManager.moveFocus(FocusDirection.Up)
-                        ThorDirection.Down -> focusManager.moveFocus(FocusDirection.Down)
+                        ThorDirection.Up, ThorDirection.Down -> Unit
                     }
                     else -> Unit
                 }
@@ -149,11 +225,9 @@ fun ThorLowerScreen(
                 ThorCommand.NextTrack -> { viewModel.playback.next(); true }
                 ThorCommand.ShuffleAll -> { viewModel.playPage(true); true }
                 ThorCommand.PlayAll -> { viewModel.playPage(false); true }
+                ThorCommand.PageActions -> true
                 is ThorCommand.Shoulder -> true
-                is ThorCommand.Move -> registry.move(command.direction, command.repeated) ?: focusManager.moveFocus(when (command.direction) {
-                    ThorDirection.Up -> FocusDirection.Up; ThorDirection.Down -> FocusDirection.Down
-                    ThorDirection.Left -> FocusDirection.Left; ThorDirection.Right -> FocusDirection.Right
-                })
+                is ThorCommand.Move -> registry.move(command.direction, command.repeated)
             }
         }
     }
@@ -169,19 +243,26 @@ fun ThorLowerScreen(
     val bottomHeight = if (playerView) 28.dp else if (refreshOnlyRoot) 48.dp else if (hasBottomActions) 56.dp else 32.dp
     val miniVisible = navigation.overlay != ThorOverlay.Player && playback.current != null
 
-    Box(modifier.fillMaxSize().background(theme.background).windowInsetsPadding(WindowInsets.safeDrawing)) {
-        Row(Modifier.fillMaxSize().then(if (menu != null) Modifier.clearAndSetSemantics {} else Modifier)) {
+    Box(modifier.fillMaxSize().background(theme.background).windowInsetsPadding(WindowInsets.safeDrawing)
+        .pointerInput(viewModel) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                viewModel.clearExitGuard()
+                do { val event = awaitPointerEvent(PointerEventPass.Final) } while (event.changes.any { it.pressed })
+            }
+        }) {
+        Row(Modifier.fillMaxSize().then(if (menu != null || pageActionSession != null) Modifier.clearAndSetSemantics {} else Modifier)) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     sceneStates.SaveableStateProvider(navigation.sceneKey) {
                         when (navigation.overlay) {
                             ThorOverlay.Player -> ThorPlayerPage(viewModel, registry, playback, onBack)
-                            ThorOverlay.Queue -> ThorQueuePage(viewModel, registry, playback, onBack)
-                            ThorOverlay.Lyrics -> ThorLyricsPage(viewModel, registry, onBack)
+                            ThorOverlay.Queue -> ThorQueuePage(viewModel, registry, playback, onBack, pageActionBindings)
+                            ThorOverlay.Lyrics -> ThorLyricsPage(viewModel, registry, onBack, pageActionBindings)
                             ThorOverlay.Timer -> ThorTimerPage(viewModel, registry, playback, onBack)
                             null -> ThorBrowsePage(viewModel, registry, navigation, library, onBack, onLegacyRoute,
                                 onRequestAirflow, onCalibrateAirflow, airflowStatus, isScanning,
-                                airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress)
+                                airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress, pageActionBindings)
                         }
                     }
                 }
@@ -220,9 +301,9 @@ fun ThorLowerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = if (playerView) Arrangement.Center else Arrangement.spacedBy(12.dp)) {
                     val hint = if (seek != null) "L1/R1 按住拖动·松开应用   A 应用   B 取消   Start 播放页" else when (navigation.overlay) {
-                        ThorOverlay.Player -> "L1/R1 ±15s·按住拖动   B/Start 返回   X 菜单   Y 播放   Select 队列"
+                        ThorOverlay.Player -> "A/Y 播放   L1/R1 ±15s   L2/R2 切歌   Select 队列·长按操作   B/Start 返回"
                         ThorOverlay.Lyrics -> "A 跳转    B 返回"
-                        else -> "A 确认    B 返回    X 菜单    Y 播放 / 暂停"
+                        else -> "↑↓ 列表   A 确认   B 返回   X 菜单   Select 长按操作"
                     }
                     Text(hint, modifier = if (playerView) Modifier else Modifier.weight(1f),
                         fontSize = 11.sp, color = theme.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -233,7 +314,12 @@ fun ThorLowerScreen(
             if (navigation.isRoot) ThorNavigationRail(viewModel, registry, navigation.tab)
         }
         if (menu != null) ThorContextMenu(viewModel, menu!!, menuRegistry)
-        if (notice != null && menu == null) {
+        pageActionSession?.let { session ->
+            ThorPageActionMenu(session.actions, session.selectedId, pageActionRegistry,
+                onSelect = { id -> pageActionSession = pageActionSession?.copy(selectedId = id) },
+                onActivate = { action -> closePageActions(action) }, onClose = { closePageActions() })
+        }
+        if (notice != null && menu == null && pageActionSession == null) {
             Row(
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .padding(start = 16.dp, end = 16.dp, bottom = bottomHeight + (if (miniVisible) 56.dp else 0.dp) + 8.dp)
@@ -255,11 +341,20 @@ fun ThorLowerScreen(
             withFrameNanos { }; registry.request(viewModel.rememberedFocus(navigation.sceneKey)) || registry.requestFirst()
         }
     }
-    LaunchedEffect(navigation.sceneKey, menu == null) {
-        if (menu == null) {
+    LaunchedEffect(navigation.sceneKey, menu == null, pageActionSession == null) {
+        if (menu == null && pageActionSession == null) {
             withFrameNanos { }
             registry.request(viewModel.rememberedFocus(navigation.sceneKey)) || registry.requestFirst()
         }
+    }
+    LaunchedEffect(navigation.sceneKey, library.account.generation, playback.currentEntryId) {
+        pageActionSession?.let { session ->
+            if (session.scene != navigation.sceneKey || session.account != library.account.generation ||
+                session.playbackEntry != null && session.playbackEntry != playback.currentEntryId) closePageActions()
+        }
+    }
+    LaunchedEffect(navigation.sceneKey, menu?.level, menu?.subject?.item?.key, pageActionSession != null, libraryCategory, searchEntry) {
+        latestScopeChange()
     }
 }
 

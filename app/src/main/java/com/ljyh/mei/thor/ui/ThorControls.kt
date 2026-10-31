@@ -48,74 +48,7 @@ import com.ljyh.mei.thor.components.ThorSurfaceRole
 import com.ljyh.mei.thor.components.thorMaterial
 import com.ljyh.mei.thor.menu.ThorMenuAnchor
 import com.ljyh.mei.thor.model.ThorItem
-import com.ljyh.mei.thor.model.ThorDirection
 import kotlinx.coroutines.flow.collect
-
-class ThorFocusEntry(
-    val requester: FocusRequester,
-    var action: () -> Unit,
-    var item: ThorItem? = null,
-    var bounds: Rect = Rect.Zero,
-    var enabled: Boolean = true,
-)
-
-/** This registry belongs to the lower composition, never the service or a ViewModel. */
-class ThorFocusRegistry {
-    private val entries = linkedMapOf<String, ThorFocusEntry>()
-    private var registrationVersion by mutableIntStateOf(0)
-    private var prepared: Triple<Any, String, ThorFocusEntry>? = null
-    private var listMovement: Pair<Any, (ThorDirection, Boolean) -> Boolean?>? = null
-    var selectedKey by mutableStateOf<String?>(null)
-    var blocked by mutableStateOf(false)
-    var onFocus: (String, ThorItem?) -> Unit = { _, _ -> }
-    val current get() = entries[selectedKey] ?: prepared?.takeIf { it.second == selectedKey }?.third
-    fun register(key: String, entry: ThorFocusEntry) {
-        entries[key] = entry
-        registrationVersion++
-        if (prepared?.second == key) prepared = null
-    }
-    fun unregister(key: String, entry: ThorFocusEntry) {
-        if (entries[key] === entry) { entries.remove(key); registrationVersion++ }
-    }
-    fun contains(key: String?): Boolean {
-        registrationVersion // Allows a pending focus job to await LazyColumn registration.
-        return key != null && entries.containsKey(key)
-    }
-    fun select(key: String) {
-        if (prepared?.second != key) prepared = null
-        selectedKey = key
-        onFocus(key, current?.item)
-    }
-    fun confirm(): Boolean {
-        if (blocked) return true
-        val entry = current ?: return selectedKey != null
-        if (entry.enabled) entry.action()
-        return true
-    }
-    fun request(key: String?): Boolean {
-        if (blocked) return false
-        // A logical pending request prevents a parent fallback from stealing focus before scroll.
-        val entry = entries[key] ?: return prepared?.second == key && key != null
-        if (!entry.enabled) return false
-        return entry.requester.requestFocus().also {
-            if (it && key != null) { if (prepared?.second == key) prepared = null; select(key) }
-        }
-    }
-    fun requestFirst(): Boolean = entries.keys.toList().any { request(it) }
-
-    /** Keep exact action/identity available while LazyColumn realizes an offscreen focus target. */
-    fun prepareFocus(owner: Any, key: String, item: ThorItem?, action: () -> Unit) {
-        val fallbackBounds = current?.bounds ?: Rect.Zero
-        prepared = Triple(owner, key, ThorFocusEntry(FocusRequester(), action, item, fallbackBounds))
-        selectedKey = key
-        onFocus(key, item)
-    }
-    fun clearPreparedFocus(owner: Any) { if (prepared?.first === owner) prepared = null }
-    fun installListMove(owner: Any, handler: (ThorDirection, Boolean) -> Boolean?) { listMovement = owner to handler }
-    fun removeListMove(owner: Any) { if (listMovement?.first === owner) listMovement = null }
-    fun move(direction: ThorDirection, repeated: Boolean): Boolean? =
-        if (blocked) false else listMovement?.second?.invoke(direction, repeated)
-}
 
 @Composable
 internal fun Modifier.thorFocus(
@@ -133,7 +66,7 @@ internal fun Modifier.thorFocus(
         onDispose { registry.unregister(key, entry) }
     }
     return this.focusRequester(requester)
-        .focusProperties { canFocus = enabled && !registry.blocked }
+        .focusProperties { canFocus = enabled && !registry.blocked && registry.isAllowed(key) }
         .onFocusChanged { if (it.isFocused) registry.select(key) }
         .onGloballyPositioned { entry.bounds = it.boundsInRoot() }
 }

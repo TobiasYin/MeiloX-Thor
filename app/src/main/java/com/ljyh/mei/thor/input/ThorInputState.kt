@@ -12,6 +12,7 @@ internal class ThorInputState(
     private val repeatIntervalMs: Long = 100,
     private val shoulderHoldDelayMs: Long = 320,
     private val shoulderStepIntervalMs: Long = 50,
+    private val selectHoldDelayMs: Long = 500,
 ) {
     private val buttons = mutableMapOf<String, Boolean>()
     private val directions = linkedMapOf<String, ThorDirection>()
@@ -20,6 +21,8 @@ internal class ThorInputState(
     private val triggers = mutableMapOf<Pair<Int, Boolean>, Trigger>()
     private val shoulders = linkedMapOf<String, Shoulder>()
     private val shouldersAwaitingRelease = mutableSetOf<String>()
+    private val selects = linkedMapOf<String, SelectGesture>()
+    private val selectsAwaitingRelease = mutableSetOf<String>()
     private var direction: ThorDirection? = null
     private var blocked = false
     private var nextRepeatMs = Long.MAX_VALUE
@@ -28,6 +31,7 @@ internal class ThorInputState(
     val nextTickAtMs: Long? get() = listOfNotNull(
         nextRepeatMs.takeIf { direction != null && !blocked },
         shoulders.values.minOfOrNull { if (it.holding) it.nextStepMs else it.startedAtMs + shoulderHoldDelayMs },
+        selects.values.filterNot { it.holding }.minOfOrNull { it.startedAtMs + selectHoldDelayMs },
     ).minOrNull()
 
     fun button(token: String, down: Boolean, command: ThorCommand, repeated: Boolean = false): Boolean {
@@ -118,6 +122,33 @@ internal class ThorInputState(
                 onCommand(ThorCommand.Shoulder(shoulder.right, ThorShoulderPhase.HoldStep))
             }
         }
+        for ((token, select) in selects.toMap()) {
+            if (selects[token] !== select || select.holding) continue
+            if (nowMs - select.startedAtMs >= selectHoldDelayMs) {
+                select.holding = true
+                onCommand(ThorCommand.PageActions)
+            }
+        }
+    }
+
+    /** Select tap is deferred to UP so a hold can open page actions without flashing the queue. */
+    fun select(token: String, down: Boolean, nowMs: Long, repeated: Boolean = false): Boolean {
+        if (token in selectsAwaitingRelease) {
+            if (!down) selectsAwaitingRelease.remove(token)
+            return true
+        }
+        if (down) {
+            if (token in selects) return true
+            if (repeated) { selectsAwaitingRelease += token; return true }
+            selects[token] = SelectGesture(nowMs)
+        } else {
+            val select = selects.remove(token) ?: return true
+            if (!select.holding) onCommand(
+                if (nowMs - select.startedAtMs >= selectHoldDelayMs) ThorCommand.PageActions
+                else ThorCommand.ToggleQueue,
+            )
+        }
+        return true
     }
 
     fun shoulder(token: String, right: Boolean, down: Boolean, nowMs: Long, repeated: Boolean = false): Boolean {
@@ -158,6 +189,8 @@ internal class ThorInputState(
         val cancelledShoulders = shoulders.values.toList()
         shouldersAwaitingRelease += shoulders.keys
         shoulders.clear()
+        selectsAwaitingRelease += selects.keys
+        selects.clear()
         direction = null
         blocked = false
         nextRepeatMs = Long.MAX_VALUE
@@ -198,6 +231,8 @@ internal class ThorInputState(
         var holding: Boolean = false,
         var nextStepMs: Long = Long.MAX_VALUE,
     )
+
+    private class SelectGesture(val startedAtMs: Long, var holding: Boolean = false)
 }
 
 /** Hysteresis rejects drift while allowing a held stick to reach its actual neutral. */

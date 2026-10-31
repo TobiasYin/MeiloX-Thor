@@ -42,9 +42,10 @@ import java.io.Closeable
 class ThorDisplayHost(
     private val activity: ComponentActivity,
     onCommand: (ThorCommand) -> Boolean,
+    private val onNonBackInput: () -> Unit = {},
     private val lowerContent: @Composable () -> Unit,
 ) : Closeable, DefaultLifecycleObserver {
-    val inputRouter = ThorInputRouter(onCommand)
+    val inputRouter = ThorInputRouter(onNonBackInput = onNonBackInput, onCommand = onCommand)
     private val manager = checkNotNull(activity.getSystemService(DisplayManager::class.java))
     private val inputManager = checkNotNull(activity.getSystemService(InputManager::class.java))
     private val handler = Handler(Looper.getMainLooper())
@@ -64,7 +65,7 @@ class ThorDisplayHost(
     private val inputListener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) = Unit
         override fun onInputDeviceChanged(deviceId: Int) = Unit
-        override fun onInputDeviceRemoved(deviceId: Int) = inputRouter.reset()
+        override fun onInputDeviceRemoved(deviceId: Int) { inputRouter.reset(); onNonBackInput() }
     }
 
     fun start() {
@@ -114,7 +115,7 @@ class ThorDisplayHost(
             val display = manager.getDisplay(lower!!.id)
             if (display != null && display.isValid) {
                 try {
-                    val next = LowerPresentation(activity, display, inputRouter, lowerContent)
+                    val next = LowerPresentation(activity, display, inputRouter, lowerContent, onNonBackInput)
                     presentation = next
                     displayedDescriptor = lower
                     next.setOnDismissListener {
@@ -190,6 +191,7 @@ private class LowerPresentation(
     display: Display,
     private val router: ThorInputRouter,
     private val content: @Composable () -> Unit,
+    private val onOwnershipLost: () -> Unit,
 ) : Presentation(owner, display) {
     private var composeView: ComposeView? = null
     private val backCallback = OnBackInvokedCallback { router.dispatch(ThorCommand.Back) }
@@ -250,7 +252,7 @@ private class LowerPresentation(
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus) router.reset()
+        if (!hasFocus) { router.reset(); onOwnershipLost() }
     }
 
     @Deprecated("Handled through the same application navigation as controller Back")

@@ -6,7 +6,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -30,11 +30,16 @@ class ThorListFocusBinding internal constructor(
     val request: (Int) -> Unit,
 )
 
-/**
- * Direction navigation uses the complete stable-key list rather than only composed LazyColumn rows.
- * Rows still register those same keys with [ThorFocusRegistry]. Null items are useful for lyrics.
- * A fresh press may leave a list; a held direction stops at its boundary until released.
- */
+/** The production binder can also be exercised without a ViewModel/account in native fixtures. */
+internal interface ThorListFocusMemory {
+    fun readFocus(scene: String): String?
+    fun readScroll(scene: String): Pair<String, Int>?
+    fun saveFocus(scene: String, key: String)
+    fun saveScroll(scene: String, key: String, offset: Int)
+    fun preview(item: ThorItem?)
+}
+
+/** A complete stable-key list is one closed region, including currently unrealized rows. */
 @Composable
 @UnstableApi
 fun BindThorListFocus(
@@ -46,38 +51,56 @@ fun BindThorListFocus(
     vm: ThorShellViewModel,
     onActivate: (Int) -> Unit,
 ): ThorListFocusBinding {
-    val scope = rememberCoroutineScope()
+    val memory = remember(vm) { object : ThorListFocusMemory {
+        override fun readFocus(scene: String) = vm.rememberedFocus(scene)
+        override fun readScroll(scene: String) = vm.rememberedListScroll(scene)
+        override fun saveFocus(scene: String, key: String) = vm.rememberFocus(scene, key)
+        override fun saveScroll(scene: String, key: String, offset: Int) = vm.rememberListScroll(scene, key, offset)
+        override fun preview(item: ThorItem?) { if (item == null) vm.clearPreview() else vm.preview(item) }
+    } }
+    return BindThorListFocus(registry, scene, keys, items, listState, memory, onActivate)
+}
+
+@Composable
+internal fun BindThorListFocus(
+    registry: ThorFocusRegistry,
+    scene: String,
+    keys: List<String>,
+    items: List<ThorItem?>,
+    listState: LazyListState,
+    memory: ThorListFocusMemory,
+    onActivate: (Int) -> Unit,
+): ThorListFocusBinding {
+    val coroutineScope = rememberCoroutineScope()
     val owner = remember(scene, registry) { Any() }
-    // Capture before a parent fallback can temporarily focus a header during scene entry.
-    val entryFocus = remember(scene) { vm.rememberedFocus(scene) }
-    val entryPosition = remember(scene) { vm.rememberedListScroll(scene) }
+    val entryFocus = remember(scene, memory) { memory.readFocus(scene) }
+    val entryPosition = remember(scene, memory) { memory.readScroll(scene) }
     var restored by remember(scene) { mutableStateOf(false) }
-    var lastIndex by remember(scene) { mutableIntStateOf(0) }
     var focusJob by remember(scene) { mutableStateOf<Job?>(null) }
-    val currentKeys by rememberUpdatedState(keys)
+    val currentKeys by key(owner) { rememberUpdatedState(keys) }
     val keyPositions = remember(keys) { keys.withIndex().associate { it.value to it.index } }
     val fallbackRowHeightPx = with(LocalDensity.current) { 56.dp.roundToPx() }
 
     fun rememberSelection(index: Int) {
         val key = keys.getOrNull(index) ?: return
-        lastIndex = index
-        vm.rememberFocus(scene, key)
-        items.getOrNull(index)?.let(vm::preview)
+        memory.saveFocus(scene, key)
+        memory.preview(items.getOrNull(index))
     }
 
     fun activate(index: Int) {
-        if (index !in keys.indices) return
+        if (index !in keys.indices || registry.blocked) return
         rememberSelection(index)
         onActivate(index)
     }
 
     fun requestItem(index: Int) {
         val key = keys.getOrNull(index) ?: return
+        if (registry.blocked || !registry.isAllowed(key)) return
+        // Freeze identity/action before an offscreen row exists. Confirm never uses an old row.
+        if (!registry.prepareFocus(owner, key, items.getOrNull(index)) { activate(index) }) return
         rememberSelection(index)
-        // Freeze the target and action now, before the old native focus can catch up with a scroll.
-        registry.prepareFocus(owner, key, items.getOrNull(index)) { activate(index) }
         focusJob?.cancel()
-        focusJob = scope.launch {
+        focusJob = coroutineScope.launch {
             val layout = listState.layoutInfo
             if (layout.visibleItemsInfo.none { it.index == index }) {
                 val viewport = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(0)
@@ -85,7 +108,6 @@ fun BindThorListFocus(
                 val movingDown = index > listState.firstVisibleItemIndex
                 listState.scrollToItem(index, if (movingDown) -(viewport - rowHeight).coerceAtLeast(0) else 0)
             }
-            // A newly scrolled row registers in composition before native focus is requested.
             snapshotFlow { registry.contains(key) }.first { it }
             withFrameNanos { }
             if (registry.selectedKey == key && currentKeys.contains(key)) registry.request(key)
@@ -93,16 +115,13 @@ fun BindThorListFocus(
     }
 
     SideEffect {
-        registry.installListMove(owner) { direction, repeated ->
-            val index = keyPositions[registry.selectedKey] ?: -1
-            if (index < 0) null
-            else if (direction == ThorDirection.Left || direction == ThorDirection.Right) {
-                if (repeated) false else null
-            } else {
-                val target = index + if (direction == ThorDirection.Up) -1 else 1
-                if (target !in keys.indices) {
-                    if (repeated) false else null
-                } else { requestItem(target); true }
+        registry.installScope(owner, ThorFocusScope(scene, keys, ThorFocusLayout.Vertical))
+        registry.installListMove(owner) { direction, _ ->
+            if (direction == ThorDirection.Left || direction == ThorDirection.Right || keys.isEmpty()) false
+            else {
+                val index = keyPositions[registry.selectedKey]
+                val target = if (index == null) 0 else index + if (direction == ThorDirection.Up) -1 else 1
+                if (target !in keys.indices) false else { requestItem(target); true }
             }
         }
     }
@@ -110,12 +129,13 @@ fun BindThorListFocus(
     DisposableEffect(owner) {
         onDispose {
             currentKeys.getOrNull(listState.firstVisibleItemIndex)?.let { firstKey ->
-                vm.rememberListScroll(scene, firstKey, listState.firstVisibleItemScrollOffset)
+                memory.saveScroll(scene, firstKey, listState.firstVisibleItemScrollOffset)
             }
-            registry.selectedKey?.takeIf(currentKeys::contains)?.let { vm.rememberFocus(scene, it) }
+            registry.selectedKey?.takeIf(currentKeys::contains)?.let { memory.saveFocus(scene, it) }
             focusJob?.cancel()
             registry.clearPreparedFocus(owner)
             registry.removeListMove(owner)
+            registry.removeScope(owner)
         }
     }
 
@@ -123,29 +143,35 @@ fun BindThorListFocus(
         keys.indexOf(registry.selectedKey).takeIf { it >= 0 }?.let(::rememberSelection)
     }
 
-    LaunchedEffect(scene, keys) {
+    LaunchedEffect(scene, keys, registry.blocked) {
         focusJob?.cancel()
+        if (registry.blocked) return@LaunchedEffect
         if (keys.isEmpty()) {
             registry.clearPreparedFocus(owner)
-            vm.clearPreview()
-            withFrameNanos { }
-            if (registry.selectedKey == null || !registry.contains(registry.selectedKey)) registry.requestFirst()
+            memory.preview(null)
+            // Loading may start empty. Do not mark restored or fall through to chrome controls.
             return@LaunchedEffect
         }
-        val saved = if (!restored) entryFocus else vm.rememberedFocus(scene)
+        val saved = if (!restored) entryFocus else memory.readFocus(scene)
         val selected = keys.indexOf(registry.selectedKey)
-        val index = keys.indexOf(saved).takeIf { it >= 0 } ?: selected.takeIf { it >= 0 }
-            ?: lastIndex.coerceIn(keys.indices)
-        val restoringAnotherRegion = !restored && entryFocus != null && entryFocus !in keyPositions && registry.contains(entryFocus)
-        val ownsFocus = !restoringAnotherRegion &&
-            (!restored || selected >= 0 || registry.selectedKey == null || !registry.contains(registry.selectedKey))
+        val index = thorRestoredListIndex(keys, saved, selected.takeIf { restored && it >= 0 })
+        // LaunchedEffect can start before SideEffect installs this region. Do not let a
+        // non-suspending restore (saved focus without saved scroll) permanently lose its
+        // request through requestItem's scope guard. This observes actual readiness.
+        val targetKey = keys[index]
+        snapshotFlow { registry.isAllowed(targetKey) }.first { it }
         if (!restored) {
-            entryPosition?.let { (firstKey, offset) ->
+            val validPosition = entryPosition?.takeIf { (firstKey, _) -> firstKey in keyPositions }
+            if (entryFocus !in keyPositions && validPosition == null) {
+                // SaveableStateHolder can retain an old LazyListState after fresh-scene memory
+                // was cleared or its saved keys disappeared. Reset even a partial first row.
+                listState.scrollToItem(0, 0)
+            } else validPosition?.let { (firstKey, offset) ->
                 keys.indexOf(firstKey).takeIf { it >= 0 }?.let { listState.scrollToItem(it, offset) }
             }
         }
         restored = true
-        if (ownsFocus) requestItem(index)
+        requestItem(index)
     }
 
     return ThorListFocusBinding(::rememberSelection, ::activate, ::requestItem)

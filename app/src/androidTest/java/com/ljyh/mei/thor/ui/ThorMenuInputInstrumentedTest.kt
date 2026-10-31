@@ -35,7 +35,7 @@ class ThorMenuInputInstrumentedTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun heldPressSurvivesRecompositionAndReleaseCannotAlsoOpenThePlaylist() {
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("playlist"))
         val menuOpen = mutableStateOf(false)
         val revision = mutableIntStateOf(0)
         var clicks = 0
@@ -78,7 +78,7 @@ class ThorMenuInputInstrumentedTest {
     @Test fun scrollingBeforeLongPressCancelsBothMenuAndClick() {
         var clicks = 0
         var menus = 0
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("row:0", "row:1", "row:2", "row:3", "row:4", "row:5"))
         compose.setContent {
             ThorTheme(ThorPreferences(reduceMotion = true)) {
                 LazyColumn(Modifier.width(320.dp).height(160.dp)) {
@@ -102,7 +102,7 @@ class ThorMenuInputInstrumentedTest {
         val echo = mutableStateOf("")
         var latestName = ""
         var savedName: String? = null
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("menu:name", "menu:name:cancel", "menu:name:save"))
         compose.setContent {
             ThorTheme(ThorPreferences(reduceMotion = true)) {
                 Column(Modifier.width(500.dp).height(220.dp)) {
@@ -123,7 +123,7 @@ class ThorMenuInputInstrumentedTest {
     @Test fun nameLimitAndImeDoneUseTheSameLatestEightyCharacters() {
         var latestName = ""
         var savedName: String? = null
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("menu:name", "menu:name:cancel", "menu:name:save"))
         compose.setContent {
             ThorTheme(ThorPreferences(reduceMotion = true)) {
                 Column(Modifier.width(500.dp).height(220.dp)) {
@@ -143,7 +143,7 @@ class ThorMenuInputInstrumentedTest {
     @Test fun aNewSubjectStartsANewNameSessionInsteadOfKeepingThePreviousDraft() {
         val subject = mutableStateOf("first")
         val initial = mutableStateOf("First playlist")
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("menu:name", "menu:name:cancel", "menu:name:save"))
         compose.setContent {
             ThorTheme(ThorPreferences(reduceMotion = true)) {
                 Column(Modifier.width(500.dp).height(220.dp)) {
@@ -156,4 +156,8 @@ class ThorMenuInputInstrumentedTest {
         compose.runOnIdle { subject.value = "second"; initial.value = "Second playlist" }
         compose.onNode(hasSetTextAction()).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("Second playlist")))
     }
+    private fun scopedFixtureRegistry(keys: List<String>) = ThorFocusRegistry().apply {
+        installScope(this, ThorFocusScope("fixture", keys, ThorFocusLayout.Spatial))
+    }
+
 }

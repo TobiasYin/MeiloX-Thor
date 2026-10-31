@@ -89,7 +89,7 @@ class ThorActivity : ComponentActivity() {
         enableEdgeToEdge()
         hideSystemBars()
         airflow = ThorAirflowSource(this, this)
-        displayHost = ThorDisplayHost(this, commands::dispatch) { LowerContent() }
+        displayHost = ThorDisplayHost(this, commands::dispatch, viewModel::clearExitGuard) { LowerContent() }
         if (!legacyActive) displayHost.start()
         setContent {
             val preferences by viewModel.preferences.collectAsStateWithLifecycle()
@@ -161,6 +161,9 @@ class ThorActivity : ComponentActivity() {
                     ThorAirflowCalibrationStep.Quiet -> "安静校准"
                     ThorAirflowCalibrationStep.Gentle -> "轻吹校准"
                     ThorAirflowCalibrationStep.Strong -> "强吹校准"
+                }, onControllerScopeChanged = {
+                    displayHost.inputRouter.reset()
+                    viewModel.clearExitGuard()
                 })
         }
     }
@@ -184,6 +187,7 @@ class ThorActivity : ComponentActivity() {
     override fun onPause() {
         if (::displayHost.isInitialized) displayHost.inputRouter.reset()
         viewModel.cancelSeek()
+        viewModel.clearExitGuard()
         super.onPause()
     }
     override fun onStop() {
@@ -217,10 +221,14 @@ class ThorActivity : ComponentActivity() {
     }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = if (::displayHost.isInitialized && !legacyActive && displayHost.inputRouter.onKeyEvent(event)) true else super.dispatchKeyEvent(event)
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean = if (::displayHost.isInitialized && !legacyActive && displayHost.inputRouter.onMotionEvent(event)) true else super.dispatchGenericMotionEvent(event)
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) viewModel.clearExitGuard()
+        return super.dispatchTouchEvent(event)
+    }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (::displayHost.isInitialized) {
-            if (!hasFocus) displayHost.inputRouter.reset()
+            if (!hasFocus) { displayHost.inputRouter.reset(); viewModel.clearExitGuard() }
             else if (recoverAbandonedLegacy() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) resumeThor()
         }
     }

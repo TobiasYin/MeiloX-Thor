@@ -1,5 +1,9 @@
 package com.ljyh.mei.thor
 
+import android.os.SystemClock
+import com.ljyh.mei.thor.input.ThorExitGuard
+import com.ljyh.mei.thor.input.ThorExitDecision
+
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -51,6 +55,8 @@ class ThorShellViewModel @Inject constructor(
     val libraryCategory = mutableLibraryCategory.asStateFlow()
     fun selectLibraryCategory(category: Int) {
         val selection = category.coerceIn(0, 2)
+        clearExitGuard()
+        if (selection != mutableLibraryCategory.value) freshScene("root:Library")
         mutableLibraryCategory.value = selection
         savedState["thor.libraryCategory"] = selection
     }
@@ -62,6 +68,8 @@ class ThorShellViewModel @Inject constructor(
     val notice = mutableNotice.asStateFlow()
     private val mutableSearch = MutableStateFlow(ThorSearchState())
     val search = mutableSearch.asStateFlow()
+    private val mutableSearchEntry = MutableStateFlow(0L)
+    val searchEntry = mutableSearchEntry.asStateFlow()
     private var searchJob: Job? = null
     private var detailJob: Job? = null
     private var detailGeneration = 0L
@@ -77,6 +85,20 @@ class ThorShellViewModel @Inject constructor(
     val textEditing = MutableStateFlow(false)
     private val focus = mutableMapOf<String, String>()
     private val listScroll = mutableMapOf<String, Pair<String, Int>>()
+    private val exitGuard = ThorExitGuard()
+    private var exitResetJob: Job? = null
+
+    fun clearExitGuard() {
+        exitGuard.clear()
+        exitResetJob?.cancel()
+        exitResetJob = null
+        if (notice.value?.message == "再按一次 B 退出") mutableNotice.value = null
+    }
+
+    private fun freshScene(scene: String) {
+        focus.keys.removeAll { it == scene || it.startsWith("$scene:") }
+        listScroll.keys.removeAll { it == scene || it.startsWith("$scene:") }
+    }
 
     private fun decodePreferences(prefs: Preferences) = decodeThorPreferences(prefs)
 
@@ -96,6 +118,7 @@ class ThorShellViewModel @Inject constructor(
         }
         viewModelScope.launch {
             library.map { it.account.generation }.distinctUntilChanged().drop(1).collect {
+                clearExitGuard()
                 mutableMenu.value = null
                 quickPlayerHistory.clear()
                 cancelSeek()
@@ -145,6 +168,7 @@ class ThorShellViewModel @Inject constructor(
     fun refresh(collection: ThorCollection? = null) = repository.refresh(collection)
 
     private fun navigate(value: ThorNavigation) {
+        clearExitGuard()
         if (value.overlay != ThorOverlay.Player) cancelSeek()
         if (value.sceneKey != mutableNavigation.value.sceneKey) mutablePreview.value = null
         mutableNavigation.value = value
@@ -153,7 +177,10 @@ class ThorShellViewModel @Inject constructor(
 
     fun switchTab(delta: Int) { if (menu.value == null) navigate(navigation.value.switchTab(delta)) }
     fun selectTab(tab: ThorTab) { if (navigation.value.isRoot && menu.value == null) navigate(navigation.value.copy(tab = tab)) }
-    fun push(page: ThorPage) { navigate(navigation.value.push(page)) }
+    fun push(page: ThorPage) {
+        if (navigation.value.page.key != page.key) freshScene(page.key)
+        navigate(navigation.value.push(page))
+    }
     fun togglePlayer() {
         if (menu.value != null || seekPreview.value != null || navigation.value.overlay != ThorOverlay.Player) showPlayer()
         else if (!restoreQuickPlayer()) navigate(navigation.value.toggle(ThorOverlay.Player))
@@ -175,26 +202,56 @@ class ThorShellViewModel @Inject constructor(
         restored.menu?.subject?.item?.let { mutablePreview.value = it }
         return true
     }
-    fun toggleQueue() { if (menu.value == null) navigate(navigation.value.toggle(ThorOverlay.Queue)) }
-    fun showLyrics() = navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Lyrics))
-    fun showTimer() = navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Timer))
+    fun toggleQueue() {
+        if (menu.value != null) return
+        if (navigation.value.overlay != ThorOverlay.Queue) freshScene("overlay:Queue")
+        navigate(navigation.value.toggle(ThorOverlay.Queue))
+    }
+    fun showLyrics() {
+        freshScene("overlay:Lyrics")
+        navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Lyrics))
+    }
+    fun showTimer() {
+        freshScene("overlay:Timer")
+        navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Timer))
+    }
 
     fun back(): Boolean {
         val menu = menu.value
         if (menu != null) {
+            clearExitGuard()
             mutableMenu.value = if (menu.busy) null else menu.back()?.syncPlaylistTargets(playlistKeys(menu, library.value))
             if (mutableMenu.value == null) menuGeneration++
             return true
         }
-        if (mutableSeek.value != null) { cancelSeek(); return true }
+        if (mutableSeek.value != null) { clearExitGuard(); cancelSeek(); return true }
         if (restoreQuickPlayer()) return true
-        val previous = navigation.value.back() ?: return false
-        navigate(previous)
-        return true
+        val previous = navigation.value.back()
+        if (previous != null) { navigate(previous); return true }
+        if (navigation.value.tab != ThorTab.Home) {
+            navigate(navigation.value.copy(tab = ThorTab.Home,
+                stacks = navigation.value.stacks - ThorTab.Home))
+            return true
+        }
+        return when (exitGuard.onBack(SystemClock.uptimeMillis())) {
+            ThorExitDecision.Exit -> { clearExitGuard(); false }
+            ThorExitDecision.IgnoreRepeat -> true
+            ThorExitDecision.Armed -> {
+                showMessage("再按一次 B 退出")
+                exitResetJob?.cancel()
+                exitResetJob = viewModelScope.launch {
+                    kotlinx.coroutines.delay(2_000)
+                    clearExitGuard()
+                }
+                true
+            }
+        }
     }
 
     fun openCollection(collection: ThorCollection) { push(ThorPage.Collection(collection)); repository.refresh(collection) }
     fun replaceCollection(collection: ThorCollection) {
+        val target = ThorPage.Collection(collection)
+        if (navigation.value.page.key != target.key) freshScene(target.key)
         navigate(navigation.value.replaceCollection(collection))
         repository.refresh(collection)
     }
@@ -285,9 +342,11 @@ class ThorShellViewModel @Inject constructor(
     fun search() {
         val query = search.value.query.trim()
         if (query.isEmpty()) return
+        freshScene("search")
+        mutableSearchEntry.value++
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            mutableSearch.value = search.value.copy(loading = true, error = null, searched = true)
+            mutableSearch.value = search.value.copy(items = emptyList(), loading = true, error = null, searched = true)
             try {
                 val items = repository.search(query)
                 mutableSearch.value = ThorSearchState(query, items, searched = true)

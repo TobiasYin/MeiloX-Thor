@@ -42,4 +42,10 @@ class ThorInputRouterPolicyTest {
         assertEquals(ThorCommand.PreviousTrack, thorCommandForKey(KeyEvent.KEYCODE_BUTTON_L2))
         assertEquals(ThorCommand.NextTrack, thorCommandForKey(KeyEvent.KEYCODE_BUTTON_R2))
     }
+
+    @Test fun selectKeepsItsQueueIdentityAndNativeTextPolicyWhileStateDistinguishesHold() {
+        assertEquals(ThorCommand.ToggleQueue, thorCommandForKey(KeyEvent.KEYCODE_BUTTON_SELECT))
+        assertEquals(ThorKeyRoute.Application, thorKeyRoute(KeyEvent.KEYCODE_BUTTON_SELECT, textEditing = false))
+        assertEquals(ThorKeyRoute.Native, thorKeyRoute(KeyEvent.KEYCODE_BUTTON_SELECT, textEditing = true))
+    }
 }

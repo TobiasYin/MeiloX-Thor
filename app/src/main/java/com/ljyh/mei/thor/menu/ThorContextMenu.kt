@@ -70,6 +70,8 @@ import com.ljyh.mei.thor.ui.ThorCover
 import com.ljyh.mei.thor.ui.thorLineIcon
 import com.ljyh.mei.thor.ui.ThorDesignIcons
 import com.ljyh.mei.thor.ui.ThorFocusRegistry
+import com.ljyh.mei.thor.ui.ThorFocusScope
+import com.ljyh.mei.thor.ui.ThorFocusLayout
 import com.ljyh.mei.thor.ui.thorFocus
 import kotlin.math.roundToInt
 
@@ -96,7 +98,20 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
         ThorMenuLevel.ConfirmDelete -> "删除歌单"
     }
     val currentMenu by rememberUpdatedState(menu)
-    SideEffect { registry.blocked = menu.busy }
+    val scopeOwner = remember(registry, subjectKey) { Any() }
+    val scopeKeys = when (menu.level) {
+        ThorMenuLevel.Actions -> actions.indices.map { "menu:action:$it" }
+        ThorMenuLevel.Playlists -> playlists.map { "menu:playlist:${ThorPlaylistTarget.Existing(it.key as ThorItemKey.Playlist).stableKey}" } +
+            "menu:playlist:${ThorPlaylistTarget.Create.stableKey}"
+        ThorMenuLevel.ConfirmDelete -> ThorDeleteChoice.entries.map { "menu:delete:${it.name}" }
+        ThorMenuLevel.Name -> listOf("menu:name", "menu:name:cancel", "menu:name:save")
+    }
+    SideEffect {
+        registry.blocked = menu.busy
+        registry.installScope(scopeOwner, ThorFocusScope("context:${menu.level}", scopeKeys,
+            if (menu.level == ThorMenuLevel.Name) ThorFocusLayout.Spatial else ThorFocusLayout.Vertical))
+    }
+    DisposableEffect(scopeOwner) { onDispose { registry.removeScope(scopeOwner) } }
     DisposableEffect(subjectKey) {
         onDispose { vm.textEditing.value = false; keyboard?.hide() }
     }
@@ -309,6 +324,7 @@ fun ThorContextMenu(vm: ThorShellViewModel, menu: ThorMenuState, registry: ThorF
                             onNameChanged = vm::setMenuName, onSubmit = vm::saveMenuName,
                             onCancel = { vm.back() },
                             onEditingChanged = { if (level == currentMenu.level) vm.textEditing.value = it },
+                            parentOwnsScope = true,
                         )
                     }
                 }
@@ -346,9 +362,16 @@ internal fun ThorMenuNameEditor(
     onSubmit: () -> Unit,
     onCancel: () -> Unit,
     onEditingChanged: (Boolean) -> Unit,
+    parentOwnsScope: Boolean = false,
 ) {
     val theme = LocalThorTheme.current
     val keyboard = LocalSoftwareKeyboardController.current
+    if (!parentOwnsScope) {
+        val scopeOwner = remember(registry) { Any() }
+        SideEffect { registry.installScope(scopeOwner, ThorFocusScope("menu:name",
+            listOf("menu:name", "menu:name:cancel", "menu:name:save"), ThorFocusLayout.Spatial)) }
+        DisposableEffect(scopeOwner) { onDispose { registry.removeScope(scopeOwner) } }
+    }
     var field by remember(entryKey, renaming) {
         mutableStateOf(TextFieldValue(initialName.take(80), TextRange(0, initialName.take(80).length)))
     }

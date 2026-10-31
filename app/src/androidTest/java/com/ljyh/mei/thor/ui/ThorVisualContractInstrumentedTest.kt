@@ -74,7 +74,7 @@ class ThorVisualContractInstrumentedTest {
     }
 
     @Test fun flatIconAndCircularTransportKeepFortyEightSixtyEightySixtyDpBounds() {
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("flat", "previous", "play", "next"))
         compose.setContent {
             FixtureTheme {
                 Column(Modifier.width(360.dp).padding(16.dp)) {
@@ -105,7 +105,7 @@ class ThorVisualContractInstrumentedTest {
     }
 
     @Test fun musicRowIsFiftySixDpWithARealThirtySixDpCover() {
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("row"))
         val title = "Cover layout fixture"
         // Android's bundled resource goes through the real ThorCover/AsyncImage path, never HTTP.
         val item = ThorItem(ThorItemKey.Song(1, true), title, "Fixture artist",
@@ -127,7 +127,7 @@ class ThorVisualContractInstrumentedTest {
     }
 
     @Test fun allSixThemesKeepTheSameNativeFocusAndControlBounds() {
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("retained", "row"))
         val preferences = mutableStateOf(ThorPreferences(reduceMotion = true, appearance = ThorAppearance.Day))
         val title = "Stable row fixture"
         compose.setContent {
@@ -156,7 +156,7 @@ class ThorVisualContractInstrumentedTest {
     }
 
     @Test fun selectedFocusedAndHeldPressPaintTogetherWithoutMovingTheRow() {
-        val registry = ThorFocusRegistry()
+        val registry = scopedFixtureRegistry(listOf("row"))
         val selected = mutableStateOf(false)
         var clicks = 0
         val title = "Combined state fixture"
@@ -190,4 +190,8 @@ class ThorVisualContractInstrumentedTest {
         row.performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
     }
+    private fun scopedFixtureRegistry(keys: List<String>) = ThorFocusRegistry().apply {
+        installScope(this, ThorFocusScope("fixture", keys, ThorFocusLayout.Spatial))
+    }
+
 }

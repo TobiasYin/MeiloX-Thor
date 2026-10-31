@@ -142,12 +142,79 @@ class ThorControllerAdapterInstrumentedTest {
         }
     }
 
+    @Test
+    fun selectTapDefersQueueUntilUpAndLongHoldOpensOnlyPageActions() {
+        val commands = mutableListOf<ThorCommand>()
+        val held = CountDownLatch(1)
+        lateinit var router: ThorInputRouter
+        onMain {
+            router = ThorInputRouter { command ->
+                commands += command
+                if (command == ThorCommand.PageActions) held.countDown()
+                true
+            }
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, true)
+            assertTrue(commands.isEmpty())
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, false)
+            assertEquals(listOf(ThorCommand.ToggleQueue), commands)
+            commands.clear()
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, true)
+        }
+        try {
+            assertTrue("A Select hold must reach the real Android Handler", held.await(3, TimeUnit.SECONDS))
+            onMain {
+                key(router, KeyEvent.KEYCODE_BUTTON_SELECT, true, repeat = 1)
+                key(router, KeyEvent.KEYCODE_BUTTON_SELECT, false)
+                assertEquals(listOf(ThorCommand.PageActions), commands)
+            }
+        } finally { onMain { router.close() } }
+    }
+
+    @Test
+    fun editingResetAndNativeSelectUpDoNotConsumeTheNextFreshTap() = onMain {
+        val commands = mutableListOf<ThorCommand>()
+        ThorInputRouter { commands += it; true }.use { router ->
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, true)
+            router.setTextEditing(true)
+            assertTrue(commands.isEmpty())
+            assertTrue(!key(router, KeyEvent.KEYCODE_BUTTON_SELECT, false))
+            router.setTextEditing(false)
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, true)
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, false)
+            assertEquals(listOf(ThorCommand.ToggleQueue), commands)
+        }
+    }
+
+    @Test
+    fun nonBackInputObserverIgnoresBackNeutralAndDriftButSeesRealActivity() = onMain {
+        var interactions = 0
+        ThorInputRouter(onNonBackInput = { interactions++ }, onCommand = { true }).use { router ->
+            key(router, KeyEvent.KEYCODE_BUTTON_B, true)
+            key(router, KeyEvent.KEYCODE_BUTTON_B, true, repeat = 1)
+            key(router, KeyEvent.KEYCODE_BUTTON_B, false)
+            assertEquals(0, interactions)
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, true)
+            assertEquals("Select DOWN must clear an exit arm before its deferred command", 1, interactions)
+            key(router, KeyEvent.KEYCODE_BUTTON_SELECT, false)
+            axis(router, KeyCharacterMap.VIRTUAL_KEYBOARD, MotionEvent.AXIS_X, 0f)
+            axis(router, KeyCharacterMap.VIRTUAL_KEYBOARD, MotionEvent.AXIS_X, .1f)
+            assertEquals(1, interactions)
+            axis(router, KeyCharacterMap.VIRTUAL_KEYBOARD, MotionEvent.AXIS_X, .8f)
+            assertEquals(2, interactions)
+            axis(router, KeyCharacterMap.VIRTUAL_KEYBOARD, MotionEvent.AXIS_X, 0f)
+            axis(router, KeyCharacterMap.VIRTUAL_KEYBOARD, MotionEvent.AXIS_BRAKE, .2f)
+            assertEquals(3, interactions)
+            axis(router, KeyCharacterMap.VIRTUAL_KEYBOARD, MotionEvent.AXIS_BRAKE, 0f)
+            assertEquals(3, interactions)
+        }
+    }
+
     private fun onMain(block: () -> Unit) = instrumentation.runOnMainSync(block)
 
     private fun key(router: ThorInputRouter, code: Int, down: Boolean,
-                    deviceId: Int = KeyCharacterMap.VIRTUAL_KEYBOARD, repeat: Int = 0) {
+                    deviceId: Int = KeyCharacterMap.VIRTUAL_KEYBOARD, repeat: Int = 0): Boolean {
         val now = SystemClock.uptimeMillis()
-        router.onKeyEvent(KeyEvent(now, now, if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
+        return router.onKeyEvent(KeyEvent(now, now, if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
             code, repeat, 0, deviceId, 0, 0, InputDevice.SOURCE_GAMEPAD))
     }
 

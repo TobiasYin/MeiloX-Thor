@@ -14,6 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -244,6 +248,7 @@ internal fun ThorBrowsePage(
     airflowStrength: Float = 0f,
     airflowCalibrationLabel: String = "校准",
     airflowCalibrationProgress: Float = 0f,
+    pageActions: ThorPageActionBindings? = null,
 ) {
     val loading by vm.detailLoading.collectAsStateWithLifecycle()
     when (val page = navigation.page) {
@@ -283,7 +288,7 @@ internal fun ThorBrowsePage(
                 sourcePlaylist = (item.key as? ThorItemKey.Playlist)?.takeIf { item.owned },
                 onItem = { _, index -> vm.play(item.tracks, index, item.title) })
         }
-        ThorPage.Search -> ThorSearchPage(vm, registry, onBack)
+        ThorPage.Search -> ThorSearchPage(vm, registry, onBack, pageActions)
         ThorPage.Appearance -> ThorAppearancePage(vm, registry, onBack)
         ThorPage.Controls -> ThorControlsPage(vm, registry, onBack, onRequestAirflow, onCalibrateAirflow, airflowStatus,
             airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress)
@@ -308,7 +313,7 @@ private fun ThorLibraryPage(vm: ThorShellViewModel, registry: ThorFocusRegistry,
             ThorButton(registry, "header:search", "", icon = Icons.Outlined.Search, flat = true, contentDescription = "搜索", onClick = { vm.push(ThorPage.Search) })
             ThorButton(registry, "header:my", "", icon = Icons.Outlined.Settings, flat = true, contentDescription = "我的", onClick = { vm.selectTab(ThorTab.My) })
         }
-        ThorBrowseList(vm, registry, "library:$category", collections.map { collection ->
+        ThorBrowseList(vm, registry, "root:Library:$category", collections.map { collection ->
             ThorItem(ThorItemKey.Destination(collection.name), collection.title, "${library[collection].size} ${if (category == 0) "首" else "项"}", library[collection].firstOrNull()?.artworkUri)
         }, Modifier.weight(1f), onItem = { item, _ -> vm.openCollection(ThorCollection.valueOf((item.key as ThorItemKey.Destination).id)) })
     }
@@ -343,25 +348,40 @@ private fun ThorMyPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, libr
 
 @UnstableApi
 @Composable
-private fun ThorSearchPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit) {
+private fun ThorSearchPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit, pageActions: ThorPageActionBindings?) {
     val search by vm.search.collectAsStateWithLifecycle()
+    val searchEntry by vm.searchEntry.collectAsStateWithLifecycle()
     var fieldFocused by remember { mutableStateOf(false) }
+    val fieldRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val submitSearch: () -> Unit = {
+        vm.search()
+        focusManager.clearFocus(force = true)
+        keyboard?.hide()
+    }
+    BindThorPageAction(pageActions, "search:edit") {
+        fieldRequester.requestFocus()
+        keyboard?.show()
+    }
+    BindThorPageAction(pageActions, "search:submit", submitSearch)
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "搜索", onBack = onBack)
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BasicTextField(
                 search.query, vm::setSearchQuery, Modifier.weight(1f).heightIn(min = 48.dp)
+                    .focusRequester(fieldRequester)
                     .onFocusChanged { fieldFocused = it.isFocused; vm.textEditing.value = it.isFocused }
                     .semantics { contentDescription = "搜索音乐" }
                     .thorMaterial(ThorSurfaceRole.Inset, focused = fieldFocused).padding(horizontal = 12.dp, vertical = 12.dp),
                 singleLine = true, textStyle = TextStyle(color = LocalThorTheme.current.text, fontSize = 14.sp, lineHeight = 20.sp),
                 cursorBrush = SolidColor(LocalThorTheme.current.accent),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { vm.search() }),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
                 decorationBox = { field -> Box { if (search.query.isEmpty()) Text("歌曲、专辑、歌单", color = LocalThorTheme.current.secondary, fontSize = 14.sp); field() } },
             )
-            ThorButton(registry, "search:submit", "搜索", primary = true, onClick = vm::search)
+            ThorButton(registry, "search:submit", "搜索", primary = true, onClick = submitSearch)
         }
-        if (search.items.isNotEmpty()) ThorBrowseList(vm, registry, "search:${search.query}", search.items, Modifier.weight(1f))
+        if (search.items.isNotEmpty()) ThorBrowseList(vm, registry, "search:results:$searchEntry", search.items, Modifier.weight(1f))
         else ThorEmptyState(vm, registry, search.error ?: when { search.loading -> "正在搜索"; search.searched -> "没有找到相关音乐"; else -> "" },
             if (search.error != null) "重试" else null, vm::search, Modifier.weight(1f), search.loading)
     }
@@ -372,6 +392,8 @@ private fun ThorSearchPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, 
 @Composable
 private fun ThorAppearancePage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit) {
     val preferences by vm.preferences.collectAsStateWithLifecycle()
+    BindThorOptionFocus(vm, registry, ThorThemePack.entries.map { "theme:${it.name}" } +
+        ThorAppearance.entries.map { "appearance:${it.name}" } + listOf("appearance:motion", "appearance:transparency"))
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "主题与外观", onBack = onBack)
         // A small fixed set stays composed, so native focus can reach its controls while scrolling.
@@ -405,6 +427,7 @@ private fun ThorAppearancePage(vm: ThorShellViewModel, registry: ThorFocusRegist
 private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit, onRequestAirflow: (Boolean) -> Unit, onCalibrateAirflow: () -> Unit, airflowStatus: String,
     airflowStrength: Float, airflowCalibrationLabel: String, airflowCalibrationProgress: Float) {
     val preferences by vm.preferences.collectAsStateWithLifecycle()
+    BindThorOptionFocus(vm, registry, listOf("controls:airflow") + if (preferences.airflowEnabled) listOf("controls:calibrate") else emptyList())
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "手柄与吹气", onBack = onBack)
         LazyColumn(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 5.dp)) {
@@ -424,7 +447,7 @@ private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry
                 }
             }
             if (airflowStatus.isNotEmpty()) item { Text(airflowStatus, fontSize = 12.sp, color = LocalThorTheme.current.secondary) }
-            val mappings = listOf("方向键 / 左摇杆" to "移动焦点", "A / B / X" to "确认 / 返回 / 更多", "Y" to "播放 / 暂停", "L1 / R1" to "一级切页 / 播放快进", "L2 / R2" to "上一首 / 下一首", "L3 / R3" to "随机 / 播放全部", "Start / Select" to "播放页 / 队列")
+            val mappings = listOf("方向键 / 左摇杆" to "列表 / 选项", "A / B / X" to "确认 / 返回 / 条目操作", "Y" to "播放 / 暂停", "L1 / R1" to "一级切页 / 播放快进", "L2 / R2" to "上一首 / 下一首", "L3 / R3" to "随机 / 播放全部", "Start" to "播放页", "Select 短按 / 长按" to "队列 / 页面操作")
             itemsIndexed(mappings) { _, pair -> Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
                 Text(pair.first, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Text(pair.second, fontSize = 13.sp, color = LocalThorTheme.current.secondary)
@@ -436,17 +459,7 @@ private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry
 @Composable
 @UnstableApi
 private fun ThorEmptyState(vm: ThorShellViewModel, registry: ThorFocusRegistry, message: String, action: String?, onAction: () -> Unit, modifier: Modifier = Modifier, loading: Boolean = false) {
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(action, loading, registry.blocked) {
-        vm.clearPreview()
-        if (!loading && !registry.blocked) {
-            withFrameNanos { }
-            if ((!entered && action != null) || registry.selectedKey == null || !registry.contains(registry.selectedKey)) {
-                registry.request(if (action != null) "empty:action" else null) || registry.requestFirst()
-            }
-            entered = true
-        }
-    }
+    LaunchedEffect(action, loading) { vm.clearPreview() }
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         if (loading) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
         Text(message, Modifier.padding(12.dp), color = LocalThorTheme.current.secondary, style = MaterialTheme.typography.bodyMedium)

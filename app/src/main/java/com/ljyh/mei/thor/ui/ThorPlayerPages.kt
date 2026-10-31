@@ -59,14 +59,15 @@ internal fun ThorPlayerPage(
     val theme = LocalThorTheme.current
     val library by vm.library.collectAsStateWithLifecycle()
     val seek by vm.seekPreview.collectAsStateWithLifecycle()
-    var wasSeeking by remember { mutableStateOf(false) }
     val song = playback.current
     val item = song?.toThorItem()
     val liked = song?.let { current ->
         if (current.isLocal) library[ThorCollection.LikedSongs].any { it.key == item?.key }
         else library.songLikes[current.id] == true
     } == true
-    DefaultFocus(vm, registry, "player:toggle", playback.current != null)
+    BindThorOptionFocus(vm, registry,
+        if (song == null) emptyList() else if (seek != null) listOf("seek:apply") else listOf("player:toggle"),
+        preferredKey = if (seek != null) "seek:apply" else "player:toggle")
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(64.dp).thorMaterial(ThorSurfaceRole.Header).padding(horizontal = 12.dp),
@@ -188,11 +189,6 @@ internal fun ThorPlayerPage(
             }
         }
     }
-    LaunchedEffect(seek != null) {
-        if (seek != null) { withFrameNanos { }; registry.request("seek:apply") }
-        else if (wasSeeking) { withFrameNanos { }; registry.request("player:progress") }
-        wasSeeking = seek != null
-    }
 }
 
 @Composable
@@ -219,15 +215,17 @@ internal fun ThorQueuePage(
     registry: ThorFocusRegistry,
     playback: ThorPlaybackState,
     onBack: () -> Unit,
+    pageActions: ThorPageActionBindings? = null,
 ) {
     val list = rememberLazyListState()
     val currentIndex = playback.queue.indexOfFirst { it.entryId == playback.currentEntryId }
     val scene = vm.navigation.value.sceneKey
     val keys = playback.queue.map { "queue:${it.entryId}" }
-    val savedFocus = remember(scene) { vm.rememberedFocus(scene) }
     val binding = BindThorListFocus(registry, scene, keys, playback.queue.map { it.item }, list, vm) { index ->
         playback.queue.getOrNull(index)?.let { vm.playback.select(it.entryId) }
     }
+    val locateCurrent = { if (currentIndex >= 0) binding.request(currentIndex) }
+    if (currentIndex >= 0) BindThorPageAction(pageActions, "queue:current", locateCurrent)
     Column(Modifier.fillMaxSize()) {
         PlayerPageHeader(registry, "queue:back", "播放队列", "共 ${playback.queue.size} 首", onBack)
         if (playback.queue.isEmpty()) PlayerEmpty("播放队列为空")
@@ -249,20 +247,13 @@ internal fun ThorQueuePage(
                         })
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
-                ThorButton(registry, "queue:current", "定位当前", icon = Icons.Outlined.MyLocation,
-                    enabled = currentIndex >= 0, onClick = { if (currentIndex >= 0) binding.request(currentIndex) })
-            }
         }
-    }
-    LaunchedEffect(Unit) {
-        if (currentIndex >= 0 && savedFocus !in keys) binding.request(currentIndex)
     }
 }
 
 @UnstableApi
 @Composable
-internal fun ThorLyricsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit) {
+internal fun ThorLyricsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit, pageActions: ThorPageActionBindings? = null) {
     val theme = LocalThorTheme.current
     val data by vm.lyrics.collectAsStateWithLifecycle()
     val playback by vm.playback.state.collectAsStateWithLifecycle()
@@ -274,10 +265,11 @@ internal fun ThorLyricsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry,
     val scene = vm.navigation.value.sceneKey
     val songIdentity = playback.current?.let { "${it.isLocal}:${it.id}" } ?: "none"
     val keys = if (available) lines.mapIndexed { index, line -> "lyric:$songIdentity:${line.start}:${line.end}:$index" } else emptyList()
-    val savedFocus = remember(scene) { vm.rememberedFocus(scene) }
     val binding = BindThorListFocus(registry, scene, keys, List(keys.size) { null }, list, vm) { index ->
         lines.getOrNull(index)?.let { vm.playback.seek(it.start.toLong()) }
     }
+    val locateCurrent = { binding.request(current) }
+    if (available) BindThorPageAction(pageActions, "lyrics:current", locateCurrent)
     Column(Modifier.fillMaxSize()) {
         PlayerPageHeader(registry, "lyrics:back", "歌词", null, onBack)
         when {
@@ -318,16 +310,8 @@ internal fun ThorLyricsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry,
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
-                    ThorButton(registry, "lyrics:current", "定位当前", icon = Icons.Outlined.MyLocation, onClick = {
-                        binding.request(current)
-                    })
-                }
             }
         }
-    }
-    LaunchedEffect(data, songIdentity) {
-        if (available && savedFocus !in keys) binding.request(current)
     }
 }
 
@@ -340,7 +324,10 @@ internal fun ThorTimerPage(
     onBack: () -> Unit,
 ) {
     val theme = LocalThorTheme.current
-    DefaultFocus(vm, registry, "timer:15", playback.connected)
+    BindThorOptionFocus(vm, registry,
+        (if (playback.connected) listOf(15, 30, 45, 60, 90).map { "timer:$it" } else emptyList()) +
+            (if (playback.connected && playback.current != null) listOf("timer:end") else emptyList()) +
+            (if (playback.timerActive) listOf("timer:clear") else emptyList()))
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayerPageHeader(registry, "timer:back", "定时停止", null, onBack)
         Text(if (playback.timerActive) "${timerLabel(playback)}后停止播放" else "选择停止时间",
@@ -379,19 +366,6 @@ private fun PlayerEmpty(message: String) {
     val theme = LocalThorTheme.current
     Box(Modifier.fillMaxWidth().heightIn(min = 150.dp), contentAlignment = Alignment.Center) {
         Text(message, color = theme.secondary, fontSize = 15.sp)
-    }
-}
-
-@UnstableApi
-@Composable
-private fun DefaultFocus(vm: ThorShellViewModel, registry: ThorFocusRegistry, key: String, ready: Boolean = true) {
-    val scene = vm.navigation.value.sceneKey
-    LaunchedEffect(scene, ready) {
-        if (ready && vm.rememberedFocus(scene) == null) {
-            vm.rememberFocus(scene, key)
-            withFrameNanos { }
-            registry.request(key)
-        }
     }
 }
 

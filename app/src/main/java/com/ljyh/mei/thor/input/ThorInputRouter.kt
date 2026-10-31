@@ -13,7 +13,12 @@ import java.io.Closeable
 import kotlin.math.abs
 
 /** The same instance receives Activity and Presentation events, with no input injection. */
-class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeable {
+class ThorInputRouter(
+    private val onNonBackInput: () -> Unit = {},
+    private val onCommand: (ThorCommand) -> Boolean,
+) : Closeable {
+    /** Preserve existing positional and trailing-lambda construction. */
+    constructor(onCommand: (ThorCommand) -> Boolean) : this({}, onCommand)
     private val handler = Handler(Looper.getMainLooper())
     private val state = ThorInputState(onCommand)
     private var repeatPosted = false
@@ -42,6 +47,7 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
         val key = event.keyCode
         val command = thorCommandForKey(key) ?: return false
         val down = event.action == KeyEvent.ACTION_DOWN
+        if (down && command != ThorCommand.Back) onNonBackInput()
         val now = SystemClock.uptimeMillis()
         val token = "${event.deviceId}:$key"
         val route = thorKeyRoute(key, isTextEditing)
@@ -54,6 +60,7 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
             // A reset cancelled the gesture when the IME took ownership. Still observe UP,
             // so its tombstone cannot swallow the first new gesture after text entry closes.
             if (command is ThorCommand.Shoulder) state.shoulder(token, command.right, false, now)
+            else if (key == KeyEvent.KEYCODE_BUTTON_SELECT) state.select(token, false, now)
             else state.button(token, false, command)
         }
         when (route) {
@@ -64,6 +71,7 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
         val consumed = when {
             command is ThorCommand.Move -> state.direction(token, down, command.direction, now, event.repeatCount > 0)
             command is ThorCommand.Shoulder -> state.shoulder(token, command.right, down, now, event.repeatCount > 0)
+            key == KeyEvent.KEYCODE_BUTTON_SELECT -> state.select(token, down, now, event.repeatCount > 0)
             key == KeyEvent.KEYCODE_BUTTON_L2 || key == KeyEvent.KEYCODE_BUTTON_R2 ->
                 state.trigger(event.deviceId, key == KeyEvent.KEYCODE_BUTTON_R2, digital = true, down = down,
                     nowMs = now, axisExpected = hasTriggerAxis(event.device, event.deviceId, key == KeyEvent.KEYCODE_BUTTON_R2),
@@ -83,16 +91,14 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
         val x = if (abs(hatX) > .25f || abs(hatY) > .25f) hatX else event.getAxisValue(MotionEvent.AXIS_X).finite()
         val y = if (abs(hatX) > .25f || abs(hatY) > .25f) hatY else event.getAxisValue(MotionEvent.AXIS_Y).finite()
         val now = SystemClock.uptimeMillis()
+        val leftTrigger = maxOf(event.getAxisValue(MotionEvent.AXIS_LTRIGGER).finite(), event.getAxisValue(MotionEvent.AXIS_BRAKE).finite())
+        val rightTrigger = maxOf(event.getAxisValue(MotionEvent.AXIS_RTRIGGER).finite(), event.getAxisValue(MotionEvent.AXIS_GAS).finite())
+        // Ignore resting motion reports and stick drift; real trigger travel starts above .05.
+        if (abs(x) > .25f || abs(y) > .25f || leftTrigger > .05f || rightTrigger > .05f) onNonBackInput()
         if (!isTextEditing) state.stick(event.deviceId, x, y, now)
         // Thor's Odin Controller advertises BRAKE/GAS; other supported controllers use L/RTRIGGER.
-        routeTriggerAxis(event, false, maxOf(
-            event.getAxisValue(MotionEvent.AXIS_LTRIGGER).finite(),
-            event.getAxisValue(MotionEvent.AXIS_BRAKE).finite(),
-        ), now)
-        routeTriggerAxis(event, true, maxOf(
-            event.getAxisValue(MotionEvent.AXIS_RTRIGGER).finite(),
-            event.getAxisValue(MotionEvent.AXIS_GAS).finite(),
-        ), now)
+        routeTriggerAxis(event, false, leftTrigger, now)
+        routeTriggerAxis(event, true, rightTrigger, now)
         scheduleRepeat()
         return !isTextEditing
     }
