@@ -170,7 +170,13 @@ internal fun thorPageActions(
                     if (vm.libraryCategory.value == 2) action("library:create", "新建歌单", run = vm::createPlaylist)
                     else action("library:import", if (isScanning) "停止扫描" else "导入音乐") { onLegacyRoute("local_music") }
                 }
-                ThorTab.My -> searchAndMy()
+                ThorTab.My -> {
+                    action("my:account", if (library.account.signedIn) "我的账号" else "登录网易云音乐") {
+                        vm.openInternalRoute(if (library.account.signedIn) "account/home" else "account/login")
+                    }
+                    action("my:audio", "播放设置") { vm.push(ThorPage.AudioSettings) }
+                    searchAndMy()
+                }
             }
             is ThorPage.Collection -> {
                 val collection = page.collection
@@ -206,6 +212,9 @@ internal fun thorPageActions(
                 action("controls:airflow", "吹气 · ${if (preferences.airflowEnabled) "开启" else "关闭"}") { onRequestAirflow(!preferences.airflowEnabled) }
                 action("controls:calibrate", airflowCalibrationLabel, preferences.airflowEnabled, onCalibrateAirflow)
             }
+            is ThorPage.Account -> addAll(thorAccountPageActions(page.route, bindings))
+            ThorPage.AudioSettings -> callback("audio:equalizer", "均衡器")
+            ThorPage.Equalizer -> callback("equalizer:reset", "恢复平直")
         }
     }
 }

@@ -81,6 +81,9 @@ import com.ljyh.mei.data.network.NeteaseSessionType
 import com.ljyh.mei.data.network.neteaseSessionType
 import com.ljyh.mei.data.network.requireNeteaseMobileSession
 import com.ljyh.mei.data.network.NETEASE_EXPECTED_SESSION_HEADER
+import com.ljyh.mei.data.network.CaptchaUiHost
+import com.ljyh.mei.data.network.captureNeteaseLoginSession
+import com.ljyh.mei.data.network.requireExpectedNeteaseLoginSession
 import com.ljyh.mei.data.network.neteaseSessionFingerprint
 import com.ljyh.mei.data.network.requireExpectedNeteaseSession
 import com.ljyh.mei.constants.NeteaseSessionTypeKey
@@ -295,9 +298,10 @@ class MeloXRepository @Inject constructor(
         activity: Activity,
         phone: String,
         countryCode: String,
+        captchaUiHost: CaptchaUiHost? = null,
     ) {
         val (normalizedPhone, normalizedCountryCode) = normalizeMobileAccount(phone, countryCode)
-        neteaseUrsSmsLogin.requestCode(activity, normalizedPhone, normalizedCountryCode)
+        neteaseUrsSmsLogin.requestCode(activity, normalizedPhone, normalizedCountryCode, captchaUiHost)
     }
 
     suspend fun loginWithMobileSms(
@@ -310,19 +314,25 @@ class MeloXRepository @Inject constructor(
         require(normalizedCode.length in 4..8 && normalizedCode.all(Char::isDigit)) {
             "Invalid SMS verification code"
         }
+        val expectedLoginSession = context.dataStore.data.first().captureNeteaseLoginSession()
         val credentials = neteaseUrsSmsLogin.verifyCode(
             normalizedPhone,
             normalizedCountryCode,
             normalizedCode,
         )
-        return loginWithUrsCredentials(credentials)
+        return loginWithUrsCredentials(credentials, expectedLoginSession)
     }
 
-    suspend fun loginWithUpSms(challenge: com.ljyh.mei.data.network.NeteaseUrsUpSmsChallenge): AccountProfile =
-        loginWithUrsCredentials(neteaseUrsSmsLogin.verifyUpSms(challenge))
+    suspend fun loginWithUpSms(challenge: com.ljyh.mei.data.network.NeteaseUrsUpSmsChallenge): AccountProfile {
+        val expectedLoginSession = context.dataStore.data.first().captureNeteaseLoginSession()
+        return loginWithUrsCredentials(neteaseUrsSmsLogin.verifyUpSms(challenge), expectedLoginSession)
+    }
 
-    private suspend fun loginWithUrsCredentials(credentials: com.ljyh.mei.data.network.NeteaseUrsLoginCredentials): AccountProfile =
-        loginWithMobileCredentials(ursAppId = credentials.appId) { checkToken ->
+    private suspend fun loginWithUrsCredentials(
+        credentials: com.ljyh.mei.data.network.NeteaseUrsLoginCredentials,
+        expectedLoginSession: String,
+    ): AccountProfile =
+        loginWithMobileCredentials(ursAppId = credentials.appId, expectedLoginSession = expectedLoginSession) { checkToken ->
             linkedMapOf(
                 "ursToken" to credentials.token,
                 "nonce" to UUID.randomUUID().toString(),
@@ -332,8 +342,10 @@ class MeloXRepository @Inject constructor(
 
     private suspend fun loginWithMobileCredentials(
         ursAppId: String? = null,
+        expectedLoginSession: String? = null,
         body: (checkToken: String) -> Map<String, Any>,
     ): AccountProfile {
+        val loginSession = expectedLoginSession ?: context.dataStore.data.first().captureNeteaseLoginSession()
         val loginUrsAppId = ursAppId ?: neteaseUrsSmsLogin.appId()
         val ydDeviceToken = prepareNeteaseLoginDevice()
         val deviceId = context.dataStore.data.first()[DeviceIdKey].orEmpty()
@@ -391,7 +403,10 @@ class MeloXRepository @Inject constructor(
         ) {
             "NetEase mobile login returned an incomplete account session"
         }
+        currentCoroutineContext().ensureActive()
         context.dataStore.edit { preferences ->
+            currentCoroutineContext().ensureActive()
+            preferences.requireExpectedNeteaseLoginSession(loginSession)
             preferences[CookieKey] = musicU
             preferences[NeteaseSessionTypeKey] = NeteaseSessionType.Mobile.name
             preferences[NeteaseCsrfKey] = csrf

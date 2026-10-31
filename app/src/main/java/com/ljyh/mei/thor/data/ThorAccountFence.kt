@@ -1,6 +1,7 @@
 package com.ljyh.mei.thor.data
 
 import com.ljyh.mei.data.repository.LibraryAccount
+import com.ljyh.mei.data.network.neteaseSessionFingerprint
 import com.ljyh.mei.thor.model.ThorAccountState
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.AbstractCoroutineContextElement
@@ -17,6 +18,7 @@ class ThorAccountTicket internal constructor(
     internal val account: LibraryAccount?,
     internal val generation: Long,
 ) {
+    internal val expectedSessionFingerprint: String get() = account?.sessionFingerprint ?: neteaseSessionFingerprint("")
     override fun toString(): String = "ThorAccountTicket"
 }
 

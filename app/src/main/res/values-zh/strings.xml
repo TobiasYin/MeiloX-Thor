@@ -399,6 +399,7 @@
     <string name="notification_add_like">喜欢这首歌</string>
     <string name="notification_remove_like">取消喜欢这首歌</string>
     <string name="notification_enable_floating_lyrics">开启悬浮窗歌词</string>
+    <string name="thor_notification_upper_lyrics">上屏歌词</string>
     <string name="notification_disable_floating_lyrics">关闭悬浮窗歌词</string>
     <string name="notification_floating_lyrics_open_hint">点按此通知开启悬浮歌词</string>
     <string name="notification_floating_lyrics_open_app">打开 MeiloX 后开启悬浮歌词</string>

@@ -2,7 +2,6 @@ package com.ljyh.mei.data.network
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.Dialog
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -12,10 +11,10 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.FrameLayout
 import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -24,12 +23,13 @@ import org.json.JSONObject
 /** Only the web-based behavior verification used by URS SMS login. */
 internal object NeteaseUrsCaptcha {
     @SuppressLint("SetJavaScriptEnabled")
-    suspend fun validate(activity: Activity, type: String): String = withContext(Dispatchers.Main) {
+    suspend fun validate(activity: Activity, type: String, uiHost: CaptchaUiHost? = null): String = withContext(Dispatchers.Main) {
         check(!activity.isFinishing && !activity.isDestroyed) { "Sign-in screen closed" }
         suspendCancellableCoroutine { continuation ->
-            val web = WebView(activity)
-            val dialog = Dialog(activity)
+            val context = uiHost?.context ?: activity
+            val web = WebView(context)
             val handler = Handler(Looper.getMainLooper())
+            lateinit var dialog: NeteaseCaptchaDialog
             var finished = false
             fun complete(value: String?, error: Throwable?) {
                 handler.post {
@@ -46,9 +46,13 @@ internal object NeteaseUrsCaptcha {
                     }
                 }
             }
+            dialog = createNeteaseCaptchaDialog(activity, uiHost, web,
+                onCancel = { complete(null, IOException("安全验证已取消")) },
+                onGlobalDeparture = { complete(null, CancellationException("安全验证已取消")) },
+                handler = handler)
             val bridge = CaptchaBridge(
-                load = { handler.post { if (type == "1" || type == "2") web.evaluateJavascript("popupCaptcha()", null) } },
-                ready = { handler.post { if (type != "1" && type != "2") web.evaluateJavascript("captchaVerify()", null) } },
+                load = { handler.post { if (!finished && (type == "1" || type == "2")) web.evaluateJavascript("popupCaptcha()", null) } },
+                ready = { handler.post { if (!finished && type != "1" && type != "2") web.evaluateJavascript("captchaVerify()", null) } },
                 valid = { token -> complete(token, null) },
                 failure = { complete(null, IOException(it)) },
             )
@@ -68,10 +72,8 @@ internal object NeteaseUrsCaptcha {
                             host.endsWith(".163yun.com"))
                 }
             }
-            val width = minOf(activity.resources.displayMetrics.widthPixels,
-                (360 * activity.resources.displayMetrics.density).toInt())
-            dialog.setContentView(web, FrameLayout.LayoutParams(width,
-                (420 * activity.resources.displayMetrics.density).toInt()))
+            val metrics = context.resources.displayMetrics
+            val width = dialog.contentWidthPixels
             dialog.setOnCancelListener { complete(null, IOException("安全验证已取消")) }
             dialog.setOnDismissListener { complete(null, IOException("安全验证已关闭")) }
             continuation.invokeOnCancellation { complete(null, IOException("安全验证已取消")) }
@@ -85,15 +87,20 @@ internal object NeteaseUrsCaptcha {
                 .appendQueryParameter("os", "android")
                 .appendQueryParameter("osVer", Build.VERSION.RELEASE)
                 .appendQueryParameter("sdkVer", "3.4.3")
-                .appendQueryParameter("popupStyles.width", (width / activity.resources.displayMetrics.density).toString())
+                .appendQueryParameter("popupStyles.width", (width / metrics.density).toString())
                 .appendQueryParameter("lang", "zh-CN")
                 .appendQueryParameter("mobileTimeout", "15000")
                 .appendQueryParameter("defaultFallback", "true")
                 .appendQueryParameter("errorFallbackCount", "3")
                 .apply { if (type != "1" && type != "2") appendQueryParameter("mode", "bind") }
                 .build()
-            dialog.show()
-            web.loadUrl(url.toString())
+            try {
+                dialog.show()
+                web.requestFocus()
+                web.loadUrl(url.toString())
+            } catch (failure: Exception) {
+                complete(null, IOException("安全验证窗口不可用，请返回重试", failure))
+            }
         }
     }
 }

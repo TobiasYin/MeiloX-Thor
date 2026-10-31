@@ -159,6 +159,7 @@ class MusicService : MediaLibraryService(),
     private lateinit var usbAudioOutput: UsbAudioOutput
     val audioOutputStatus get() = usbAudioOutput.status
     private var audioOutputMode = AudioOutputMode.AudioTrack
+    private var skipUnavailableSources = false
     val context = this
     private lateinit var mediaSession: MediaLibrarySession
     private var notificationLeftAction = NotificationAction.PlayMode
@@ -454,6 +455,11 @@ class MusicService : MediaLibraryService(),
                 .collect { allowConcurrentPlayback ->
                     player.setHandleAudioFocus(!allowConcurrentPlayback)
                 }
+        }
+        scope.launch {
+            context.dataStore.data.map { it[NoAudioSourceKey] ?: false }
+                .distinctUntilChanged()
+                .collect { skipUnavailableSources = it }
         }
         scope.launch {
             context.dataStore.data.map { preferences ->
@@ -1037,7 +1043,10 @@ class MusicService : MediaLibraryService(),
         if (activity != null && activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
             return activity.enterPictureInPictureMode(floatingLyricsPipParams(activity, player.isPlaying))
         }
-        if (hasFloatingLyricsBackgroundPermission(this)) {
+        val process = android.app.ActivityManager.RunningAppProcessInfo()
+        android.app.ActivityManager.getMyMemoryState(process)
+        if (process.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND ||
+            hasFloatingLyricsBackgroundPermission(this)) {
             try {
                 startActivity(floatingLyricsIntent(this, true))
                 return true
@@ -1051,7 +1060,7 @@ class MusicService : MediaLibraryService(),
             return false
         }
         manager.createNotificationChannel(NotificationChannel(
-            "floating_lyrics", getString(R.string.more_action_floating_lyrics), NotificationManager.IMPORTANCE_DEFAULT,
+            "floating_lyrics", getString(R.string.thor_notification_upper_lyrics), NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
             setSound(null, null)
             enableVibration(false)
@@ -1060,7 +1069,7 @@ class MusicService : MediaLibraryService(),
         // send the activity PendingIntent directly when the user taps this short-lived entry.
         val notification = NotificationCompat.Builder(this, "floating_lyrics")
             .setSmallIcon(R.drawable.ic_notification_sf_text_rectangle)
-            .setContentTitle(getString(R.string.notification_enable_floating_lyrics))
+            .setContentTitle(getString(R.string.thor_notification_upper_lyrics))
             .setContentText(getString(R.string.notification_floating_lyrics_open_hint))
             .setContentIntent(floatingLyricsPendingIntent(this, true))
             .setAutoCancel(true)
@@ -1446,25 +1455,13 @@ class MusicService : MediaLibraryService(),
                 error.message?.contains("Unable to resolve url") == true
 
         if (isSourceError) {
-            val limitReached = playbackFailures.recordFailure()
+            when (handleUnavailablePlaybackSource(player, skipUnavailableSources, playbackFailures)) {
+                UnavailableSourceResult.PausedCurrent -> Toast.makeText(context, "音源不可用，已暂停当前歌曲", Toast.LENGTH_SHORT).show()
+                UnavailableSourceResult.FailureLimit -> Toast.makeText(context, "播放失败，已连续跳过多首歌曲", Toast.LENGTH_LONG).show()
+                UnavailableSourceResult.QueueEnded -> Toast.makeText(context, "播放结束，部分歌曲无法加载", Toast.LENGTH_SHORT).show()
+                UnavailableSourceResult.Skipped -> Unit
+            }
             Timber.tag("MusicService").e("Play failure detected. Count: %s", playbackFailures.consecutiveFailures)
-            if (limitReached) {
-                Toast.makeText(context, "播放失败，已连续跳过多首歌曲", Toast.LENGTH_LONG).show()
-                player.pause()
-                player.stop()
-                return
-            }
-            val nextIndex = player.nextMediaItemIndex
-            if (nextIndex in 0 until player.mediaItemCount && nextIndex != player.currentMediaItemIndex) {
-                val nextItem = player.getMediaItemAt(nextIndex)
-                playbackFailures.expectAutomaticSkip(nextItem.queueEntryId ?: nextItem.mediaId)
-                player.seekToDefaultPosition(nextIndex)
-                player.prepare()
-            } else {
-                player.pause()
-                player.stop()
-                Toast.makeText(context, "播放结束，部分歌曲无法加载", Toast.LENGTH_SHORT).show()
-            }
         } else {
             Toast.makeText(context, "播放出错: ${error.errorCodeName}", Toast.LENGTH_SHORT).show()
         }

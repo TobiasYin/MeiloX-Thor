@@ -48,6 +48,8 @@ class ThorShellViewModel @Inject constructor(
 ) : ViewModel() {
     val library = repository.state
     val playback = ThorPlaybackBridge(viewModelScope)
+    private val mutablePlayerConnection = MutableStateFlow<PlayerConnection?>(null)
+    val playerConnection = mutablePlayerConnection.asStateFlow()
     val lyrics = lyricManager.lyricData
     private val mutableNavigation = MutableStateFlow(ThorNavigation(tab = ThorTab.entries.firstOrNull { it.name == savedState.get<String>("thor.tab") } ?: ThorTab.Home))
     val navigation = mutableNavigation.asStateFlow()
@@ -85,6 +87,7 @@ class ThorShellViewModel @Inject constructor(
     val textEditing = MutableStateFlow(false)
     private val focus = mutableMapOf<String, String>()
     private val listScroll = mutableMapOf<String, Pair<String, Int>>()
+    private var handledAccountGeneration = -1L
     private val exitGuard = ThorExitGuard()
     private var exitResetJob: Job? = null
 
@@ -117,22 +120,7 @@ class ThorShellViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            library.map { it.account.generation }.distinctUntilChanged().drop(1).collect {
-                clearExitGuard()
-                mutableMenu.value = null
-                quickPlayerHistory.clear()
-                cancelSeek()
-                mutableNotice.value = null
-                menuGeneration++
-                mutablePreview.value = null
-                mutableSearch.value = ThorSearchState()
-                searchJob?.cancel()
-                detailJob?.cancel()
-                detailGeneration++
-                playRequestGeneration++
-                // Never leave a previous account's private detail visible after a switch.
-                mutableNavigation.value = ThorNavigation(tab = navigation.value.tab)
-            }
+            library.map { it.account.generation }.distinctUntilChanged().collect(::applyAccountGeneration)
         }
         viewModelScope.launch {
             library.collect { state ->
@@ -156,7 +144,10 @@ class ThorShellViewModel @Inject constructor(
         }
     }
 
-    fun attachPlayer(connection: PlayerConnection?) = playback.attach(connection)
+    fun attachPlayer(connection: PlayerConnection?) {
+        mutablePlayerConnection.value = connection
+        playback.attach(connection)
+    }
     fun rememberFocus(scene: String, key: String) { focus[scene] = key }
     fun rememberedFocus(scene: String): String? = focus[scene]
     fun rememberListScroll(scene: String, firstKey: String, offset: Int) { listScroll[scene] = firstKey to offset }
@@ -180,6 +171,46 @@ class ThorShellViewModel @Inject constructor(
     fun push(page: ThorPage) {
         if (navigation.value.page.key != page.key) freshScene(page.key)
         navigate(navigation.value.push(page))
+    }
+    fun openInternalRoute(route: String): Boolean {
+        val page = thorInternalPageForRoute(route) ?: return false
+        push(page)
+        return true
+    }
+    fun captureAccountTicket(account: ThorAccountState) = repository.captureAccountTicket(account)
+    fun completeAccountLogin() {
+        textEditing.value = false
+        val callerTab = navigation.value.tab
+        viewModelScope.launch {
+            try {
+                val account = kotlinx.coroutines.withTimeout(5_000) { repository.awaitCurrentAccountProjection() }
+                applyAccountGeneration(account.generation)
+                if (navigation.value.tab == callerTab) navigate(navigation.value.completeAccountLogin())
+                repository.refresh()
+            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+                showMessage("账号状态同步超时，请重试", false)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showMessage("账号状态同步失败，请重试", false) }
+        }
+    }
+    private fun applyAccountGeneration(generation: Long) {
+        if (generation == handledAccountGeneration) return
+        handledAccountGeneration = generation
+        clearExitGuard()
+        mutableMenu.value = null
+        quickPlayerHistory.clear()
+        cancelSeek()
+        mutableNotice.value = null
+        menuGeneration++
+        mutablePreview.value = null
+        mutableSearch.value = ThorSearchState()
+        searchJob?.cancel()
+        detailJob?.cancel()
+        detailGeneration++
+        playRequestGeneration++
+        focus.clear()
+        listScroll.clear()
+        navigate(navigation.value.forChangedAccount())
     }
     fun togglePlayer() {
         if (menu.value != null || seekPreview.value != null || navigation.value.overlay != ThorOverlay.Player) showPlayer()

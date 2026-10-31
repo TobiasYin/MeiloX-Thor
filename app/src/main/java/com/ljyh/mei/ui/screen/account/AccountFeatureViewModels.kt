@@ -101,14 +101,14 @@ class AccountDevicesViewModel @Inject constructor(private val repository: Accoun
             catch (failure: Exception) { _state.value = previous.copy(loading = false, error = failure.message) }
         }
     }
-    suspend fun removeDevice(device: AccountDevice, captcha: String = "") {
+    suspend fun removeDevice(device: AccountDevice, captcha: String = "", expectedSession: String? = null) {
         check(!device.current)
-        repository.removeDevice(device.key, captcha)
+        repository.removeDevice(device.key, captcha, expectedSession)
         refresh()
     }
-    suspend fun revoke(application: AccountAuthorization) {
-        repository.revokeAuthorization(application.clientId)
+    suspend fun revoke(application: AccountAuthorization, expectedSession: String? = null) {
+        repository.revokeAuthorization(application.clientId, expectedSession)
         refresh()
     }
-    suspend fun sendCode() = repository.sendDeviceVerificationCode()
+    suspend fun sendCode(expectedSession: String? = null) = repository.sendDeviceVerificationCode(expectedSession = expectedSession)
 }

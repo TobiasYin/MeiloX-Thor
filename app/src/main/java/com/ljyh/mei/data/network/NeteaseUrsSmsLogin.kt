@@ -64,14 +64,14 @@ class NeteaseUrsSmsLogin internal constructor(
         }
     }
 
-    suspend fun requestCode(activity: Activity, phone: String, countryCode: String) =
+    suspend fun requestCode(activity: Activity, phone: String, countryCode: String, captchaUiHost: CaptchaUiHost? = null) =
         withOperationTimeout("SMS code request", 120_000) {
             check(!activity.isFinishing && !activity.isDestroyed) { "Sign-in screen closed" }
             appId()
             val parameters = JSONObject().put("username", ursPhoneAccount(phone, countryCode))
             var response = authenticatedRequest(SMS_SEND_PATH, parameters)
             if (response.code == 12010) {
-                val validation = NeteaseUrsCaptcha.validate(activity, response.data.optString("captchaType"))
+                val validation = NeteaseUrsCaptcha.validate(activity, response.data.optString("captchaType"), captchaUiHost)
                 response = authenticatedRequest(SMS_SEND_PATH, parameters, JSONObject().put("cp", validation))
             }
             // The SDK treats 12020 as a supported verification step, not a failed send.

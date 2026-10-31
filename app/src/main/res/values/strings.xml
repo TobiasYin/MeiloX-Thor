@@ -400,6 +400,7 @@
     <string name="notification_add_like">Like this song</string>
     <string name="notification_remove_like">Unlike this song</string>
     <string name="notification_enable_floating_lyrics">Enable floating lyrics</string>
+    <string name="thor_notification_upper_lyrics">Upper-screen lyrics</string>
     <string name="notification_disable_floating_lyrics">Disable floating lyrics</string>
     <string name="notification_floating_lyrics_open_hint">Tap this notification to open floating lyrics</string>
     <string name="notification_floating_lyrics_open_app">Open MeiloX to enable floating lyrics</string>

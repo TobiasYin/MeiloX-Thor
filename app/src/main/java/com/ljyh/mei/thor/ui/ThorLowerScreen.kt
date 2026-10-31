@@ -84,6 +84,8 @@ fun ThorLowerScreen(
     val menuRegistry = remember { ThorFocusRegistry() }
     val pageActionRegistry = remember { ThorFocusRegistry() }
     val pageActionBindings = remember { ThorPageActionBindings() }
+    val accountInput = remember { com.ljyh.mei.thor.account.ThorAccountInputHost() }
+    val playerConnection by viewModel.playerConnection.collectAsStateWithLifecycle()
     var pageActionSession by remember { mutableStateOf<ThorPageActionSession?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val owner = remember { Any() }
@@ -105,7 +107,16 @@ fun ThorLowerScreen(
             ) action?.takeIf { it.enabled }?.onClick?.invoke()
         }
     }
-    val onBack = { if (pageActionSession != null) closePageActions() else if (!viewModel.back()) onExit() }
+    val onBack: () -> Unit = {
+        val current = viewModel.navigation.value
+        val localPage = current.overlay == null && viewModel.menu.value == null && viewModel.seekPreview.value == null
+        when {
+            pageActionSession != null -> closePageActions()
+            localPage && pageActionBindings.invoke("page:back") -> Unit
+            localPage && current.page is ThorPage.Account && accountInput.handle(ThorCommand.Back) -> Unit
+            !viewModel.back() -> onExit()
+        }
+    }
     fun currentPageActionSession(): ThorPageActionSession? {
         val currentNavigation = viewModel.navigation.value
         val currentLibrary = viewModel.library.value
@@ -129,6 +140,7 @@ fun ThorLowerScreen(
     }
 
     SideEffect {
+        accountInput.observe((navigation.page as? ThorPage.Account)?.route, library.account.generation)
         registry.blocked = menu != null || pageActionSession != null
         registry.onFocus = { key, item ->
             if (registry.isAllowed(key)) viewModel.rememberFocus(navigation.sceneKey, key)
@@ -197,7 +209,10 @@ fun ThorLowerScreen(
                     else -> Unit
                 }
                 true
-            } else when (command) {
+            } else if (command != ThorCommand.Back && navigation.overlay == null && navigation.page is ThorPage.Account &&
+                command !in setOf(ThorCommand.ToggleQueue, ThorCommand.TogglePlayback, ThorCommand.PreviousTrack, ThorCommand.NextTrack) &&
+                accountInput.handle(command)) true
+            else when (command) {
                 ThorCommand.Back -> { onBack(); true }
                 ThorCommand.Confirm -> registry.confirm()
                 ThorCommand.ContextMenu -> {
@@ -262,7 +277,8 @@ fun ThorLowerScreen(
                             ThorOverlay.Timer -> ThorTimerPage(viewModel, registry, playback, onBack)
                             null -> ThorBrowsePage(viewModel, registry, navigation, library, onBack, onLegacyRoute,
                                 onRequestAirflow, onCalibrateAirflow, airflowStatus, isScanning,
-                                airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress, pageActionBindings)
+                                airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress, pageActionBindings,
+                                playerConnection, accountInput)
                         }
                     }
                 }
@@ -303,7 +319,9 @@ fun ThorLowerScreen(
                     val hint = if (seek != null) "L1/R1 按住拖动·松开应用   A 应用   B 取消   Start 播放页" else when (navigation.overlay) {
                         ThorOverlay.Player -> "A/Y 播放   L1/R1 ±15s   L2/R2 切歌   Select 队列·长按操作   B/Start 返回"
                         ThorOverlay.Lyrics -> "A 跳转    B 返回"
-                        else -> "↑↓ 列表   A 确认   B 返回   X 菜单   Select 长按操作"
+                        else -> if (navigation.page is ThorPage.Account || navigation.page == ThorPage.AudioSettings || navigation.page == ThorPage.Equalizer)
+                            "↑↓ 选择   A 确认   B 返回   Start 播放   Select 长按操作"
+                        else "↑↓ 列表   A 确认   B 返回   X 菜单   Select 长按操作"
                     }
                     Text(hint, modifier = if (playerView) Modifier else Modifier.weight(1f),
                         fontSize = 11.sp, color = theme.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)

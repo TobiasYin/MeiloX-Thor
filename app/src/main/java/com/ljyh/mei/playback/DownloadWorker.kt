@@ -16,7 +16,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.ljyh.mei.MainActivity
+import com.ljyh.mei.thor.ThorActivity
 import com.ljyh.mei.R
 import com.ljyh.mei.data.model.room.DownloadStatus
 import com.ljyh.mei.data.model.room.Song
@@ -334,7 +334,7 @@ class DownloadWorker(
 
     private fun showNotification(title: String, progress: Int, ongoing: Boolean = progress < 100) {
         try {
-            val intent = Intent(applicationContext, MainActivity::class.java).apply {
+            val intent = Intent(applicationContext, ThorActivity::class.java).putExtra(ThorActivity.INTERNAL_ROUTE, "library/downloads").apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
             val pendingIntent = PendingIntent.getActivity(

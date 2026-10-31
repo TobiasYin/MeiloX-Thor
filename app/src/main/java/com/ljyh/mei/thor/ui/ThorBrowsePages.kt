@@ -41,6 +41,9 @@ import com.ljyh.mei.thor.model.*
 import com.ljyh.mei.thor.state.*
 import com.ljyh.mei.thor.theme.LocalThorTheme
 import com.ljyh.mei.thor.theme.thorThemeTokens
+import com.ljyh.mei.thor.account.ThorAccountRoute
+import com.ljyh.mei.thor.account.ThorAccountInputHost
+import com.ljyh.mei.playback.PlayerConnection
 
 @Composable
 internal fun ThorPageHeader(registry: ThorFocusRegistry, title: String, count: Int? = null, onBack: (() -> Unit)? = null, onSearch: (() -> Unit)? = null, countUnit: String = "首", onMy: (() -> Unit)? = null) {
@@ -55,6 +58,7 @@ internal fun ThorPageHeader(registry: ThorFocusRegistry, title: String, count: I
 }
 
 private val libraryHeaderCollections = setOf(ThorCollection.CollectedAlbums, ThorCollection.LikedSongs, ThorCollection.OwnedPlaylists, ThorCollection.SavedPlaylists)
+private val accountCollections = libraryHeaderCollections + ThorCollection.History
 
 @UnstableApi
 @Composable
@@ -249,6 +253,8 @@ internal fun ThorBrowsePage(
     airflowCalibrationLabel: String = "校准",
     airflowCalibrationProgress: Float = 0f,
     pageActions: ThorPageActionBindings? = null,
+    playerConnection: PlayerConnection? = null,
+    accountInput: ThorAccountInputHost? = null,
 ) {
     val loading by vm.detailLoading.collectAsStateWithLifecycle()
     when (val page = navigation.page) {
@@ -272,11 +278,12 @@ internal fun ThorBrowsePage(
             if (page.collection in libraryHeaderCollections) ThorCollectionHeader(vm, registry, page.collection, items.size, onBack)
             else ThorPageHeader(registry, page.collection.title, items.size, onBack = onBack, countUnit = if (songList) "首" else if (page.collection == ThorCollection.LocalAlbums) "张" else "个")
             if (items.isEmpty()) {
-                val busy = page.collection in library.loading
+                val needsLogin = !library.account.signedIn && page.collection in accountCollections
+                val busy = !needsLogin && page.collection in library.loading
                 val local = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums)
-                ThorEmptyState(vm, registry, library.errors[page.collection] ?: if (local && isScanning) "正在扫描本地音乐" else if (busy) "正在加载" else "暂无${page.collection.title}",
-                    if (busy) null else if (local && isScanning) "停止扫描" else if (local) "导入音乐" else "刷新", {
-                        if (local) onLegacyRoute("local_music") else vm.refresh(page.collection)
+                ThorEmptyState(vm, registry, if (needsLogin) "登录后查看${page.collection.title}" else library.errors[page.collection] ?: if (local && isScanning) "正在扫描本地音乐" else if (busy) "正在加载" else "暂无${page.collection.title}",
+                    if (needsLogin) "登录网易云音乐" else if (busy) null else if (local && isScanning) "停止扫描" else if (local) "导入音乐" else "刷新", {
+                        if (needsLogin) vm.push(ThorPage.Account(ThorAccountRoute.Login)) else if (local) onLegacyRoute("local_music") else vm.refresh(page.collection)
                     }, Modifier.weight(1f), busy)
             } else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f))
         }
@@ -292,6 +299,12 @@ internal fun ThorBrowsePage(
         ThorPage.Appearance -> ThorAppearancePage(vm, registry, onBack)
         ThorPage.Controls -> ThorControlsPage(vm, registry, onBack, onRequestAirflow, onCalibrateAirflow, airflowStatus,
             airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress)
+        is ThorPage.Account -> ThorAccountPage(page.route, vm, registry,
+            onNavigate = { vm.push(ThorPage.Account(it)) }, onBack = onBack,
+            onLoginSuccess = vm::completeAccountLogin, pageActions = pageActions, input = accountInput)
+        ThorPage.AudioSettings -> ThorAudioSettingsPage(vm, registry, onBack,
+            onOpenEqualizer = { vm.push(ThorPage.Equalizer) }, playerConnection = playerConnection, pageActions = pageActions)
+        ThorPage.Equalizer -> ThorEqualizerSettingsPage(vm, registry, onBack, pageActions)
     }
 }
 
@@ -337,9 +350,9 @@ private fun ThorMyPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, libr
             when ((item.key as ThorItemKey.Destination).id) {
                 "appearance" -> vm.push(ThorPage.Appearance)
                 "controls" -> vm.push(ThorPage.Controls)
-                "account" -> onLegacyRoute(if (account.signedIn) "account/home" else "account/login")
-                "bindings" -> onLegacyRoute(if (account.signedIn) "account/security/bindings" else "account/login")
-                "play" -> onLegacyRoute("setting/play")
+                "account" -> vm.push(ThorPage.Account(if (account.signedIn) ThorAccountRoute.Home else ThorAccountRoute.Login))
+                "bindings" -> vm.push(ThorPage.Account(ThorAccountRoute.Bindings))
+                "play" -> vm.push(ThorPage.AudioSettings)
                 else -> onLegacyRoute("about")
             }
         })
@@ -459,6 +472,7 @@ private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry
 @Composable
 @UnstableApi
 private fun ThorEmptyState(vm: ThorShellViewModel, registry: ThorFocusRegistry, message: String, action: String?, onAction: () -> Unit, modifier: Modifier = Modifier, loading: Boolean = false) {
+    BindThorOptionFocus(vm, registry, if (action != null) listOf("empty:action") else emptyList(), ThorFocusLayout.Vertical)
     LaunchedEffect(action, loading) { vm.clearPreview() }
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         if (loading) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)

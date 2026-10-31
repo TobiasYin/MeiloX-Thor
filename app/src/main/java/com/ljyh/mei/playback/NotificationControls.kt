@@ -17,7 +17,7 @@ import androidx.media3.session.MediaNotification
 import androidx.media3.session.SessionCommand
 import com.google.common.collect.ImmutableList
 import com.ljyh.mei.R
-import com.ljyh.mei.MainActivity
+import com.ljyh.mei.thor.ThorActivity
 import com.ljyh.mei.constants.NotificationAction
 
 internal const val NOTIFICATION_LEFT_COMMAND = "com.neoruaa.meilox.notification.LEFT"
@@ -56,7 +56,8 @@ internal fun hyperOsNotificationIcon(icon: Int): Int = when (icon) {
 }
 
 internal fun floatingLyricsIntent(context: Context, enabled: Boolean): Intent =
-    Intent(context, MainActivity::class.java)
+    Intent(context, ThorActivity::class.java)
+        .putExtra(ThorActivity.OPEN_PLAYER, true)
         .setAction(if (enabled) ENABLE_FLOATING_LYRICS else DISABLE_FLOATING_LYRICS)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
@@ -115,8 +116,7 @@ internal fun notificationButton(
         NotificationAction.FloatingLyrics -> {
             icon = if (floatingLyricsEnabled) R.drawable.ic_notification_sf_text_rectangle_fill
                 else R.drawable.ic_notification_sf_text_rectangle
-            label = if (floatingLyricsEnabled) R.string.notification_disable_floating_lyrics
-                else R.string.notification_enable_floating_lyrics
+            label = R.string.thor_notification_upper_lyrics
         }
     }
     // ICON_UNDEFINED keeps controllers from substituting a predefined icon for the SF glyph.

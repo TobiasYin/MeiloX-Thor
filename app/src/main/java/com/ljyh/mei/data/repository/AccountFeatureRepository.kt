@@ -11,6 +11,7 @@ import com.ljyh.mei.data.model.melox.*
 import com.ljyh.mei.data.network.NETEASE_EXPECTED_SESSION_HEADER
 import com.ljyh.mei.data.network.NeteaseLoginSecurity
 import com.ljyh.mei.data.network.NeteaseSecurityCookies
+import com.ljyh.mei.data.network.requireExpectedNeteaseSession
 import com.ljyh.mei.data.network.neteaseSessionFingerprint
 import com.ljyh.mei.data.network.api.MeloXDirectService
 import com.ljyh.mei.di.NETEASE_EAPI_PROFILE_HEADER
@@ -40,15 +41,17 @@ class AccountFeatureRepository @Inject constructor(
         it[CookieKey].orEmpty().takeIf(String::isNotBlank)?.let(::neteaseSessionFingerprint).orEmpty()
     }.distinctUntilChanged()
 
-    private suspend fun call(path: String, body: Map<String, Any> = emptyMap(), checkToken: Boolean = false): JsonObject {
+    private suspend fun call(path: String, body: Map<String, Any> = emptyMap(), checkToken: Boolean = false, expectedSession: String? = null): JsonObject {
         val preferences = context.dataStore.data.first()
         val credential = preferences[CookieKey].orEmpty()
         check(credential.isNotBlank()) { "请先登录网易云音乐" }
+        val expected = expectedSession ?: neteaseSessionFingerprint(credential)
+        preferences.requireExpectedNeteaseSession(expected)
         val fields = body.toMutableMap()
         val token = if (checkToken) security.freshCheckToken() else null
         if (token != null) fields["checkToken"] = token
         val cookies = if (checkToken) security.securityCookies() else null
-        return requestAccountFeature(service, path, fields, neteaseSessionFingerprint(credential), token, cookies)
+        return requestAccountFeature(service, path, fields, expected, token, cookies)
     }
 
     suspend fun summary(): AccountSecuritySummary = coroutineScope {
@@ -88,20 +91,20 @@ class AccountFeatureRepository @Inject constructor(
             "page" to Gson().toJson(mapOf("cursor" to cursor, "size" to 30)),
         )))
 
-    suspend fun removeDevice(key: String, captcha: String = "") {
+    suspend fun removeDevice(key: String, captcha: String = "", expectedSession: String? = null) {
         require(key.isNotBlank())
         call("/api/middle/user/security/device/kickoff", mapOf(
             "deviceKey" to key, "deviceKeys" to "", "captcha" to captcha,
-        ))
+        ), expectedSession = expectedSession)
     }
 
-    suspend fun revokeAuthorization(clientId: String) {
+    suspend fun revokeAuthorization(clientId: String, expectedSession: String? = null) {
         require(clientId.isNotBlank())
-        call("/api/oauth/app/cancel", mapOf("clientId" to clientId))
+        call("/api/oauth/app/cancel", mapOf("clientId" to clientId), expectedSession = expectedSession)
     }
 
-    suspend fun sendDeviceVerificationCode(countryCode: String = "86") {
-        call("/api/sms/captcha/safe/sent", mapOf("ctcode" to countryCode))
+    suspend fun sendDeviceVerificationCode(countryCode: String = "86", expectedSession: String? = null) {
+        call("/api/sms/captcha/safe/sent", mapOf("ctcode" to countryCode), expectedSession = expectedSession)
     }
 
     suspend fun bindings(): List<AccountBinding> {

@@ -90,7 +90,7 @@ class ThorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         legacyActive = savedInstanceState?.getBoolean("thor.legacyActive") ?: false
-        if (intent.getBooleanExtra(OPEN_PLAYER, false)) viewModel.showPlayer()
+        readThorDestination(intent)
         enableEdgeToEdge()
         hideSystemBars()
         airflow = ThorAirflowSource(this, this)
@@ -197,6 +197,10 @@ class ThorActivity : ComponentActivity() {
             legacyActive = false
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) resumeThor()
         }
+        readThorDestination(intent)
+    }
+    private fun readThorDestination(intent: Intent) {
+        intent.getStringExtra(INTERNAL_ROUTE)?.let(viewModel::openInternalRoute)
         if (intent.getBooleanExtra(OPEN_PLAYER, false)) viewModel.showPlayer()
     }
     override fun onResume() {
@@ -282,6 +286,7 @@ class ThorActivity : ComponentActivity() {
         airflow.calibrate(airflow.nextCalibrationStep.value)
     }
     private fun openLegacy(route: String) {
+        if (viewModel.openInternalRoute(route)) return
         if (route == "local_music") {
             if (localLibrary.scanState.value.isScanning) localLibrary.cancelScan()
             else if (localLibrary.hasAudioPermission()) localLibrary.scan() else musicPermission.launch(LocalLibraryViewModel.audioPermission)
@@ -309,6 +314,7 @@ class ThorActivity : ComponentActivity() {
     companion object {
         const val LEGACY_ROUTE = "com.ljyh.mei.thor.LEGACY_ROUTE"
         const val OPEN_PLAYER = "com.ljyh.mei.thor.OPEN_PLAYER"
+        const val INTERNAL_ROUTE = "com.ljyh.mei.thor.INTERNAL_ROUTE"
         const val RETURN_FROM_LEGACY = "com.ljyh.mei.thor.RETURN_FROM_LEGACY"
         const val UPPER_DISPLAY = "com.ljyh.mei.thor.UPPER_DISPLAY"
         val LegacyRoutes = setOf("account/login", "account/home", "account/security/bindings", "setting/play", "local_music", "download_manage", "about")

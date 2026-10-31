@@ -73,6 +73,10 @@ import com.ljyh.mei.constants.UserAvatarUrlKey
 import com.ljyh.mei.constants.UserIdKey
 import com.ljyh.mei.constants.UserNicknameKey
 import com.ljyh.mei.data.repository.MeloXRepository
+import com.ljyh.mei.data.network.CaptchaUiHost
+import com.ljyh.mei.data.network.captureNeteaseLoginSession
+import com.ljyh.mei.data.network.requireExpectedNeteaseLoginSession
+import kotlinx.coroutines.flow.first
 import com.ljyh.mei.data.network.clearNeteaseAccountSession
 import com.ljyh.mei.data.network.setNeteaseWebSession
 import com.ljyh.mei.thor.ThorActivity
@@ -189,7 +193,7 @@ fun NeteaseLoginScreen(viewModel: NeteaseLoginViewModel = hiltViewModel()) {
         NeteaseMobileLoginSheet(
             onDismiss = { showMobileLoginSheet = false },
             onSubmitPassword = viewModel::loginWithMobilePassword,
-            onRequestSmsCode = viewModel::requestMobileSmsCode,
+            onRequestSmsCode = { activity, phone, countryCode -> viewModel.requestMobileSmsCode(activity, phone, countryCode) },
             onSubmitSms = viewModel::loginWithMobileSms,
             onSubmitUpSms = viewModel::loginWithUpSms,
             onLoginSuccess = navController::finishNeteaseLogin,
@@ -580,8 +584,9 @@ class NeteaseLoginViewModel @Inject constructor(
         activity: android.app.Activity,
         phone: String,
         countryCode: String,
+        captchaUiHost: CaptchaUiHost? = null,
     ) {
-        repository.requestMobileSmsCode(activity, phone, countryCode)
+        repository.requestMobileSmsCode(activity, phone, countryCode, captchaUiHost)
     }
 
     suspend fun loginWithMobileSms(
@@ -597,6 +602,7 @@ class NeteaseLoginViewModel @Inject constructor(
     }
 
     suspend fun loginWithCookie(musicU: String): Boolean {
+        val expectedLoginSession = context.dataStore.data.first().captureNeteaseLoginSession()
         val profile = try {
             repository.accountProfile(webCookie = musicU)
         } catch (error: CancellationException) {
@@ -605,25 +611,47 @@ class NeteaseLoginViewModel @Inject constructor(
             return false
         }
         currentCoroutineContext().ensureActive()
-        context.dataStore.edit { preferences ->
-            currentCoroutineContext().ensureActive()
-            preferences.setNeteaseWebSession(musicU)
-            preferences[UserIdKey] = profile.id.toString()
-            preferences[UserNicknameKey] = profile.nickname
-            if (profile.avatarUrl == null) preferences.remove(UserAvatarUrlKey)
-            else preferences[UserAvatarUrlKey] = profile.avatarUrl
+        try {
+            context.dataStore.edit { preferences ->
+                currentCoroutineContext().ensureActive()
+                preferences.requireExpectedNeteaseLoginSession(expectedLoginSession)
+                preferences.setNeteaseWebSession(musicU)
+                preferences[UserIdKey] = profile.id.toString()
+                preferences[UserNicknameKey] = profile.nickname
+                if (profile.avatarUrl == null) preferences.remove(UserAvatarUrlKey)
+                else preferences[UserAvatarUrlKey] = profile.avatarUrl
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: java.io.IOException) {
+            return false
         }
         return true
     }
 }
 
-suspend fun logoutNetease(context: android.content.Context) {
-    withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { continuation ->
-            CookieManager.getInstance().removeAllCookies {
-                if (continuation.isActive) continuation.resume(Unit)
+suspend fun logoutNetease(context: android.content.Context, expectedSession: String? = null) {
+    try {
+        val initial = context.dataStore.data.first()
+        val expectedLoginSession = expectedSession ?: initial.captureNeteaseLoginSession()
+        initial.requireExpectedNeteaseLoginSession(expectedLoginSession)
+        withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { continuation ->
+                CookieManager.getInstance().removeAllCookies {
+                    if (continuation.isActive) continuation.resume(Unit)
+                }
             }
         }
+        currentCoroutineContext().ensureActive()
+        context.dataStore.edit {
+            currentCoroutineContext().ensureActive()
+            it.requireExpectedNeteaseLoginSession(expectedLoginSession)
+            it.clearNeteaseAccountSession()
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: java.io.IOException) {
+        if (expectedSession != null) throw failure
+        // A legacy caller must not clear a replacement account or crash an unhandled UI launch.
     }
-    context.dataStore.edit { it.clearNeteaseAccountSession() }
 }

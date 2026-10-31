@@ -111,6 +111,17 @@ class ThorMusicRepository @Inject constructor(
         project(network, device, likes, flags, pendingLikes)
     }.stateIn(scope, SharingStarted.Eagerly, ThorLibraryState())
 
+    /** Login storage and its public projection are asynchronous; do not navigate against stale UI. */
+    internal suspend fun awaitCurrentAccountProjection(): ThorAccountState {
+        val preferences = context.dataStore.data.first()
+        val id = preferences[UserIdKey]?.takeIf { it.toLongOrNull()?.let { n -> n > 0 } == true }
+        val credential = preferences[CookieKey].orEmpty()
+        val expected = if (id != null && credential.isNotBlank()) LibraryAccount(id, credential) else null
+        return state.first { projected ->
+            accountFence.account == expected && projected.account.generation == accountFence.generation
+        }.account
+    }
+
     init {
         scope.launch {
             var initialized = false
