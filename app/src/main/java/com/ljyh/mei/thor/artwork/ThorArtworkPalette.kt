@@ -64,7 +64,9 @@ fun extractThorArtworkPalette(pixels: IntArray, width: Int, height: Int): ThorAr
     val minWeight = max(colorWeight * .015, min(1.0, colorWeight))
     val eligible = clusters.filter { it.weight >= minWeight }
         .sortedWith(compareByDescending<PaletteBucket> { it.weight }.thenBy { it.argb() })
-    if (eligible.isEmpty() || eligible.none { chroma(it.lab()) >= .035 }) return neutralPalette(opaqueGray, opaqueWeight)
+    // Muted photographic/sepia covers still have a real hue. Reserve the neutral fallback for
+    // genuinely near-achromatic artwork instead of discarding every low-saturation cover.
+    if (eligible.isEmpty() || eligible.none { chroma(it.lab()) >= .018 }) return neutralPalette(opaqueGray, opaqueWeight)
     val dominant = eligible.first()
     val secondary = eligible.drop(1).firstOrNull { distanceSquared(dominant.lab(), it.lab()) >= .085 * .085 }
     val accent = eligible.asSequence().filter { it !== dominant && it !== secondary }
@@ -79,14 +81,18 @@ fun extractThorArtworkPalette(pixels: IntArray, width: Int, height: Int): ThorAr
 }
 
 /**
- * Safe opaque environmental tones for the existing day/night theme.
- * Linear-light retiming preserves hue without allowing bright cover pixels behind night lyrics.
+ * Opaque environmental tones retain the cover's hue and enough depth to remain visible.
+ * The background compositor separately guarantees contrast in the actual lyric reading zone;
+ * bleaching every source color to near-white made real day covers look like an uncolored canvas.
  */
 fun ThorArtworkPalette.forAmbient(isDark: Boolean): ThorArtworkPalette = copy(
-    dominantArgb = retone(desaturate(dominantArgb, .28), if (isDark) .035 else .86),
-    secondaryArgb = retone(desaturate(secondaryArgb, .22), if (isDark) .060 else .78),
-    accentArgb = retone(desaturate(accentArgb, .14), if (isDark) .085 else .70),
+    dominantArgb = retone(desaturate(dominantArgb, .12), if (isDark) .065 else .62),
+    secondaryArgb = retone(desaturate(secondaryArgb, .08), if (isDark) .100 else .72),
+    accentArgb = retone(desaturate(accentArgb, .04), if (isDark) .140 else .58),
 )
+
+/** Small palette-level tone adjustment, never a per-pixel CPU image filter. */
+internal fun toneThorArtworkColor(argb: Int, targetLuminance: Double): Int = retone(argb, targetLuminance)
 
 /** Relative luminance, also useful when verifying an environmental renderer's own composition. */
 fun thorArtworkLuminance(argb: Int): Double =

@@ -285,7 +285,7 @@ class ThorUpperLyricsInstrumentedTest {
                 ThorUpperLyrics(data, { position.longValue }, true,
                     Modifier.width(320.dp).height(360.dp).background(LocalThorTheme.current.background).testTag(TAG),
                     onLineSelected = { time -> selected += time; position.longValue = time },
-                    listState = state, browseState = browse)
+                    listState = state, browseState = browse, playing = false)
             }
         }
         for (mode in listOf(ThorAppearance.Day, ThorAppearance.Night)) {
@@ -436,7 +436,7 @@ class ThorUpperLyricsInstrumentedTest {
                     background = Color.Black, text = Color.White, secondary = Color.White)) {
                     Box(Modifier.width(360.dp).height(320.dp).background(Color.Black).testTag(TAG)) {
                         ThorUpperLyrics(data, { position.longValue }, true, Modifier.fillMaxSize(),
-                            listState = state, browseState = browse)
+                            listState = state, browseState = browse, playing = false)
                     }
                 }
             }
@@ -528,7 +528,7 @@ class ThorUpperLyricsInstrumentedTest {
                     Box(Modifier.width(320.dp).height(heightDp.dp).background(Color.Black).testTag(TAG)) {
                         ThorUpperLyrics(data, { position.longValue }, true, Modifier.fillMaxSize(),
                             onLineSelected = { time -> selected += time; position.longValue = time },
-                            listState = state, browseState = browse)
+                            listState = state, browseState = browse, playing = false)
                     }
                 }
             }
@@ -587,6 +587,7 @@ class ThorUpperLyricsInstrumentedTest {
                     onLineSelected = { time -> selected += time; position.longValue = time },
                     listState = state,
                     browseState = browse,
+                    playing = false, // This fixture tests scroll ownership, not decorative flow frames.
                 )
             }
         }

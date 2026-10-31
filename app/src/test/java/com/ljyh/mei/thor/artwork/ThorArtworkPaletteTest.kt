@@ -55,6 +55,14 @@ class ThorArtworkPaletteTest {
         }
     }
 
+    @Test fun mutedPhotographicCoverKeepsItsActualWarmHueInsteadOfBecomingGray() {
+        val warm = 0xFFB6A79A.toInt()
+        val palette = extractThorArtworkPalette(IntArray(400) { warm }, 20, 20)
+        assertFalse(palette.neutral)
+        assertRgbNear(warm, palette.dominantArgb, 2)
+        assertTrue(red(palette.dominantArgb) > blue(palette.dominantArgb))
+    }
+
     @Test fun malformedOrFullyTransparentImagesUseTheSameSafeFallback() {
         assertEquals(ThorArtworkPalette.Neutral, extractThorArtworkPalette(intArrayOf(), 0, 0))
         assertEquals(ThorArtworkPalette.Neutral, extractThorArtworkPalette(intArrayOf(0), Int.MAX_VALUE, Int.MAX_VALUE))
@@ -87,15 +95,24 @@ class ThorArtworkPaletteTest {
         val day = palette.forAmbient(false)
         val night = palette.forAmbient(true)
         listOf(day.dominantArgb, day.secondaryArgb, day.accentArgb).forEach {
-            assertTrue("day background must remain light", thorArtworkLuminance(it) in .69.. .88)
+            assertTrue("day field must keep usable mid-light cover color", thorArtworkLuminance(it) in .57.. .73)
             assertTrue(contrast(it, 0xFF18211F.toInt()) >= 4.5)
         }
         listOf(night.dominantArgb, night.secondaryArgb, night.accentArgb).forEach {
-            assertTrue("night background must remain dark", thorArtworkLuminance(it) in .03.. .095)
+            assertTrue("night field must remain dark while still showing its cover hue", thorArtworkLuminance(it) in .06.. .15)
             assertTrue(contrast(it, 0xFFEDF4EF.toInt()) >= 4.5)
         }
         assertTrue(red(day.dominantArgb) > blue(day.dominantArgb))
         assertTrue(blue(night.secondaryArgb) > red(night.secondaryArgb))
+    }
+
+    @Test fun dayMappingRetainsVisibleCoverChromaInsteadOfWhiteningEveryRegion() {
+        val mapped = ThorArtworkPalette(0xFFFF0000.toInt(), 0xFF0000FF.toInt(), 0xFF00FF00.toInt()).forAmbient(false)
+        assertTrue("The dominant red must not become an almost-white tint",
+            red(mapped.dominantArgb) - green(mapped.dominantArgb) >= 50)
+        assertTrue("The blue secondary must remain visibly blue",
+            blue(mapped.secondaryArgb) - red(mapped.secondaryArgb) >= 30)
+        assertTrue(green(mapped.accentArgb) > red(mapped.accentArgb))
     }
 
     @Test fun mappingAlsoHandlesExtremeSourceColorsWithoutNaNOrTransparentOutput() {

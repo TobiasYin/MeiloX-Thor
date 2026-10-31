@@ -245,7 +245,7 @@ class ThorLivePlaybackInstrumentedTest {
         assertTrue("required_recovery_opt_in_missing=false", InstrumentationRegistry.getArguments().getString(name) == "true")
     }
 
-    private fun withLiveFixture(block: (Fixture) -> Unit) {
+    internal fun withLiveFixture(block: (Fixture) -> Unit) {
         assumeTrue(InstrumentationRegistry.getArguments().getString("thor.livePlayback") == "true")
         ThorLiveEnvironment.requireRequestedDevice(context)
         val fixture = Fixture()
@@ -263,7 +263,8 @@ class ThorLivePlaybackInstrumentedTest {
         }
     }
 
-    private inner class Fixture {
+    internal inner class Fixture {
+        val ownerActivity: ThorActivity get() = checkNotNull(activity)
         lateinit var service: MusicService
         private val connected = CountDownLatch(1)
         private val reference = AtomicReference<MusicService?>()
@@ -618,7 +619,7 @@ class ThorLivePlaybackInstrumentedTest {
         }
     }
 
-    private class RealErrors : Player.Listener {
+    internal class RealErrors : Player.Listener {
         var denied = 0
         var total = 0
         var firstErrorAtMs = 0L

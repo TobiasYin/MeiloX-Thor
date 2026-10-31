@@ -73,7 +73,7 @@ class ThorBackdropProfileTest {
         for (mode in ThorBackgroundMode.entries) for (intensity in ThorBackgroundIntensity.entries) {
             val normal = thorBackdropProfile(mode, intensity, false)
             val reduced = thorBackdropProfile(mode, intensity, false, reduceTransparency = true)
-            assertEquals(normal.copy(colorStrength = normal.colorStrength * .35f, highlights = false), reduced)
+            assertEquals(normal.copy(colorStrength = normal.colorStrength * .70f, highlights = false), reduced)
         }
     }
 
@@ -105,9 +105,22 @@ class ThorBackdropProfileTest {
                 assertTrue(profile.quietEndX in 0f..1f)
                 assertTrue(profile.quietStartX < .52f)
                 assertTrue(profile.quietEndX > .52f)
-                assertTrue(profile.quietEndX <= .57f)
-                assertTrue(profile.quietRetention > 0f && profile.quietRetention <= .10f)
+                assertTrue("The reading side must keep a broad visible color field", profile.quietEndX in .80f.. .95f)
+                assertTrue("The old 6.5-10% retention erased the visible cover environment",
+                    profile.quietRetention in .50f.. .70f)
             }
+        }
+    }
+
+    @Test fun defaultArtworkFlowRetainsVisibleColorEvenWithReducedTransparency() {
+        for (dark in listOf(false, true)) {
+            val normal = thorBackdropProfile(ThorBackgroundMode.ArtworkFlow, ThorBackgroundIntensity.Medium, dark)
+            val opaque = thorBackdropProfile(ThorBackgroundMode.ArtworkFlow, ThorBackgroundIntensity.Medium, dark,
+                reduceTransparency = true)
+            assertTrue(normal.colorStrength >= .9f)
+            assertTrue(opaque.colorStrength >= .6f)
+            assertTrue(opaque.quietRetention >= .5f)
+            assertFalse(opaque.highlights)
         }
     }
 

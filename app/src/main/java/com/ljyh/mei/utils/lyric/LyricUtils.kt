@@ -76,7 +76,7 @@ private fun LyricData.displayPriority(): Int {
 
 fun mergeLyrics(sources: List<LyricSourceData>, isPureMusic: Boolean = false): LyricData {
 //    Timber.tag("LyricUtils").d("mergeLyrics: $sources")
-    // 找到 NetEase 的逐字歌词（yrc + tlyric）
+    // NetEase word timing is independent of optional translation availability.
     val amSource = sources.filterIsInstance<LyricSourceData.AM>().firstOrNull()
     if (amSource != null) {
         val a = amSource.lyric
@@ -99,8 +99,8 @@ fun mergeLyrics(sources: List<LyricSourceData>, isPureMusic: Boolean = false): L
                 val trimmed = line.trim()
                 trimmed.startsWith("[") && trimmed.contains("]") && trimmed.contains("(")
             }
-            if (hasYrcLines && translation != null) {
-                Timber.tag("LyricUtils").d("yrc and tlyric")
+            if (hasYrcLines) {
+                Timber.tag("LyricUtils").d("NetEase YRC")
                 return LyricData(
                     isVerbatim = true,
                     isPureMusic = isPureMusic,

@@ -58,24 +58,26 @@ internal fun thorBackdropProfile(
     val artwork = mode == ThorBackgroundMode.ArtworkFlow
     val animate = artwork && active && playing && !reduceMotion
     val colorWeight = when (mode) {
-        ThorBackgroundMode.ArtworkFlow -> if (isDark) 1f else .78f
-        ThorBackgroundMode.SoftGradient -> if (isDark) .70f else .52f
+        ThorBackgroundMode.ArtworkFlow -> if (isDark) 1.08f else .94f
+        ThorBackgroundMode.SoftGradient -> if (isDark) .85f else .75f
         ThorBackgroundMode.Clean -> 0f
     }
     val deformation = when (mode) {
-        ThorBackgroundMode.ArtworkFlow -> .20f
+        ThorBackgroundMode.ArtworkFlow -> .30f
         ThorBackgroundMode.SoftGradient -> .06f
         ThorBackgroundMode.Clean -> 0f
     }
     val speed = when (mode) {
-        ThorBackgroundMode.ArtworkFlow -> .12f
+        ThorBackgroundMode.ArtworkFlow -> .20f
         ThorBackgroundMode.SoftGradient -> 0f
         ThorBackgroundMode.Clean -> 0f
     }
     return ThorBackdropProfile(
         mode = mode,
         visible = visible,
-        colorStrength = colorWeight * intensity.multiplier * if (reduceTransparency) .35f else 1f,
+        // The backdrop is already opaque: reduced transparency removes optical gloss without
+        // erasing the user's selected artwork color field.
+        colorStrength = colorWeight * intensity.multiplier * if (reduceTransparency) .70f else 1f,
         deformationStrength = deformation * intensity.multiplier,
         speed = if (animate) speed else 0f,
         animate = animate,
@@ -86,9 +88,9 @@ internal fun thorBackdropProfile(
         },
         primaryField = if (artwork) ArtworkPrimary else GradientPrimary,
         secondaryField = if (artwork) ArtworkSecondary else GradientSecondary,
-        quietStartX = .36f,
-        quietEndX = .57f,
-        quietRetention = if (isDark) .10f else .065f,
+        quietStartX = .46f,
+        quietEndX = .88f,
+        quietRetention = if (isDark) .62f else .56f,
         highlights = visible && !reduceTransparency,
     )
 }

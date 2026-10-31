@@ -62,6 +62,7 @@ class ThorPlaybackBackdropInstrumentedTest {
     ))
     private val active = mutableStateOf(true)
     private val playing = mutableStateOf(false)
+    private val artworkPalette = mutableStateOf(SYNTHETIC_PALETTE)
     private val diagnostics = ThorBackdropDiagnostics()
     private lateinit var contentView: View
     private var captureBounds = Rect.Zero
@@ -93,6 +94,8 @@ class ThorPlaybackBackdropInstrumentedTest {
                         } else {
                             assertTrue("$label must contain a visible optical field",
                                 luminanceRange(image, .04f, .49f) > .005)
+                            assertTrue("$label must retain visible cover color beside the lyrics",
+                                distanceFromColor(image, backgroundArgb, .55f, .97f) > .012)
                         }
                         save(image, "background-$label")
                     } finally { image.recycle() }
@@ -100,6 +103,42 @@ class ThorPlaybackBackdropInstrumentedTest {
             }
         }
         assertEquals("Reduced motion must not start a decorative clock", 0L, diagnostics.frameTicks.get())
+    }
+
+    @Test(timeout = 60_000)
+    fun defaultIntensityMutedCoverColorsReachTheReadingSideWhileReducedMotionStaysPixelStable() {
+        preferences.value = preferences.value.copy(backgroundIntensity = ThorBackgroundIntensity.Medium,
+            backgroundMode = ThorBackgroundMode.ArtworkFlow, reduceMotion = true)
+        artworkPalette.value = MUTED_WARM_PALETTE
+        showBackdrop()
+        for (appearance in listOf(ThorAppearance.Day, ThorAppearance.Night)) {
+            compose.runOnIdle {
+                preferences.value = preferences.value.copy(appearance = appearance)
+                artworkPalette.value = MUTED_WARM_PALETTE
+            }
+            compose.waitForIdle()
+            val warm = copyWindowPixels()
+            try {
+                assertLyricZoneContrast(warm, "muted-$appearance-medium")
+                assertTrue("A normal muted cover at default intensity must not look like the bare theme canvas",
+                    distanceFromColor(warm, backgroundArgb, .55f, .97f) > .012)
+                compose.mainClock.advanceTimeBy(1_000)
+                val still = copyWindowPixels()
+                try { assertEquals("Reduced motion retains a static colored field", 0.0, imageDifference(warm, still), 0.0) }
+                finally { still.recycle() }
+                compose.runOnIdle {
+                    artworkPalette.value = CaseAmbientPalette(Color(0xFF486A82), Color(0xFF678879), Color(0xFF555F91))
+                }
+                compose.waitForIdle()
+                val cool = copyWindowPixels()
+                try {
+                    assertLyricZoneContrast(cool, "muted-cool-$appearance-medium")
+                    assertTrue("The actual palette input must recolor the reading-side background too",
+                        imageDifference(warm, cool, .52f, .97f) > .008)
+                } finally { cool.recycle() }
+            } finally { warm.recycle() }
+        }
+        assertEquals("Static cover color must not create a decorative frame clock", 0L, diagnostics.frameTicks.get())
     }
 
     @Test(timeout = 90_000)
@@ -219,7 +258,7 @@ class ThorPlaybackBackdropInstrumentedTest {
                     textArgb = theme.text.toArgb(); secondaryArgb = theme.secondary.toArgb()
                     backgroundArgb = theme.background.toArgb()
                 }
-                ThorPlaybackBackdrop(SYNTHETIC_PALETTE, active.value, playing.value, preferences.value,
+                ThorPlaybackBackdrop(artworkPalette.value, active.value, playing.value, preferences.value,
                     Modifier.fillMaxSize().testTag("backdrop").onGloballyPositioned {
                         captureBounds = it.boundsInWindow()
                     }, diagnostics)
@@ -269,7 +308,7 @@ class ThorPlaybackBackdropInstrumentedTest {
 
     private fun assertLyricZoneContrast(image: Bitmap, label: String) {
         var minimum = Double.POSITIVE_INFINITY
-        // The lyric column starts near 52%, before the quiet mask is fully opaque at 57%.
+        // The lyric column starts near 52%; its color remains visible with semantic ink safety.
         sample(image, .52f, .97f) { pixel ->
             assertEquals("$label must draw an opaque backing", 255, android.graphics.Color.alpha(pixel))
             minimum = minOf(minimum, ColorUtils.calculateContrast(textArgb, pixel),
@@ -331,6 +370,7 @@ class ThorPlaybackBackdropInstrumentedTest {
     }
 
     private companion object {
+        val MUTED_WARM_PALETTE = CaseAmbientPalette(Color(0xFF927052), Color(0xFF697E76), Color(0xFFA88A59))
         val SYNTHETIC_PALETTE = CaseAmbientPalette(Color(0xFFD6475B), Color(0xFF34A9B5), Color(0xFFE9B868))
     }
 }

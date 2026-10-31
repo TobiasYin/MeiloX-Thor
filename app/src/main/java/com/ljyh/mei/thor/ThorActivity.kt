@@ -132,7 +132,13 @@ class ThorActivity : ComponentActivity() {
                     ThorUpperScreen(
                         item = upperItem,
                         playing = playback.value.playing, preferences = preferences, airflow = strength,
-                        lyricData = lyrics, positionProvider = { playback.value.positionMs },
+                        lyricData = lyrics, positionProvider = {
+                            // The bridge tick keeps line-follow state observable. Draw-time
+                            // karaoke samples the actual main-thread player clock between ticks.
+                            val observedPosition = playback.value.positionMs
+                            viewModel.playerConnection.value?.player?.currentPosition
+                                ?.coerceAtLeast(0L) ?: observedPosition
+                        },
                         onOpenPlayer = viewModel::togglePlayer, playbackScene = playbackScene,
                         onLyricSelected = { position -> viewModel.playFromLyric(position, lyricEntryId) },
                         playbackEntryId = lyricEntryId,
