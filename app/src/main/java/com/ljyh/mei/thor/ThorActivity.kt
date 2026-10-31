@@ -99,6 +99,7 @@ class ThorActivity : ComponentActivity() {
             val playback = viewModel.playback.state.collectAsStateWithLifecycle()
             val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
             val strength by airflow.strength.collectAsStateWithLifecycle()
+            val lyricEntryId = playback.value.currentEntryId
             val playbackScene = navigation.overlay in setOf(ThorOverlay.Player, ThorOverlay.Queue, ThorOverlay.Lyrics, ThorOverlay.Timer)
             ThorTheme(preferences) {
                 if (displays.isDualScreen || legacyActive) {
@@ -107,6 +108,8 @@ class ThorActivity : ComponentActivity() {
                         playing = playback.value.playing, preferences = preferences, airflow = strength,
                         lyricData = lyrics, positionProvider = { playback.value.positionMs },
                         onOpenPlayer = viewModel::togglePlayer, playbackScene = playbackScene,
+                        onLyricSelected = { position -> viewModel.playFromLyric(position, lyricEntryId) },
+                        playbackEntryId = lyricEntryId,
                         visible = displays.displays.firstOrNull { it.id == displays.upperDisplayId }?.state == android.view.Display.STATE_ON,
                     )
                 } else LowerContent()

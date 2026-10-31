@@ -3,6 +3,7 @@ package com.ljyh.mei.thor.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import com.google.gson.JsonParser
 import com.ljyh.mei.thor.model.ThorThemePack
 import java.nio.file.Files
@@ -52,6 +53,12 @@ class ThorThemeContractTest {
             assertEquals(light["shadowBlur"].asInt.dp, actual.shadowBlur)
             assertEquals(light["shadowLift"].asInt.dp, actual.shadowLift)
             assertEquals(light["glintAngle"].asFloat, actual.glintAngle)
+            val lyrics = JsonParser.parseString(designFile("theme-tokens.json")).asJsonObject["foundation"].asJsonObject["lyricLayout"].asJsonObject
+            assertEquals(lyrics["rowGap"].asInt.dp, actual.lyricLayout.rowGap)
+            assertEquals(lyrics["rowVerticalInset"].asInt.dp, actual.lyricLayout.rowVerticalInset)
+            assertEquals(lyrics["auxiliaryTopGap"].asInt.dp, actual.lyricLayout.auxiliaryTopGap)
+            assertEquals(lyrics["auxiliaryGap"].asInt.dp, actual.lyricLayout.auxiliaryGap)
+            assertEquals(lyrics["lineHeightEm"].asFloat.em, actual.lyricLayout.lineHeight)
         }
     }
 

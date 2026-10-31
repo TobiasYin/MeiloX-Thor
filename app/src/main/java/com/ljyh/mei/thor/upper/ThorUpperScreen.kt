@@ -1,10 +1,15 @@
 package com.ljyh.mei.thor.upper
 
+import android.os.SystemClock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -22,6 +27,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -45,14 +56,15 @@ import com.ljyh.mei.ui.component.player.component.lyricAccompanimentOwners
 import com.ljyh.mei.ui.component.player.component.lyricFocusLineIndex
 import com.ljyh.mei.ui.component.player.component.readableGlyphOffsets
 import com.ljyh.mei.ui.component.player.component.readableKaraokeProgress
+import com.ljyh.mei.ui.component.player.component.runInterruptibleLyricJump
 import com.ljyh.mei.ui.model.LyricData
 import com.ljyh.mei.ui.model.LyricSource
 import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeLine
 import com.mocharealm.accompanist.lyrics.core.model.synced.SyncedLine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.sin
@@ -71,9 +83,11 @@ fun ThorUpperScreen(
     modifier: Modifier = Modifier,
     playbackScene: Boolean = false,
     visible: Boolean = true,
+    onLyricSelected: (Long) -> Unit = {},
+    playbackEntryId: String? = null,
 ) {
     ThorTheme(preferences) {
-        ThorUpperContent(item, playing, preferences, airflow, lyricData, positionProvider, onOpenPlayer, modifier, playbackScene, visible)
+        ThorUpperContent(item, playing, preferences, airflow, lyricData, positionProvider, onOpenPlayer, modifier, playbackScene, visible, onLyricSelected, playbackEntryId)
     }
 }
 
@@ -81,7 +95,7 @@ fun ThorUpperScreen(
 private fun ThorUpperContent(
     item: ThorItem?, playing: Boolean, preferences: ThorPreferences, airflow: Float,
     lyricData: LyricData?, positionProvider: () -> Long, onOpenPlayer: () -> Unit,
-    modifier: Modifier, playbackScene: Boolean, visible: Boolean,
+    modifier: Modifier, playbackScene: Boolean, visible: Boolean, onLyricSelected: (Long) -> Unit, playbackEntryId: String?,
 ) {
     val theme = LocalThorTheme.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -117,7 +131,9 @@ private fun ThorUpperContent(
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, letterSpacing = 1.3.sp),
                             color = theme.secondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(20.dp))
-                        UpperLyrics(lyricData!!, positionProvider, active, Modifier.weight(1f).fillMaxWidth())
+                        key(playbackEntryId ?: item?.key?.stableId, lyricData!!.lyricLine) {
+                            ThorUpperLyrics(lyricData, positionProvider, active, Modifier.weight(1f).fillMaxWidth(), onLyricSelected)
+                        }
                     }
                 } else Column(Modifier.fillMaxSize().padding(start = maxWidth * .01f, end = maxWidth * .04f),
                     verticalArrangement = Arrangement.Center) {
@@ -216,31 +232,87 @@ private fun upperLyricsArePlaceholder(data: LyricData): Boolean {
     return text in setOf("暂无歌词", "没有歌词", "歌词加载中", "纯音乐", "纯音乐，请欣赏")
 }
 
-/** Screen-specific typography: no touch rows, fixed player padding, or alpha masks. */
+/** Independent browsing shares the playback clock only for emphasis; only a row click seeks. */
 @Composable
-private fun UpperLyrics(data: LyricData, positionProvider: () -> Long, active: Boolean, modifier: Modifier) {
+internal fun ThorUpperLyrics(
+    data: LyricData,
+    positionProvider: () -> Long,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    onLineSelected: (Long) -> Unit = {},
+    listState: LazyListState = rememberLazyListState(),
+    browseState: ThorLyricBrowseState = remember(data.lyricLine) { ThorLyricBrowseState() },
+) {
     val theme = LocalThorTheme.current
+    val layout = theme.lyricLayout
     val latestPosition by rememberUpdatedState(positionProvider)
-    val listState = rememberLazyListState()
+    val latestSelection by rememberUpdatedState(onLineSelected)
     var viewport by remember { mutableIntStateOf(0) }
     val lines = data.lyricLine.lines
     val owners = remember(lines) { lyricAccompanimentOwners(lines) }
     val timeProvider = remember { { latestPosition().coerceIn(0L, Int.MAX_VALUE.toLong()).toInt() } }
     val focus by remember(lines) { derivedStateOf { lyricFocusLineIndex(lines, timeProvider(), owners) } }
-    LaunchedEffect(lines, active, theme.reduceMotion) {
+    val positioned = remember(lines, listState) { booleanArrayOf(false) }
+    DisposableEffect(browseState) { onDispose { browseState.onHidden() } }
+    LaunchedEffect(browseState, active) {
+        if (!active) browseState.onHidden()
+    }
+    LaunchedEffect(listState, browseState, active) {
         if (!active) return@LaunchedEffect
-        var previous = -1
+        listState.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> browseState.onDragStarted(SystemClock.uptimeMillis())
+                is DragInteraction.Stop, is DragInteraction.Cancel -> browseState.onDragStopped(SystemClock.uptimeMillis())
+            }
+        }
+    }
+    LaunchedEffect(listState, browseState, active) {
+        if (!active) return@LaunchedEffect
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            browseState.onScrollChanged(scrolling, SystemClock.uptimeMillis())
+        }
+    }
+    val returnAt = browseState.returnAtMs
+    LaunchedEffect(browseState, returnAt, active) {
+        if (!active || returnAt == null) return@LaunchedEffect
+        // Recheck the same monotonic clock after waking; an early scheduler callback
+        // must neither return before 15s nor leave this unchanged deadline unarmed.
+        while (isActive && browseState.returnAtMs == returnAt) {
+            val remaining = returnAt - SystemClock.uptimeMillis()
+            if (remaining > 0L) delay(remaining)
+            else { browseState.resumeIfIdle(SystemClock.uptimeMillis()); break }
+        }
+    }
+    LaunchedEffect(lines, active, theme.reduceMotion, browseState.canFollow) {
+        if (!active || !browseState.canFollow) return@LaunchedEffect
         snapshotFlow { focus to viewport }.distinctUntilChanged().collectLatest { (index, height) ->
             if (height <= 0 || lines.isEmpty()) return@collectLatest
             val target = index.coerceIn(0, lines.lastIndex)
             val anchor = -(height * .23f).toInt()
-            if (theme.reduceMotion || previous < 0 || abs(previous - target) > 5 || previous == target) listState.scrollToItem(target, anchor)
-            else listState.animateScrollToItem(target, anchor)
-            previous = target
+            // Isolate the scroll mutation: a finger winning an animation must not kill follow.
+            val completed = runInterruptibleLyricJump(restoreVisibility = {}, jump = {
+                if (theme.reduceMotion || !positioned[0]) listState.scrollToItem(target, anchor)
+                else listState.animateScrollToItem(target, anchor)
+                true
+            })
+            if (completed) positioned[0] = true
         }
     }
-    LazyColumn(modifier.clipToBounds().onSizeChanged { viewport = it.height }, state = listState,
-        userScrollEnabled = false, contentPadding = PaddingValues(bottom = 260.dp)) {
+    LazyColumn(modifier.clipToBounds().onSizeChanged { viewport = it.height }
+        .semantics { stateDescription = if (browseState.isBrowsing) "浏览歌词" else "跟随播放" }
+        .pointerInput(browseState, active) {
+            if (!active) return@pointerInput
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                browseState.onTouchStarted(SystemClock.uptimeMillis())
+                try {
+                    do { val event = awaitPointerEvent(PointerEventPass.Final) }
+                    while (event.changes.any { it.pressed })
+                } finally { browseState.onTouchEnded(SystemClock.uptimeMillis()) }
+            }
+        }, state = listState,
+        userScrollEnabled = active, verticalArrangement = Arrangement.spacedBy(layout.rowGap),
+        contentPadding = PaddingValues(bottom = 260.dp)) {
         itemsIndexed(lines, key = { index, line -> "${line.start}:${line.end}:$index" }) { index, line ->
             val focused = index == focus || owners[index] == focus
             val words = remember(line) { when (line) {
@@ -255,8 +327,13 @@ private fun UpperLyrics(data: LyricData, positionProvider: () -> Long, active: B
             val style = MaterialTheme.typography.bodyLarge.copy(
                 fontSize = if (focused && !accompaniment) theme.typography.lyricCurrent else theme.typography.lyricAdjacent,
                 fontWeight = if (focused && !accompaniment) FontWeight.Medium else FontWeight.Normal,
-                lineHeight = if (focused) 1.55.em else 2.1.em, textDirection = TextDirection.Content)
-            Column(Modifier.fillMaxWidth()) {
+                lineHeight = layout.lineHeight, textDirection = TextDirection.Content)
+            Column(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .semantics { selected = focused }
+                .clickable(enabled = active, role = Role.Button, onClickLabel = "从这里播放") {
+                    latestSelection(line.start.toLong())
+                    browseState.onLineSelected()
+                }.padding(vertical = layout.rowVerticalInset)) {
                 if (line is KaraokeLine && data.isVerbatim && focused && !theme.reduceMotion) {
                     val boundaries = remember(line) { line.syllables.map { readableGlyphOffsets(it.content) } }
                     val time = timeProvider()
@@ -275,21 +352,23 @@ private fun UpperLyrics(data: LyricData, positionProvider: () -> Long, active: B
                     Text(styled, style = style, color = theme.text)
                 } else Text(words, style = style, color = if (focused) theme.text else theme.secondary)
                 if (focused && (!translation.isNullOrBlank() || !phonetic.isNullOrBlank())) {
-                    Column(Modifier.padding(top = 5.dp, bottom = 13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.padding(top = layout.auxiliaryTopGap), verticalArrangement = Arrangement.spacedBy(layout.auxiliaryGap)) {
                         if (!translation.isNullOrBlank()) Text(translation, style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = theme.typography.lyricTranslation, lineHeight = 1.3.em, textDirection = TextDirection.Content), color = theme.secondary)
+                            fontSize = theme.typography.lyricTranslation, lineHeight = layout.lineHeight, textDirection = TextDirection.Content), color = theme.secondary)
                         if (!phonetic.isNullOrBlank()) Text(phonetic, style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 12.sp, lineHeight = 1.4.em, textDirection = TextDirection.Content), color = theme.secondary)
+                            fontSize = 12.sp, lineHeight = layout.lineHeight, textDirection = TextDirection.Content), color = theme.secondary)
                     }
                 }
                 if (focused && line is KaraokeLine.MainKaraokeLine) {
                     line.accompanimentLines.orEmpty().filter { backing ->
                         backing !in lines && timeProvider() in (backing.start - 600)..(backing.end + 600)
                     }.forEach { backing ->
-                        Text(backing.syllables.joinToString("") { it.content }, style = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = theme.typography.lyricAdjacent), color = theme.secondary)
-                        if (!backing.translation.isNullOrBlank()) Text(backing.translation!!, style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = theme.typography.lyricTranslation), color = theme.secondary)
+                        Column(Modifier.padding(top = layout.auxiliaryTopGap), verticalArrangement = Arrangement.spacedBy(layout.auxiliaryGap)) {
+                            Text(backing.syllables.joinToString("") { it.content }, style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = theme.typography.lyricAdjacent, lineHeight = layout.lineHeight), color = theme.secondary)
+                            if (!backing.translation.isNullOrBlank()) Text(backing.translation!!, style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = theme.typography.lyricTranslation, lineHeight = layout.lineHeight), color = theme.secondary)
+                        }
                     }
                 }
             }

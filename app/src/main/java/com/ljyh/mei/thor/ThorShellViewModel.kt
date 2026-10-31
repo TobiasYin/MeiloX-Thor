@@ -249,6 +249,15 @@ class ThorShellViewModel @Inject constructor(
         return true
     }
 
+    fun playFromLyric(positionMs: Long, expectedEntryId: String?) {
+        val current = playback.state.value
+        if (!current.connected || current.current == null || expectedEntryId.isNullOrBlank() ||
+            current.currentEntryId != expectedEntryId
+        ) return
+        cancelSeek()
+        playback.seekAndPlay(positionMs, expectedEntryId)
+    }
+
     fun handleShoulder(right: Boolean, phase: ThorShoulderPhase) {
         if (navigation.value.isRoot && menu.value == null && !textEditing.value) {
             if (phase == ThorShoulderPhase.Press) switchTab(if (right) 1 else -1)

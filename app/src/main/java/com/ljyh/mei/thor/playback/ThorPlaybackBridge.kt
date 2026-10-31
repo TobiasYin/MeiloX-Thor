@@ -167,7 +167,17 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     fun switchMode() { connection?.switchPlayMode(); refresh() }
     fun seek(positionMs: Long) {
         val duration = state.value.durationMs
-        connection?.player?.seekTo(positionMs.coerceIn(0, duration.coerceAtLeast(0)))
+        connection?.player?.seekTo(clampThorSeekPosition(positionMs, duration))
+        refresh()
+    }
+    fun seekAndPlay(positionMs: Long, expectedEntryId: String? = null) {
+        val player = connection?.player ?: return
+        val item = player.currentMediaItem ?: return
+        // The player may already have advanced before the published projection catches up.
+        if (expectedEntryId != null && (expectedEntryId.isBlank() || item.queueEntryId != expectedEntryId)) return
+        val duration = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+            ?: item.metadata?.duration?.takeIf { it > 0 } ?: 0L
+        player.seekAndPlayLyric(positionMs, duration)
         refresh()
     }
     fun startTimer(minutes: Int) { connection?.service?.sleepTimer?.start(minutes); refresh() }
@@ -266,6 +276,17 @@ class ThorPlaybackBridge(private val scope: CoroutineScope) : Player.Listener {
     }
 
     fun close() { attach(null); resetQueueActions() }
+}
+
+private fun clampThorSeekPosition(positionMs: Long, durationMs: Long): Long =
+    positionMs.coerceIn(0, durationMs.coerceAtLeast(0))
+
+/** An unknown duration must not turn every lyric line into a seek to the beginning. */
+@UnstableApi
+internal fun Player.seekAndPlayLyric(positionMs: Long, durationMs: Long) {
+    val target = if (durationMs > 0) clampThorSeekPosition(positionMs, durationMs) else positionMs.coerceAtLeast(0)
+    seekTo(target)
+    play()
 }
 
 private fun MediaItem.thorMetadata(): MediaMetadata = metadata ?: MediaMetadata(

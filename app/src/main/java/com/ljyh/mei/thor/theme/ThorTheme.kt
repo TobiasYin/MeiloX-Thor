@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.ljyh.mei.thor.model.ThorAppearance
 import com.ljyh.mei.thor.model.ThorPreferences
@@ -73,6 +74,7 @@ data class ThorThemeTokens(
     val reduceTransparency: Boolean = false,
     val bezel: Color = surface,
     val typography: ThorTypographyTokens = ThorTypographyTokens(),
+    val lyricLayout: ThorLyricLayoutTokens = ThorLyricLayoutTokens(),
 ) {
     val success: Color get() = accent
     val warning: Color get() = if (isDark) Color(0xFFF4C36B) else Color(0xFF815000)
@@ -351,6 +353,15 @@ fun thorThemeTokens(
         caseReflection = if (reduceTransparency) Color.Transparent else tokens.caseReflection,
     )
 }
+
+@Immutable
+data class ThorLyricLayoutTokens(
+    val rowGap: Dp = 16.dp,
+    val rowVerticalInset: Dp = 8.dp,
+    val auxiliaryTopGap: Dp = 8.dp,
+    val auxiliaryGap: Dp = 6.dp,
+    val lineHeight: androidx.compose.ui.unit.TextUnit = 1.5.em,
+)
 
 @Immutable
 data class ThorTypographyTokens(

@@ -19,6 +19,9 @@
       "lyricAdjacent": {"size": 19, "weight": 400},
       "lyricTranslation": {"size": 14, "weight": 400}
     },
+    "lyricLayout": {
+      "rowGap": 16, "rowVerticalInset": 8, "auxiliaryTopGap": 8, "auxiliaryGap": 6, "lineHeightEm": 1.5
+    },
     "motion": {
       "pressMs": 120, "surfaceMs": 180, "caseMs": 320, "menuEnterMs": 170,
       "blow": {
