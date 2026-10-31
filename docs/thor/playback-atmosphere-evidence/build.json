@@ -1,0 +1,30 @@
+{
+  "sourceCommit": "da9e5506761ee2951baecb156cb8419e53314a89",
+  "appId": "com.neoruaa.meilox",
+  "apk": "app/build/outputs/apk/debug/app-debug.apk",
+  "apkBytes": 74451927,
+  "apkSha256": "a63961e6440518480ba45a1afe9ebc41dfb6445438647b440c1d165c1e0a9770",
+  "installedApkSha256": "a63961e6440518480ba45a1afe9ebc41dfb6445438647b440c1d165c1e0a9770",
+  "avd": "thor_agent_dual_api36",
+  "adbSerial": "emulator-5560",
+  "adbServerPort": 5038,
+  "physicalDeviceTested": false,
+  "unitTests": {
+    "tests": 507,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "nativeTests": {
+    "tests": 24,
+    "failures": 0,
+    "durationSeconds": 121.999
+  },
+  "matrix": {
+    "materialPacks": 3,
+    "appearances": 2,
+    "backgroundModes": 3,
+    "renderedCombinations": 18,
+    "lyricZonePrimaryAndSecondaryTextMinimumContrast": 4.5
+  }
+}

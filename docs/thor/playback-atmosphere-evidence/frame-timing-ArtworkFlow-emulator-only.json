@@ -1,0 +1,58 @@
+{
+  "environment": "emulator-only",
+  "isPhysicalThorPerformanceResult": false,
+  "recordedAtUtc": "2026-10-31T08:32:30.965966Z",
+  "deviceModel": "sdk_gphone64_arm64",
+  "sdkInt": 36,
+  "frameDriver": "Production AndroidUiDispatcher\/Choreographer; ActivityScenario without ComposeTestRule",
+  "scene": "ThorUpperScreen + local PNG\/Coil palette extraction + CD case + ArtworkFlow + real SyncedLyrics",
+  "mode": "ArtworkFlow",
+  "theme": "Glass\/Night\/High",
+  "playing": true,
+  "reduceMotion": false,
+  "syntheticLyricPlaybackSpeed": 1.5,
+  "warmupMs": 1800,
+  "warmupFrameCallbacks": 55,
+  "sampleDurationMs": 5000,
+  "count": 190,
+  "droppedMetricsCallbacks": 0,
+  "droppedMetricsMeaning": "Undelivered metrics callbacks; not a count of missed display frames",
+  "totalDuration": {
+    "supportedSamples": 190,
+    "p50Ms": 70.967193,
+    "p95Ms": 83.438316,
+    "maxMs": 98.915107
+  },
+  "drawDuration": {
+    "supportedSamples": 190,
+    "p50Ms": 0.611958,
+    "p95Ms": 1.671792,
+    "maxMs": 12.461125
+  },
+  "gpuDuration": {
+    "supportedSamples": 190,
+    "p50Ms": 25.049333,
+    "p95Ms": 31.349958,
+    "maxMs": 38.0005
+  },
+  "syncDuration": {
+    "supportedSamples": 190,
+    "p50Ms": 0.031792,
+    "p95Ms": 0.16675,
+    "maxMs": 3.305416
+  },
+  "commandIssueDuration": {
+    "supportedSamples": 190,
+    "p50Ms": 1.499417,
+    "p95Ms": 17.538916,
+    "maxMs": 26.883458
+  },
+  "display": {
+    "displayId": 0,
+    "windowWidthPx": 1920,
+    "windowHeightPx": 1080,
+    "reportedRefreshRateHz": 60.000003814697266
+  },
+  "screenshot": "upper-frame-timing-ArtworkFlow-color-cover.png",
+  "scope": "Native emulator window timings only; no hardware FPS threshold or extrapolation"
+}
