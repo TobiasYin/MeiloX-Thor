@@ -205,6 +205,8 @@ internal fun thorPageActions(
             ThorPage.Appearance -> {
                 ThorThemePack.entries.forEach { pack -> action("theme:${pack.name}", "材质 · ${pack.title}") { vm.updatePreferences { it.copy(theme = pack) } } }
                 ThorAppearance.entries.forEach { appearance -> action("appearance:${appearance.name}", "显示模式 · ${appearance.title}") { vm.updatePreferences { it.copy(appearance = appearance) } } }
+                ThorBackgroundMode.entries.forEach { mode -> action("background:mode:${mode.name}", "播放背景 · ${mode.title}") { vm.updatePreferences { it.copy(backgroundMode = mode) } } }
+                ThorBackgroundIntensity.entries.forEach { intensity -> action("background:intensity:${intensity.name}", "背景强度 · ${intensity.title}", preferences.backgroundMode != ThorBackgroundMode.Clean) { vm.updatePreferences { it.copy(backgroundIntensity = intensity) } } }
                 action("appearance:motion", "减少动态 · ${if (preferences.reduceMotion) "开启" else "关闭"}") { vm.updatePreferences { it.copy(reduceMotion = !it.reduceMotion) } }
                 action("appearance:transparency", "减少透明 · ${if (preferences.reduceTransparency) "开启" else "关闭"}") { vm.updatePreferences { it.copy(reduceTransparency = !it.reduceTransparency) } }
             }

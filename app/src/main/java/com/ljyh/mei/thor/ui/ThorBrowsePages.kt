@@ -406,7 +406,10 @@ private fun ThorSearchPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, 
 private fun ThorAppearancePage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit) {
     val preferences by vm.preferences.collectAsStateWithLifecycle()
     BindThorOptionFocus(vm, registry, ThorThemePack.entries.map { "theme:${it.name}" } +
-        ThorAppearance.entries.map { "appearance:${it.name}" } + listOf("appearance:motion", "appearance:transparency"))
+        ThorAppearance.entries.map { "appearance:${it.name}" } +
+        ThorBackgroundMode.entries.map { "background:mode:${it.name}" } +
+        (if (preferences.backgroundMode != ThorBackgroundMode.Clean) ThorBackgroundIntensity.entries.map { "background:intensity:${it.name}" } else emptyList()) +
+        listOf("appearance:motion", "appearance:transparency"))
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "主题与外观", onBack = onBack)
         // A small fixed set stays composed, so native focus can reach its controls while scrolling.
@@ -425,6 +428,23 @@ private fun ThorAppearancePage(vm: ThorShellViewModel, registry: ThorFocusRegist
                     ThorButton(registry, "appearance:${appearance.name}", appearance.title, Modifier.weight(1f),
                         selected = preferences.appearance == appearance,
                         onClick = { vm.updatePreferences { it.copy(appearance = appearance) } })
+                }
+            }
+            Text("播放背景", color = LocalThorTheme.current.secondary, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThorBackgroundMode.entries.forEach { mode ->
+                    ThorButton(registry, "background:mode:${mode.name}", mode.title, Modifier.weight(1f),
+                        selected = preferences.backgroundMode == mode,
+                        onClick = { vm.updatePreferences { it.copy(backgroundMode = mode) } })
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("强度", color = LocalThorTheme.current.secondary, fontSize = 12.sp)
+                ThorBackgroundIntensity.entries.forEach { intensity ->
+                    ThorButton(registry, "background:intensity:${intensity.name}", intensity.title, Modifier.weight(1f),
+                        enabled = preferences.backgroundMode != ThorBackgroundMode.Clean,
+                        selected = preferences.backgroundIntensity == intensity,
+                        onClick = { vm.updatePreferences { it.copy(backgroundIntensity = intensity) } })
                 }
             }
             ThorButton(registry, "appearance:motion", "减少动态 · ${if (preferences.reduceMotion) "开启" else "关闭"}", Modifier.fillMaxWidth(),

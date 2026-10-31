@@ -99,9 +99,10 @@ fun ThorUpperScreen(
     visible: Boolean = true,
     onLyricSelected: (Long) -> Unit = {},
     playbackEntryId: String? = null,
+    backgroundPreview: Boolean = false,
 ) {
     ThorTheme(preferences) {
-        ThorUpperContent(item, playing, preferences, airflow, lyricData, positionProvider, onOpenPlayer, modifier, playbackScene, visible, onLyricSelected, playbackEntryId)
+        ThorUpperContent(item, playing, preferences, airflow, lyricData, positionProvider, onOpenPlayer, modifier, playbackScene, visible, onLyricSelected, playbackEntryId, backgroundPreview)
     }
 }
 
@@ -109,7 +110,7 @@ fun ThorUpperScreen(
 private fun ThorUpperContent(
     item: ThorItem?, playing: Boolean, preferences: ThorPreferences, airflow: Float,
     lyricData: LyricData?, positionProvider: () -> Long, onOpenPlayer: () -> Unit,
-    modifier: Modifier, playbackScene: Boolean, visible: Boolean, onLyricSelected: (Long) -> Unit, playbackEntryId: String?,
+    modifier: Modifier, playbackScene: Boolean, visible: Boolean, onLyricSelected: (Long) -> Unit, playbackEntryId: String?, backgroundPreview: Boolean,
 ) {
     val theme = LocalThorTheme.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -120,13 +121,17 @@ private fun ThorUpperContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val active = visible && started
-    var ambient by remember(item?.key?.stableId, item?.artworkUri) { mutableStateOf<CaseAmbientPalette?>(null) }
+    // Keep the visible palette while another cover decodes; the backdrop crossfades to its result.
+    var ambient by remember { mutableStateOf<CaseAmbientPalette?>(null) }
     val hasLyrics = playbackScene && lyricData != null && lyricData.source != LyricSource.Empty &&
         lyricData.source != LyricSource.Loading && !lyricData.isPureMusic && lyricData.lyricLine.lines.isNotEmpty() &&
         !remember(lyricData) { upperLyricsArePlaceholder(lyricData) }
     BoxWithConstraints(modifier.fillMaxSize().background(theme.background)) {
-        UpperAmbient(ambient ?: CaseAmbientPalette(theme.ambient, theme.ambient), active,
-            playbackScene && playing && !theme.reduceMotion, Modifier.fillMaxSize())
+        val palette = ambient.takeIf { item != null && item.key !is ThorItemKey.Destination }
+            ?: CaseAmbientPalette(theme.ambient, theme.ambient)
+        if (playbackScene || backgroundPreview) ThorPlaybackBackdrop(palette, active, playing || backgroundPreview, preferences,
+            Modifier.fillMaxSize().testTag("thor-playback-backdrop"))
+        else UpperAmbient(palette, active, false, Modifier.fillMaxSize())
         // Keep the approved cover rectangle; only the lyric column uses more vertical space.
         val screenHeight = maxHeight
         Row(Modifier.fillMaxSize().padding(horizontal = maxWidth * .04f),

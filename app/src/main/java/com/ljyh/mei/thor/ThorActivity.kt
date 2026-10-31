@@ -36,6 +36,7 @@ import com.ljyh.mei.thor.audio.*
 import com.ljyh.mei.thor.display.ThorDisplayHost
 import com.ljyh.mei.thor.model.toThorItem
 import com.ljyh.mei.thor.state.ThorOverlay
+import com.ljyh.mei.thor.state.ThorPage
 import com.ljyh.mei.thor.theme.ThorTheme
 import com.ljyh.mei.thor.ui.ThorCommandDispatcher
 import com.ljyh.mei.thor.ui.ThorLowerScreen
@@ -131,6 +132,7 @@ class ThorActivity : ComponentActivity() {
                         onOpenPlayer = viewModel::togglePlayer, playbackScene = playbackScene,
                         onLyricSelected = { position -> viewModel.playFromLyric(position, lyricEntryId) },
                         playbackEntryId = lyricEntryId,
+                        backgroundPreview = navigation.overlay == null && navigation.page == ThorPage.Appearance,
                         visible = upperDisplayOn,
                     )
                 } else LowerContent()

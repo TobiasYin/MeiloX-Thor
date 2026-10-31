@@ -99,6 +99,8 @@ data class ThorPreferences(
     val reduceMotion: Boolean = false,
     val reduceTransparency: Boolean = false,
     val airflowEnabled: Boolean = false,
+    val backgroundMode: ThorBackgroundMode = ThorBackgroundMode.ArtworkFlow,
+    val backgroundIntensity: ThorBackgroundIntensity = ThorBackgroundIntensity.Medium,
 )
 
 enum class ThorDirection { Up, Down, Left, Right }

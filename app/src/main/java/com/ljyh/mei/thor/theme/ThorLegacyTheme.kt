@@ -19,6 +19,8 @@ import com.ljyh.mei.constants.ReduceTransparencyKey
 import com.ljyh.mei.thor.model.ThorAppearance
 import com.ljyh.mei.thor.model.ThorPreferences
 import com.ljyh.mei.thor.model.ThorThemePack
+import com.ljyh.mei.thor.model.ThorBackgroundMode
+import com.ljyh.mei.thor.model.ThorBackgroundIntensity
 import com.ljyh.mei.ui.theme.MusicTheme
 import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlassColors
@@ -29,6 +31,8 @@ import io.github.neoruaa.glasmio.core.GlasmioTheme
 private val ThorThemeKey = stringPreferencesKey("thor.theme")
 private val ThorReduceMotionKey = booleanPreferencesKey("thor.reduceMotion")
 private val ThorAirflowKey = booleanPreferencesKey("thor.airflowEnabled")
+private val ThorBackgroundModeKey = stringPreferencesKey("thor.background.mode")
+private val ThorBackgroundIntensityKey = stringPreferencesKey("thor.background.intensity")
 
 internal val LocalThorLegacyMode = staticCompositionLocalOf { false }
 
@@ -43,6 +47,8 @@ internal fun decodeThorPreferences(preferences: Preferences) = ThorPreferences(
     reduceMotion = preferences[ThorReduceMotionKey] ?: false,
     reduceTransparency = preferences[ReduceTransparencyKey] ?: false,
     airflowEnabled = preferences[ThorAirflowKey] ?: false,
+    backgroundMode = ThorBackgroundMode.entries.firstOrNull { it.name == preferences[ThorBackgroundModeKey] } ?: ThorBackgroundMode.ArtworkFlow,
+    backgroundIntensity = ThorBackgroundIntensity.entries.firstOrNull { it.name == preferences[ThorBackgroundIntensityKey] } ?: ThorBackgroundIntensity.Medium,
 )
 
 /** Keep the ordinary client path intact; only a validated Thor route supplies preferences. */

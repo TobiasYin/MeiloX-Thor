@@ -69,6 +69,8 @@ import com.ljyh.mei.thor.theme.LocalThorTheme
 import com.ljyh.mei.thor.theme.ThorThemeTokens
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -77,7 +79,7 @@ import kotlin.math.sin
 import kotlin.math.exp
 
 /** Extracted once per decoded cover; never used as text or focus ink. */
-data class CaseAmbientPalette(val body: Color, val glow: Color)
+data class CaseAmbientPalette(val body: Color, val glow: Color, val accent: Color = glow)
 
 /** The caller controls visibility and airflow; this view never changes music selection or playback. */
 @Composable
@@ -104,6 +106,9 @@ fun ThorCdCase(
     val painter = remember { CdCasePainter() }
     val latestAmbient by rememberUpdatedState(onAmbientColor)
     val latestPalette by rememberUpdatedState(onAmbientPalette)
+    val paletteIdentity = Triple(artwork.key, artwork.frontUri, artwork.backUri)
+    val latestPaletteIdentity by rememberUpdatedState(paletteIdentity)
+    val latestPaletteContext by rememberUpdatedState(context)
     val latestAirflow by rememberUpdatedState(airflow)
     val diagnosticTimes = remember { longArrayOf(-500L, -500L) }
     val front = remember(artwork.frontUri, context) { mutableStateOf<Bitmap?>(null) }
@@ -146,7 +151,17 @@ fun ThorCdCase(
             entrance.animateTo(0f, tween(theme.caseMs))
         }
     }
-    LaunchedEffect(artwork.key, artwork.frontUri, artwork.backUri, context) {
+    LaunchedEffect(paletteIdentity, context) {
+        val requestedIdentity = paletteIdentity
+        suspend fun isCurrentRequest(): Boolean {
+            currentCoroutineContext().ensureActive()
+            return latestPaletteIdentity == requestedIdentity && latestPaletteContext === context
+        }
+        suspend fun publish(palette: CaseAmbientPalette) {
+            if (!isCurrentRequest()) return
+            latestAmbient(palette.body)
+            latestPalette(palette)
+        }
         suspend fun load(uri: String?): Bitmap? {
             if (uri.isNullOrBlank()) return null
             return try {
@@ -158,13 +173,16 @@ fun ThorCdCase(
                 throw cancel
             } catch (_: Exception) { null }
         }
-        front.value = load(artwork.frontUri)
-        front.value?.let { bitmap ->
-            val palette = withContext(Dispatchers.Default) { sampleArtworkPalette(bitmap) }
-            latestAmbient(palette.body)
-            latestPalette(palette)
-        }
-        back.value = if (artwork.backUri == artwork.frontUri) front.value else load(artwork.backUri) ?: front.value
+        // Keep the previous environment until a requested image is ready; failure uses neutral below.
+        val loadedFront = load(artwork.frontUri)
+        if (!isCurrentRequest()) return@LaunchedEffect
+        front.value = loadedFront
+        val palette = if (loadedFront != null) withContext(Dispatchers.Default) { sampleArtworkPalette(loadedFront) }
+            else ThorArtworkPalette.Neutral.asCaseAmbientPalette()
+        publish(palette)
+        if (!isCurrentRequest()) return@LaunchedEffect
+        val loadedBack = if (artwork.backUri == artwork.frontUri) loadedFront else load(artwork.backUri) ?: loadedFront
+        if (isCurrentRequest()) back.value = loadedBack
     }
     LaunchedEffect(active, airflow, theme.reduceMotion) {
         if (active) motion.setAirflow(airflow) else motion.pause()
@@ -297,25 +315,8 @@ fun ThorCdCase(
     }
 }
 
-private fun sampleArtworkPalette(bitmap: Bitmap): CaseAmbientPalette {
-    if (bitmap.isRecycled || bitmap.width == 0 || bitmap.height == 0) return CaseAmbientPalette(Color.Gray, Color.Gray)
-    var r = 0L; var g = 0L; var b = 0L; var count = 0
-    var brightR = 0L; var brightG = 0L; var brightB = 0L; var brightCount = 0
-    val stepX = (bitmap.width / 12).coerceAtLeast(1); val stepY = (bitmap.height / 12).coerceAtLeast(1)
-    for (y in 0 until bitmap.height step stepY) for (x in 0 until bitmap.width step stepX) {
-        val color = bitmap.getPixel(x, y)
-        if (android.graphics.Color.alpha(color) < 128) continue
-        val red = android.graphics.Color.red(color); val green = android.graphics.Color.green(color); val blue = android.graphics.Color.blue(color)
-        r += red; g += green; b += blue; count++
-        if ((red * 2126 + green * 7152 + blue * 722) / 10000 > 135) {
-            brightR += red; brightG += green; brightB += blue; brightCount++
-        }
-    }
-    if (count == 0) return CaseAmbientPalette(Color.Gray, Color.Gray)
-    val body = Color(android.graphics.Color.rgb((r / count).toInt(), (g / count).toInt(), (b / count).toInt()))
-    val glow = if (brightCount == 0) body else Color(android.graphics.Color.rgb((brightR / brightCount).toInt(), (brightG / brightCount).toInt(), (brightB / brightCount).toInt()))
-    return CaseAmbientPalette(body, glow)
-}
+private fun sampleArtworkPalette(bitmap: Bitmap): CaseAmbientPalette =
+    extractThorArtworkPalette(bitmap).asCaseAmbientPalette()
 
 private class CdCasePainter {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)

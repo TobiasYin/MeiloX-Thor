@@ -395,6 +395,8 @@ class ThorShellViewModel @Inject constructor(
                 prefs[ReduceMotionKey] = next.reduceMotion
                 prefs[ReduceTransparencyKey] = next.reduceTransparency
                 prefs[AirflowKey] = next.airflowEnabled
+                prefs[BackgroundModeKey] = next.backgroundMode.name
+                prefs[BackgroundIntensityKey] = next.backgroundIntensity.name
             }
         }
     }
@@ -640,5 +642,7 @@ class ThorShellViewModel @Inject constructor(
         val ThemeKey = stringPreferencesKey("thor.theme")
         val ReduceMotionKey = booleanPreferencesKey("thor.reduceMotion")
         val AirflowKey = booleanPreferencesKey("thor.airflowEnabled")
+        val BackgroundModeKey = stringPreferencesKey("thor.background.mode")
+        val BackgroundIntensityKey = stringPreferencesKey("thor.background.intensity")
     }
 }
