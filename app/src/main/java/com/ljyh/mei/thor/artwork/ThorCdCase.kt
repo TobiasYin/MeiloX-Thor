@@ -224,7 +224,9 @@ fun ThorCdCase(
                             if (!change.pressed) {
                                 change.consume()
                                 motion.endDrag((change.uptimeMillis - lastMove) / 1000.0)
-                                if (!dragged) motion.turn(1)
+                                // A held source resumes on release, including a short touch.
+                                // Do not replace it with a turn that clears the source request.
+                                if (!dragged && motion.phase != CaseMotionPhase.Airflow) motion.turn(1)
                                 released = true
                             } else {
                                 val total = change.position - down.position

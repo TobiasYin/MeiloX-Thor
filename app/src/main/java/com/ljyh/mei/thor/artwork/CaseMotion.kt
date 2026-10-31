@@ -46,7 +46,8 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
         private set
     var reducedMotion: Boolean = false
         private set
-    private var input = 0.0
+    // Source intent survives touch ownership; pause/reduced motion explicitly discard it.
+    private var requestedAirflow = 0.0
     private var filtered = 0.0
     private var reducedDragTravel = 0.0
 
@@ -60,16 +61,13 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
     }
 
     fun setAirflow(strength: Float) {
-        if (phase == CaseMotionPhase.Dragging || reducedMotion) return
-        input = if (strength.isFinite()) strength.toDouble().coerceIn(0.0, 1.0) else 0.0
-        if (input > 0.0) {
-            phase = CaseMotionPhase.Airflow
-            velocity = velocity.coerceAtLeast(0.0)
-        }
+        if (reducedMotion) return
+        requestedAirflow = if (strength.isFinite()) strength.toDouble().coerceIn(0.0, 1.0) else 0.0
+        if (phase == CaseMotionPhase.Dragging) return
+        if (requestedAirflow > 0.0) resumeAirflow()
     }
 
     fun beginDrag() {
-        input = 0.0
         filtered = 0.0
         velocity = 0.0
         reducedDragTravel = 0.0
@@ -102,12 +100,12 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
     fun endDrag(secondsSinceLastMove: Double = 0.0) {
         if (phase != CaseMotionPhase.Dragging) return
         if (secondsSinceLastMove > .09) velocity = 0.0
-        settle()
+        if (!reducedMotion && requestedAirflow > 0.0) resumeAirflow() else settle()
     }
 
     fun turn(direction: Int) {
         if (direction == 0) return
-        input = 0.0
+        requestedAirflow = 0.0
         filtered = 0.0
         target = nearestFace(angle) + if (direction > 0) 180.0 else -180.0
         velocity = if (direction > 0) 150.0 else -150.0
@@ -117,7 +115,7 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
 
     /** Stop hidden/background work without retaining microphone input or drag ownership. */
     fun pause() {
-        input = 0.0
+        requestedAirflow = 0.0
         filtered = 0.0
         target = nearestFace(angle)
         snap()
@@ -131,13 +129,14 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
         if (lift < .001 && phase != CaseMotionPhase.Dragging) lift = 0.0
         when (phase) {
             CaseMotionPhase.Airflow -> {
-                filtered += (input - filtered) * response(dt, if (input > filtered) config.inputAttackSeconds else config.inputReleaseSeconds)
+                filtered += (requestedAirflow - filtered) * response(dt, if (requestedAirflow > filtered) config.inputAttackSeconds else config.inputReleaseSeconds)
                 val requestedSpeed = config.maximumSpeed * filtered.pow(config.strengthExponent)
                 velocity += (requestedSpeed - velocity) * response(dt, if (requestedSpeed > velocity) config.accelerationSeconds else config.decelerationSeconds)
                 // The airflow source can never reverse the model or select a music item.
                 velocity = velocity.coerceAtLeast(0.0)
                 angle += velocity * dt
-                if (input == 0.0 && filtered < .03) settle()
+                pitch += (6.0 - pitch) * response(dt, .15)
+                if (requestedAirflow == 0.0 && filtered < .03) settle()
             }
             CaseMotionPhase.Settling -> {
                 velocity += (config.settleOmega * config.settleOmega * (target - angle) - config.settleDamping * velocity) * dt
@@ -151,11 +150,17 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
     }
 
     private fun settle() {
-        input = 0.0
+        requestedAirflow = 0.0
         filtered = 0.0
         target = nearestFace(angle + velocity * config.momentumProjectionSeconds)
         phase = CaseMotionPhase.Settling
         if (reducedMotion) snap()
+    }
+
+    private fun resumeAirflow() {
+        phase = CaseMotionPhase.Airflow
+        // A quick touch drag can reach 900°/s; airflow always resumes within its own 600°/s cap.
+        velocity = velocity.coerceIn(0.0, config.maximumSpeed)
     }
 
     private fun nearestFace(value: Double) = round((value - config.restDegrees) / 180.0) * 180.0 + config.restDegrees

@@ -9,8 +9,12 @@ data class ThorAirflowCalibration(
     val strongRms: Float = .16f,
 ) {
     val isValid: Boolean get() = noiseFloorRms.isFinite() && gentleRms.isFinite() && strongRms.isFinite() &&
-        noiseFloorRms in 0f..0.8f && gentleRms > noiseFloorRms && strongRms > gentleRms && strongRms <= 1f
+        noiseFloorRms in 0f..0.8f && gentleRms > airflowNoiseGate(noiseFloorRms) &&
+        strongRms > gentleRms && strongRms <= 1f
 }
+
+/** The floor follows the microphone gain; quiet calibration can support a low-gain input. */
+internal fun airflowNoiseGate(noise: Float): Float = maxOf(noise * 2.5f, noise + .0005f)
 
 enum class ThorAirflowCalibrationStep { Quiet, Gentle, Strong }
 enum class ThorAirflowStatus { Stopped, Listening, Calibrating, PermissionRequired, Unavailable }
@@ -20,6 +24,11 @@ internal data class AirflowReading(
     val calibration: ThorAirflowCalibration,
     val step: ThorAirflowCalibrationStep?,
     val progress: Float,
+    val rms: Float = 0f,
+    val gate: Float = 0f,
+    val crest: Float = 0f,
+    val calibrationAccepted: Boolean? = null,
+    val calibrationError: String? = null,
 )
 
 /** Bounded, local energy/noise gate, not a claim to classify breath independently of every sound. */
@@ -67,40 +76,53 @@ internal class ThorAirflowDetector {
             peak = maxOf(peak, abs(sample))
         }
         val rms = sqrt(energy / size).toFloat()
+        val crest = (peak / maxOf(rms.toDouble(), .00001)).toFloat()
         val activeStep = step
         if (activeStep != null) {
             // Cap storage even if a device delivers unusually small read buffers.
             if (calibrationSamples.size < 512) calibrationSamples += rms
             val progress = ((nowMs - startedAt).toFloat() / calibrationDurationMs).coerceIn(0f, 1f)
-            if (progress >= 1f) finishCalibration(activeStep)
-            return AirflowReading(0f, calibration, step, progress)
+            val error = if (progress >= 1f) finishCalibration(activeStep) else null
+            return AirflowReading(0f, calibration, step, progress, rms, airflowNoiseGate(calibration.noiseFloorRms),
+                crest, if (progress >= 1f) error == null else null, error)
         }
-        val gate = maxOf(calibration.noiseFloorRms * 2.5f, calibration.noiseFloorRms + .006f)
+        val gate = airflowNoiseGate(calibration.noiseFloorRms)
         // Isolated clicks and an unchanging DC offset cannot rotate the artwork.
-        val sustainedCandidate = rms > gate && peak / maxOf(rms.toDouble(), .00001) < 12.0
+        val sustainedCandidate = rms > gate && crest < 12f
         if (!sustainedCandidate) candidateAt = null else if (candidateAt == null) candidateAt = nowMs
         val sustained = candidateAt?.let { nowMs - it >= 60L } == true
-        val gentle = maxOf(calibration.gentleRms, gate + .008f)
-        val strong = maxOf(calibration.strongRms, gentle + .015f)
+        val gentle = maxOf(calibration.gentleRms, gate + .0005f)
+        val strong = maxOf(calibration.strongRms, gentle + .001f)
         val intensity = if (!sustained) 0f else if (rms <= gentle) {
             .35f * (rms - gate) / (gentle - gate)
         } else .35f + .65f * (rms - gentle) / (strong - gentle)
-        return AirflowReading(intensity.coerceIn(0f, 1f), calibration, null, 0f)
+        return AirflowReading(intensity.coerceIn(0f, 1f), calibration, null, 0f, rms, gate, crest)
     }
 
-    private fun finishCalibration(finishedStep: ThorAirflowCalibrationStep) {
+    private fun finishCalibration(finishedStep: ThorAirflowCalibrationStep): String? {
         val sorted = calibrationSamples.sorted()
         val measured = sorted.getOrNull(((sorted.size - 1) * .85f).toInt().coerceAtLeast(0)) ?: 0f
         val noise = when (finishedStep) {
             ThorAirflowCalibrationStep.Quiet -> (measured * 1.12f).coerceIn(.0001f, .45f)
             else -> calibration.noiseFloorRms
         }
-        val gate = maxOf(noise * 2.5f, noise + .006f)
+        val gate = airflowNoiseGate(noise)
+        if (finishedStep == ThorAirflowCalibrationStep.Gentle && measured <= gate + .0005f) {
+            cancel()
+            return "未检测到轻吹，请对准麦克风重试"
+        }
+        if (finishedStep == ThorAirflowCalibrationStep.Strong && measured <= calibration.gentleRms + .001f) {
+            cancel()
+            return "力度不足，请用力吹后重试"
+        }
         val gentle = (if (finishedStep == ThorAirflowCalibrationStep.Gentle) measured else calibration.gentleRms)
-            .coerceIn((gate + .008f).coerceAtMost(.9f), .92f)
+            .coerceIn((gate + .0005f).coerceAtMost(.9f), .92f)
         val strong = (if (finishedStep == ThorAirflowCalibrationStep.Strong) measured else calibration.strongRms)
-            .coerceIn((gentle + .02f).coerceAtMost(.96f), 1f)
-        calibration = ThorAirflowCalibration(noise, gentle, strong)
+            .coerceIn((gentle + .001f).coerceAtMost(.96f), 1f)
+        val candidate = ThorAirflowCalibration(noise, gentle, strong)
         cancel()
+        if (!candidate.isValid) return "环境声音过大，请保持安静后重试"
+        calibration = candidate
+        return null
     }
 }

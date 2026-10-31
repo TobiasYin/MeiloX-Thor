@@ -9,6 +9,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.SystemClock
 import android.util.Log
+import com.ljyh.mei.BuildConfig
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.Closeable
+import java.util.Locale
 
 /**
  * Off until the Activity explicitly calls start after permission and user opt-in.
@@ -49,16 +51,19 @@ class ThorAirflowSource(
     private val mutableCalibration = MutableStateFlow(ThorAirflowCalibration())
     private val mutableStep = MutableStateFlow<ThorAirflowCalibrationStep?>(null)
     private val mutableProgress = MutableStateFlow(0f)
+    private val mutableNextStep = MutableStateFlow(ThorAirflowCalibrationStep.Quiet)
+    private val mutableCalibrationFeedback = MutableStateFlow<String?>(null)
     val strength: StateFlow<Float> = mutableStrength.asStateFlow()
     val status: StateFlow<ThorAirflowStatus> = mutableStatus.asStateFlow()
     val error: StateFlow<String?> = mutableError.asStateFlow()
     val calibration: StateFlow<ThorAirflowCalibration> = mutableCalibration.asStateFlow()
     val calibrationStep: StateFlow<ThorAirflowCalibrationStep?> = mutableStep.asStateFlow()
     val calibrationProgress: StateFlow<Float> = mutableProgress.asStateFlow()
+    val nextCalibrationStep: StateFlow<ThorAirflowCalibrationStep> = mutableNextStep.asStateFlow()
+    val calibrationFeedback: StateFlow<String?> = mutableCalibrationFeedback.asStateFlow()
     @Volatile private var recording: AudioRecord? = null
     private var reader: Job? = null
     private var closed = false
-    @Volatile private var calibrated = false
     @Volatile private var calibrationRevision = 0
     private var persistenceJob: Job? = null
 
@@ -72,7 +77,6 @@ class ThorAirflowSource(
                     if (!closed && calibrationRevision == 0 && saved != null) {
                         synchronized(signalLock) { detector.applyCalibration(saved) }
                         mutableCalibration.value = saved
-                        calibrated = true
                     }
                 }
             } catch (error: Exception) {
@@ -113,13 +117,13 @@ class ThorAirflowSource(
             check(prepared.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "麦克风未开始采集" }
             recording = prepared
             mutableError.value = null
+            mutableCalibrationFeedback.value = null
             mutableStatus.value = ThorAirflowStatus.Listening
             val current = prepared
             val job = scope.launch {
                 calibrationRestored.await()
-                synchronized(this@ThorAirflowSource) {
-                    if (recording === current && !calibrated && mutableStep.value == null) calibrate(ThorAirflowCalibrationStep.Quiet)
-                }
+                // Enabling is immediately usable. Calibration starts only on an explicit action;
+                // otherwise the user's first blow could be permanently learned as ambient noise.
                 read(current)
             }
             reader = job
@@ -148,6 +152,7 @@ class ThorAirflowSource(
         mutableStrength.value = 0f
         mutableStep.value = null
         mutableProgress.value = 0f
+        mutableCalibrationFeedback.value = null
         mutableStatus.value = ThorAirflowStatus.Stopped
     }
 
@@ -161,6 +166,7 @@ class ThorAirflowSource(
         mutableStrength.value = 0f
         mutableStep.value = step
         mutableProgress.value = 0f
+        mutableCalibrationFeedback.value = null
         mutableStatus.value = ThorAirflowStatus.Calibrating
         return true
     }
@@ -172,7 +178,6 @@ class ThorAirflowSource(
             detector.applyCalibration(value).also { if (it) calibrationRevision++ }
         }
         if (accepted) {
-            calibrated = true
             mutableCalibration.value = value
             mutableStep.value = null
             mutableProgress.value = 0f
@@ -199,6 +204,7 @@ class ThorAirflowSource(
 
     private suspend fun read(current: AudioRecord) {
         val samples = ShortArray(FRAME_SAMPLES)
+        var lastDiagnosticMs = 0L
         try {
             while (scope.isActive && recording === current) {
                 val count = current.read(samples, 0, samples.size, AudioRecord.READ_BLOCKING)
@@ -223,17 +229,29 @@ class ThorAirflowSource(
                 }
                 synchronized(this@ThorAirflowSource) {
                     if (recording === current && calibrationRevision == revision) {
+                        val completedStep = mutableStep.value
                         mutableStrength.value = reading.strength
                         mutableCalibration.value = reading.calibration
                         mutableStep.value = reading.step
                         mutableProgress.value = reading.progress
                         mutableStatus.value = if (reading.step == null) ThorAirflowStatus.Listening else ThorAirflowStatus.Calibrating
                         mutableError.value = null
-                        if (reading.progress >= 1f) {
-                            calibrated = true
+                        if (reading.calibrationAccepted == true) {
                             persistCalibration(reading.calibration)
+                            if (completedStep != null) mutableNextStep.value =
+                                ThorAirflowCalibrationStep.entries[(completedStep.ordinal + 1) % ThorAirflowCalibrationStep.entries.size]
                         }
+                        reading.calibrationError?.let { mutableCalibrationFeedback.value = it }
                     }
+                }
+                val now = SystemClock.elapsedRealtime()
+                if (BuildConfig.DEBUG && now - lastDiagnosticMs >= 200) {
+                    lastDiagnosticMs = now
+                    // Scalars only: no PCM, speech, device address, or account information.
+                    Log.d("ThorAirflowSignal", String.format(Locale.US,
+                        "rms=%.6f gate=%.6f crest=%.2f strength=%.3f source=%d route=%d step=%s",
+                        reading.rms, reading.gate, reading.crest, reading.strength,
+                        current.audioSource, current.routedDevice?.type ?: 0, reading.step?.name ?: "none"))
                 }
             }
         } catch (error: Exception) {

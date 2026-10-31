@@ -61,7 +61,6 @@ class ThorActivity : ComponentActivity() {
     private var connectionJob: Job? = null
     private var legacyActive by mutableStateOf(false)
     private var legacyLaunchedAt = 0L
-    private var calibrationStep = 0
 
     private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) setAirflowEnabled(true)
@@ -138,16 +137,28 @@ class ThorActivity : ComponentActivity() {
         val status by airflow.status.collectAsStateWithLifecycle()
         val error by airflow.error.collectAsStateWithLifecycle()
         val step by airflow.calibrationStep.collectAsStateWithLifecycle()
+        val nextStep by airflow.nextCalibrationStep.collectAsStateWithLifecycle()
+        val strength by airflow.strength.collectAsStateWithLifecycle()
+        val progress by airflow.calibrationProgress.collectAsStateWithLifecycle()
+        val calibrationFeedback by airflow.calibrationFeedback.collectAsStateWithLifecycle()
         val scan by localLibrary.scanState.collectAsStateWithLifecycle()
         ThorTheme(preferences) {
             ThorLowerScreen(viewModel, commands, ::finish, ::openLegacy, ::requestAirflow, ::calibrate,
-                airflowStatus = error ?: when {
+                airflowStatus = error ?: calibrationFeedback ?: when {
                     step == ThorAirflowCalibrationStep.Quiet -> "保持安静"
                     step == ThorAirflowCalibrationStep.Gentle -> "轻吹麦克风"
                     step == ThorAirflowCalibrationStep.Strong -> "用力吹麦克风"
-                    status == ThorAirflowStatus.Listening -> "已就绪"
+                    preferences.airflowEnabled && preferences.reduceMotion -> "减少动态已开启"
+                    status == ThorAirflowStatus.Listening -> "等待吹气"
                     else -> ""
-                }, isScanning = scan.isScanning)
+                }, isScanning = scan.isScanning,
+                airflowStrength = strength,
+                airflowCalibrationProgress = if (step != null) progress else 0f,
+                airflowCalibrationLabel = when (step ?: nextStep) {
+                    ThorAirflowCalibrationStep.Quiet -> "安静校准"
+                    ThorAirflowCalibrationStep.Gentle -> "轻吹校准"
+                    ThorAirflowCalibrationStep.Strong -> "强吹校准"
+                })
         }
     }
 
@@ -166,6 +177,11 @@ class ThorActivity : ComponentActivity() {
         hideSystemBars()
         recoverAbandonedLegacy()
         if (!legacyActive && ::displayHost.isInitialized) resumeThor()
+    }
+    override fun onPause() {
+        if (::displayHost.isInitialized) displayHost.inputRouter.reset()
+        viewModel.cancelSeek()
+        super.onPause()
     }
     override fun onStop() {
         viewModel.playback.setVisible(false)
@@ -231,8 +247,7 @@ class ThorActivity : ComponentActivity() {
     }
     private fun calibrate() {
         if (airflow.calibrationStep.value != null) return
-        val steps = ThorAirflowCalibrationStep.entries
-        if (airflow.calibrate(steps[calibrationStep.mod(steps.size)])) calibrationStep++
+        airflow.calibrate(airflow.nextCalibrationStep.value)
     }
     private fun openLegacy(route: String) {
         if (route == "local_music") {

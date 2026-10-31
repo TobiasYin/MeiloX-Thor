@@ -89,4 +89,50 @@ class ThorAirflowDetectorTest {
         assertNull(restored.step)
         assertEquals(0f, restored.strength, 0f)
     }
+
+    @Test fun unreachableNoiseGateIsNotAValidStoredCalibration() {
+        assertNull(storedAirflowCalibration(.4f, .9f, .99f))
+        assertNull(storedAirflowCalibration(.03f, .05f, .2f))
+    }
+
+    @Test fun anOverloadedQuietSampleKeepsThePreviousCalibrationAndCanBeRetried() {
+        val detector = ThorAirflowDetector()
+        val previous = detector.calibration
+        detector.calibrate(ThorAirflowCalibrationStep.Quiet, 0, 500)
+        detector.process(sound(.95f), 640, 0)
+        val rejected = detector.process(sound(.95f), 640, 500)
+        assertEquals(false, rejected.calibrationAccepted)
+        assertNotNull(rejected.calibrationError)
+        assertEquals(previous, rejected.calibration)
+        assertNull(rejected.step)
+        detector.calibrate(ThorAirflowCalibrationStep.Quiet, 600, 500)
+        detector.process(sound(.0002f), 640, 600)
+        val accepted = detector.process(sound(.0002f), 640, 1_100)
+        assertEquals(true, accepted.calibrationAccepted)
+        assertTrue(accepted.calibration.isValid)
+    }
+
+    @Test fun aCalibratedLowGainMicrophoneCanReachFullStrength() {
+        val detector = ThorAirflowDetector()
+        assertTrue(detector.applyCalibration(ThorAirflowCalibration(.0001f, .002f, .006f)))
+        detector.process(sound(.01f), 640, 0)
+        val blow = detector.process(sound(.01f), 640, 80)
+        assertEquals(1f, blow.strength, .001f)
+        assertTrue(blow.rms > blow.gate)
+        assertEquals(0f, detector.process(ShortArray(640), 640, 120).strength, 0f)
+    }
+
+    @Test fun missingGentleOrStrongInputDoesNotInventCalibrationValues() {
+        val detector = ThorAirflowDetector()
+        val before = detector.calibration
+        for ((index, step) in listOf(ThorAirflowCalibrationStep.Gentle, ThorAirflowCalibrationStep.Strong).withIndex()) {
+            val start = index * 600L
+            detector.calibrate(step, start, 500)
+            detector.process(ShortArray(640), 640, start)
+            val result = detector.process(ShortArray(640), 640, start + 500)
+            assertEquals(false, result.calibrationAccepted)
+            assertEquals(before, result.calibration)
+            assertNotNull(result.calibrationError)
+        }
+    }
 }
