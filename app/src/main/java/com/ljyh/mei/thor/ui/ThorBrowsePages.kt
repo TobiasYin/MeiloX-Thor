@@ -13,23 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.ljyh.mei.thor.ThorShellViewModel
@@ -364,39 +351,14 @@ private fun ThorMyPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, libr
 private fun ThorSearchPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit, pageActions: ThorPageActionBindings?) {
     val search by vm.search.collectAsStateWithLifecycle()
     val searchEntry by vm.searchEntry.collectAsStateWithLifecycle()
-    var fieldFocused by remember { mutableStateOf(false) }
-    val fieldRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-    val keyboard = LocalSoftwareKeyboardController.current
-    val submitSearch: () -> Unit = {
-        vm.search()
-        focusManager.clearFocus(force = true)
-        keyboard?.hide()
-    }
-    BindThorPageAction(pageActions, "search:edit") {
-        fieldRequester.requestFocus()
-        keyboard?.show()
-    }
-    BindThorPageAction(pageActions, "search:submit", submitSearch)
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "搜索", onBack = onBack)
-        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BasicTextField(
-                search.query, vm::setSearchQuery, Modifier.weight(1f).heightIn(min = 48.dp)
-                    .focusRequester(fieldRequester)
-                    .onFocusChanged { fieldFocused = it.isFocused; vm.textEditing.value = it.isFocused }
-                    .semantics { contentDescription = "搜索音乐" }
-                    .thorMaterial(ThorSurfaceRole.Inset, focused = fieldFocused).padding(horizontal = 12.dp, vertical = 12.dp),
-                singleLine = true, textStyle = TextStyle(color = LocalThorTheme.current.text, fontSize = 14.sp, lineHeight = 20.sp),
-                cursorBrush = SolidColor(LocalThorTheme.current.accent),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
-                decorationBox = { field -> Box { if (search.query.isEmpty()) Text("歌曲、专辑、歌单", color = LocalThorTheme.current.secondary, fontSize = 14.sp); field() } },
-            )
-            ThorButton(registry, "search:submit", "搜索", primary = true, onClick = submitSearch)
-        }
+        ThorSearchInput(search.query, search.loading, registry, pageActions,
+            onQueryChange = vm::setSearchQuery, onSubmit = { vm.search(it) },
+            onEditingChange = { vm.textEditing.value = it })
         if (search.items.isNotEmpty()) ThorBrowseList(vm, registry, "search:results:$searchEntry", search.items, Modifier.weight(1f))
         else ThorEmptyState(vm, registry, search.error ?: when { search.loading -> "正在搜索"; search.searched -> "没有找到相关音乐"; else -> "" },
-            if (search.error != null) "重试" else null, vm::search, Modifier.weight(1f), search.loading)
+            if (search.error != null) "重试" else null, { vm.search() }, Modifier.weight(1f), search.loading)
     }
     DisposableEffect(Unit) { onDispose { vm.textEditing.value = false } }
 }

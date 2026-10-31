@@ -33,8 +33,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import java.util.concurrent.atomic.AtomicLong
 
-data class ThorNotice(val message: String, val undoToken: String? = null, val success: Boolean = true)
+private val thorNoticeIds = AtomicLong()
+data class ThorNotice(val message: String, val undoToken: String? = null, val success: Boolean = true,
+    val id: Long = thorNoticeIds.incrementAndGet())
 data class ThorSearchState(val query: String = "", val items: List<ThorItem> = emptyList(), val loading: Boolean = false, val error: String? = null, val searched: Boolean = false)
 
 /** Screen-independent navigation and management. Neither composition owns business state. */
@@ -73,6 +76,7 @@ class ThorShellViewModel @Inject constructor(
     private val mutableSearchEntry = MutableStateFlow(0L)
     val searchEntry = mutableSearchEntry.asStateFlow()
     private var searchJob: Job? = null
+    private var searchRequestGeneration = 0L
     private var detailJob: Job? = null
     private var detailGeneration = 0L
     private var playRequestGeneration = 0L
@@ -155,6 +159,7 @@ class ThorShellViewModel @Inject constructor(
     fun preview(item: ThorItem) { mutablePreview.value = item }
     fun clearPreview() { mutablePreview.value = null }
     fun clearNotice() { mutableNotice.value = null }
+    fun clearNoticeIfCurrent(id: Long) { mutableNotice.update { current -> current?.takeUnless { it.id == id } } }
     fun showMessage(message: String, success: Boolean = true) { mutableNotice.value = ThorNotice(message, success = success) }
     fun refresh(collection: ThorCollection? = null) = repository.refresh(collection)
 
@@ -204,6 +209,7 @@ class ThorShellViewModel @Inject constructor(
         menuGeneration++
         mutablePreview.value = null
         mutableSearch.value = ThorSearchState()
+        searchRequestGeneration++
         searchJob?.cancel()
         detailJob?.cancel()
         detailGeneration++
@@ -302,7 +308,7 @@ class ThorShellViewModel @Inject constructor(
                     }
                 }
             }
-            is ThorItemKey.QueueEntry -> playback.select(key.entryId)
+            is ThorItemKey.QueueEntry -> selectQueueEntry(key.entryId)
             is ThorItemKey.Destination -> Unit
             else -> {
                 push(ThorPage.Detail(item))
@@ -327,7 +333,21 @@ class ThorShellViewModel @Inject constructor(
 
     fun play(tracks: List<MediaMetadata>, index: Int = 0, title: String = "播放列表", shuffle: Boolean? = null) {
         playRequestGeneration++
-        if (!playback.play(tracks, index, title, shuffle)) showMessage(if (tracks.isEmpty()) "没有可播放的歌曲" else "播放器正在连接，请稍后重试", false)
+        if (playback.play(tracks, index, title, shuffle)) showPlayer()
+        else showMessage(if (tracks.isEmpty()) "没有可播放的歌曲" else "播放器正在连接，请稍后重试", false)
+    }
+
+    fun selectQueueEntry(entryId: String): Boolean {
+        val current = playback.state.value
+        if (!current.connected) { showMessage("播放器正在连接，请稍后重试", false); return false }
+        if (entryId.isBlank() || current.queue.none { it.entryId == entryId }) {
+            showMessage("队列已更新，请重新选择", false)
+            return false
+        }
+        playback.select(entryId)
+        // QuickPlayerHistory collapses Q/P into one player while retaining the browsing return.
+        showPlayer()
+        return true
     }
 
     fun playPage(shuffle: Boolean): Boolean {
@@ -369,20 +389,31 @@ class ThorShellViewModel @Inject constructor(
         }
     }
 
-    fun setSearchQuery(query: String) { mutableSearch.value = search.value.copy(query = query) }
-    fun search() {
-        val query = search.value.query.trim()
-        if (query.isEmpty()) return
+    fun setSearchQuery(query: String) {
+        if (query == search.value.query) return
+        searchRequestGeneration++
+        searchJob?.cancel()
+        mutableSearch.value = search.value.copy(query = query, loading = false, error = null)
+    }
+    fun search(query: String = search.value.query) {
+        val submitted = query.trim()
+        if (submitted.isEmpty()) return
         freshScene("search")
         mutableSearchEntry.value++
+        val generation = ++searchRequestGeneration
+        val accountGeneration = library.value.account.generation
         searchJob?.cancel()
+        mutableSearch.value = ThorSearchState(query = submitted, loading = true, searched = true)
         searchJob = viewModelScope.launch {
-            mutableSearch.value = search.value.copy(items = emptyList(), loading = true, error = null, searched = true)
             try {
-                val items = repository.search(query)
-                mutableSearch.value = ThorSearchState(query, items, searched = true)
+                val items = repository.search(submitted)
+                if (generation == searchRequestGeneration && accountGeneration == library.value.account.generation)
+                    mutableSearch.value = ThorSearchState(submitted, items, searched = true)
             } catch (cancellation: CancellationException) { throw cancellation }
-            catch (error: Exception) { mutableSearch.value = ThorSearchState(query, error = error.message ?: "搜索失败", searched = true) }
+            catch (error: Exception) {
+                if (generation == searchRequestGeneration && accountGeneration == library.value.account.generation)
+                    mutableSearch.value = ThorSearchState(submitted, error = error.message ?: "搜索失败", searched = true)
+            }
         }
     }
 

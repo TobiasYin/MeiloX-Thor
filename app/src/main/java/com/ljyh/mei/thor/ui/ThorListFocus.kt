@@ -1,5 +1,6 @@
 package com.ljyh.mei.thor.ui
 
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -87,30 +88,55 @@ internal fun BindThorListFocus(
         memory.preview(items.getOrNull(index))
     }
 
+    fun rememberViewport() {
+        currentKeys.getOrNull(listState.firstVisibleItemIndex)?.let { firstKey ->
+            memory.saveScroll(scene, firstKey, listState.firstVisibleItemScrollOffset)
+        }
+    }
+
     fun activate(index: Int) {
         if (index !in keys.indices || registry.blocked) return
+        registry.select(keys[index])
         rememberSelection(index)
+        // Navigation may replace the list immediately. Persist before invoking its action,
+        // rather than depending on a later focus effect or SaveableStateProvider disposal.
+        rememberViewport()
         onActivate(index)
     }
 
-    fun requestItem(index: Int) {
+    fun requestItem(index: Int, preserveViewportOnFocus: Boolean = false) {
         val key = keys.getOrNull(index) ?: return
         if (registry.blocked || !registry.isAllowed(key)) return
         // Freeze identity/action before an offscreen row exists. Confirm never uses an old row.
         if (!registry.prepareFocus(owner, key, items.getOrNull(index)) { activate(index) }) return
         rememberSelection(index)
-        focusJob?.cancel()
+        val previous = focusJob
+        previous?.cancel()
         focusJob = coroutineScope.launch {
+            // A new direction must wait for a cancelled restore's scroll mutex to be released.
+            previous?.join()
             val layout = listState.layoutInfo
-            if (layout.visibleItemsInfo.none { it.index == index }) {
+            val alreadyVisible = layout.visibleItemsInfo.any { it.index == index }
+            if (!alreadyVisible) {
                 val viewport = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(0)
                 val rowHeight = layout.visibleItemsInfo.lastOrNull()?.size ?: fallbackRowHeightPx
                 val movingDown = index > listState.firstVisibleItemIndex
                 listState.scrollToItem(index, if (movingDown) -(viewport - rowHeight).coerceAtLeast(0) else 0)
             }
-            snapshotFlow { registry.contains(key) }.first { it }
-            withFrameNanos { }
-            if (registry.selectedKey == key && currentKeys.contains(key)) registry.request(key)
+            suspend fun focusRealizedRow() {
+                snapshotFlow { registry.contains(key) }.first { it }
+                withFrameNanos { }
+                if (registry.selectedKey == key && currentKeys.contains(key)) registry.request(key)
+            }
+            if (preserveViewportOnFocus && alreadyVisible) {
+                // Restoring a partially clipped row must not let Focusable's default
+                // BringIntoView scroll replace the saved pixel offset. This transaction
+                // covers focus/layout delivery only; ordinary direction requests stay normal.
+                listState.scroll(MutatePriority.PreventUserInput) {
+                    focusRealizedRow()
+                    repeat(2) { withFrameNanos { } }
+                }
+            } else focusRealizedRow()
         }
     }
 
@@ -128,9 +154,7 @@ internal fun BindThorListFocus(
 
     DisposableEffect(owner) {
         onDispose {
-            currentKeys.getOrNull(listState.firstVisibleItemIndex)?.let { firstKey ->
-                memory.saveScroll(scene, firstKey, listState.firstVisibleItemScrollOffset)
-            }
+            rememberViewport()
             registry.selectedKey?.takeIf(currentKeys::contains)?.let { memory.saveFocus(scene, it) }
             focusJob?.cancel()
             registry.clearPreparedFocus(owner)
@@ -160,6 +184,7 @@ internal fun BindThorListFocus(
         // request through requestItem's scope guard. This observes actual readiness.
         val targetKey = keys[index]
         snapshotFlow { registry.isAllowed(targetKey) }.first { it }
+        var preserveViewportOnFocus = false
         if (!restored) {
             val validPosition = entryPosition?.takeIf { (firstKey, _) -> firstKey in keyPositions }
             if (entryFocus !in keyPositions && validPosition == null) {
@@ -167,12 +192,15 @@ internal fun BindThorListFocus(
                 // was cleared or its saved keys disappeared. Reset even a partial first row.
                 listState.scrollToItem(0, 0)
             } else validPosition?.let { (firstKey, offset) ->
-                keys.indexOf(firstKey).takeIf { it >= 0 }?.let { listState.scrollToItem(it, offset) }
+                keys.indexOf(firstKey).takeIf { it >= 0 }?.let {
+                    listState.scrollToItem(it, offset)
+                    preserveViewportOnFocus = true
+                }
             }
         }
         restored = true
-        requestItem(index)
+        requestItem(index, preserveViewportOnFocus)
     }
 
-    return ThorListFocusBinding(::rememberSelection, ::activate, ::requestItem)
+    return ThorListFocusBinding(::rememberSelection, ::activate) { requestItem(it) }
 }

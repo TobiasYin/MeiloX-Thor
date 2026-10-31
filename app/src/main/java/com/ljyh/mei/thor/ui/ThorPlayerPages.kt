@@ -222,7 +222,7 @@ internal fun ThorQueuePage(
     val scene = vm.navigation.value.sceneKey
     val keys = playback.queue.map { "queue:${it.entryId}" }
     val binding = BindThorListFocus(registry, scene, keys, playback.queue.map { it.item }, list, vm) { index ->
-        playback.queue.getOrNull(index)?.let { vm.playback.select(it.entryId) }
+        playback.queue.getOrNull(index)?.let { vm.selectQueueEntry(it.entryId) }
     }
     val locateCurrent = { if (currentIndex >= 0) binding.request(currentIndex) }
     if (currentIndex >= 0) BindThorPageAction(pageActions, "queue:current", locateCurrent)

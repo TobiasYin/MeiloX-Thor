@@ -23,6 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -101,6 +103,12 @@ fun ThorUpperScreen(
     playbackEntryId: String? = null,
     backgroundPreview: Boolean = false,
 ) {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val previous = view.defaultFocusHighlightEnabled
+        view.defaultFocusHighlightEnabled = false
+        onDispose { view.defaultFocusHighlightEnabled = previous }
+    }
     ThorTheme(preferences) {
         ThorUpperContent(item, playing, preferences, airflow, lyricData, positionProvider, onOpenPlayer, modifier, playbackScene, visible, onLyricSelected, playbackEntryId, backgroundPreview)
     }
@@ -126,7 +134,7 @@ private fun ThorUpperContent(
     val hasLyrics = playbackScene && lyricData != null && lyricData.source != LyricSource.Empty &&
         lyricData.source != LyricSource.Loading && !lyricData.isPureMusic && lyricData.lyricLine.lines.isNotEmpty() &&
         !remember(lyricData) { upperLyricsArePlaceholder(lyricData) }
-    BoxWithConstraints(modifier.fillMaxSize().background(theme.background)) {
+    BoxWithConstraints(modifier.fillMaxSize().focusProperties { canFocus = false }.background(theme.background)) {
         val palette = ambient.takeIf { item != null && item.key !is ThorItemKey.Destination }
             ?: CaseAmbientPalette(theme.ambient, theme.ambient)
         if (playbackScene || backgroundPreview) ThorPlaybackBackdrop(palette, active, playing || backgroundPreview, preferences,
@@ -152,7 +160,7 @@ private fun ThorUpperContent(
                         top = maxHeight * theme.lyricLayout.viewportVerticalInsetFraction,
                         bottom = maxHeight * theme.lyricLayout.viewportVerticalInsetFraction)) {
                         Text(listOfNotNull(item?.title?.takeIf(String::isNotBlank), item?.subtitle?.takeIf(String::isNotBlank)).joinToString(" · "),
-                            Modifier.fillMaxWidth().clickable(onClick = onOpenPlayer),
+                            Modifier.fillMaxWidth().focusProperties { canFocus = false }.clickable(onClick = onOpenPlayer),
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, letterSpacing = 1.3.sp),
                             color = theme.secondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(theme.lyricLayout.titleGap))
@@ -392,7 +400,7 @@ internal fun ThorUpperLyrics(
                 if (completed) positioned[0] = true
             }
         }
-        LazyColumn(Modifier.fillMaxSize().clipToBounds()
+        LazyColumn(Modifier.fillMaxSize().focusProperties { canFocus = false }.clipToBounds()
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {
                 drawContent()
@@ -442,6 +450,7 @@ internal fun ThorUpperLyrics(
                     if (line is KaraokeLine.MainKaraokeLine) line.accompanimentLines.orEmpty().filter { it !in lines } else emptyList()
                 }
                 Column(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .focusProperties { canFocus = false }
                     .semantics { selected = focused }
                     .clickable(enabled = active, role = Role.Button, onClickLabel = "从这里播放") {
                         latestSelection(line.start.toLong())

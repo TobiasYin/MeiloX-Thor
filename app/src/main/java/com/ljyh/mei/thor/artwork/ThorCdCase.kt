@@ -10,11 +10,9 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.os.SystemClock
 import android.util.Log
-import android.view.KeyEvent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,19 +28,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -148,9 +140,6 @@ fun ThorCdCase(
     val front = remember(artwork.frontUri, context) { mutableStateOf<Bitmap?>(null) }
     val back = remember(artwork.backUri, context) { mutableStateOf<Bitmap?>(null) }
     var touchSize by remember { mutableStateOf(IntSize.Zero) }
-    var focused by remember { mutableStateOf(false) }
-    var touchFocused by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
 
     fun recordMotion(tick: Boolean = false) {
         diagnostics?.record(ThorCaseFrame(
@@ -281,8 +270,6 @@ fun ThorCdCase(
             .fillMaxSize()
             .testTag("thor-cd-case")
             .onSizeChanged { touchSize = it }
-            .focusRequester(focusRequester)
-            .onFocusChanged { focused = it.isFocused; if (!it.isFocused) touchFocused = false }
             .semantics {
                 role = Role.Button
                 contentDescription = artwork.title.ifBlank { "专辑封面" }
@@ -292,25 +279,12 @@ fun ThorCdCase(
                     CustomAccessibilityAction("向右转动") { turn(1) },
                 )
             }
-            .onKeyEvent { event ->
-                touchFocused = false
-                val key = event.nativeKeyEvent
-                val direction = when (key.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT -> -1
-                    KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER,
-                    KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_BUTTON_A -> 1
-                    else -> 0
-                }
-                if (direction != 0 && key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0) turn(direction)
-                direction != 0
-            }
-            .focusable()
             .pointerInput(motion, touchSize, theme.reduceMotion, active) {
                 if (!active) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (touchSize.width <= 0 || touchSize.height <= 0) return@awaitEachGesture
-                    down.consume(); touchFocused = true; focusRequester.requestFocus()
+                    down.consume()
                     motion.beginDrag(); pose.value = motion.pose; wakeFrames.trySend(Unit); recordMotion()
                     var previous = down.position
                     var lastTime = down.uptimeMillis
@@ -372,7 +346,6 @@ fun ThorCdCase(
             front.value, back.value, artwork.title, artwork.artist, theme, center, modelScale,
             logicalSide = baseScale * 2f / density,
         ) }
-        if (focused && !touchFocused) drawRoundRect(theme.focus, cornerRadius = CornerRadius(16.dp.toPx()), style = Stroke(2.dp.toPx()))
     }
 }
 

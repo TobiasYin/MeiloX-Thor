@@ -79,6 +79,7 @@ fun ThorLowerScreen(
     val seek by viewModel.seekPreview.collectAsStateWithLifecycle()
     val menu by viewModel.menu.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
+    val textEditing by viewModel.textEditing.collectAsStateWithLifecycle()
     val theme = LocalThorTheme.current
     val registry = remember { ThorFocusRegistry() }
     val menuRegistry = remember { ThorFocusRegistry() }
@@ -112,6 +113,8 @@ fun ThorLowerScreen(
         val localPage = current.overlay == null && viewModel.menu.value == null && viewModel.seekPreview.value == null
         when {
             pageActionSession != null -> closePageActions()
+            localPage && current.page == ThorPage.Search &&
+                handleThorSearchEditingCommand(ThorCommand.Back, viewModel.textEditing.value, pageActionBindings) -> Unit
             localPage && pageActionBindings.invoke("page:back") -> Unit
             localPage && current.page is ThorPage.Account && accountInput.handle(ThorCommand.Back) -> Unit
             !viewModel.back() -> onExit()
@@ -127,10 +130,10 @@ fun ThorLowerScreen(
         viewModel.notice.value?.let { shown ->
             val token = shown.undoToken
             if (token != null) actions += ThorPageAction("notice:undo", "撤销") {
-                if (viewModel.notice.value?.undoToken == token) viewModel.undo()
+                if (viewModel.notice.value?.id == shown.id && viewModel.notice.value?.undoToken == token) viewModel.undo()
             }
             actions += ThorPageAction("notice:close", "关闭提示") {
-                if (viewModel.notice.value == shown) viewModel.clearNotice()
+                viewModel.clearNoticeIfCurrent(shown.id)
             }
         }
         if (actions.isEmpty()) return null
@@ -209,7 +212,9 @@ fun ThorLowerScreen(
                     else -> Unit
                 }
                 true
-            } else if (command != ThorCommand.Back && navigation.overlay == null && navigation.page is ThorPage.Account &&
+            } else if (viewModel.navigation.value.overlay == null && viewModel.navigation.value.page == ThorPage.Search &&
+                handleThorSearchEditingCommand(command, viewModel.textEditing.value, pageActionBindings)) true
+            else if (command != ThorCommand.Back && navigation.overlay == null && navigation.page is ThorPage.Account &&
                 command !in setOf(ThorCommand.ToggleQueue, ThorCommand.TogglePlayback, ThorCommand.PreviousTrack, ThorCommand.NextTrack) &&
                 accountInput.handle(command)) true
             else when (command) {
@@ -338,23 +343,17 @@ fun ThorLowerScreen(
                 onActivate = { action -> closePageActions(action) }, onClose = { closePageActions() })
         }
         if (notice != null && menu == null && pageActionSession == null) {
-            Row(
+            ThorNoticeBanner(notice, registry,
+                editingSearch = navigation.overlay == null && navigation.page == ThorPage.Search && textEditing,
+                onUndo = { id -> if (viewModel.notice.value?.id == id) viewModel.undo() },
+                onClose = viewModel::clearNoticeIfCurrent,
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .padding(start = 16.dp, end = 16.dp, bottom = bottomHeight + (if (miniVisible) 56.dp else 0.dp) + 8.dp)
-                    .fillMaxWidth().heightIn(min = 48.dp)
-                    .thorMaterial(ThorSurfaceRole.Overlay, cornerRadius = theme.controlRadius)
-                    .padding(start = 12.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(notice!!.message, Modifier.weight(1f), color = theme.text, fontSize = 14.sp, maxLines = 2)
-                if (notice!!.undoToken != null) ThorButton(registry, "notice:undo", "撤销", flat = true, onClick = viewModel::undo)
-                ThorButton(registry, "notice:close", "", icon = Icons.Outlined.Close, flat = true,
-                    contentDescription = "关闭提示", onClick = viewModel::clearNotice)
-            }
+            )
         }
     }
-    LaunchedEffect(notice) {
-        if (notice?.success == true && notice!!.undoToken == null) { kotlinx.coroutines.delay(3500); viewModel.clearNotice() }
+    ThorNoticeAutoDismiss(notice, viewModel::clearNoticeIfCurrent)
+    LaunchedEffect(notice?.id) {
         if (notice == null && registry.selectedKey?.startsWith("notice:") == true) {
             withFrameNanos { }; registry.request(viewModel.rememberedFocus(navigation.sceneKey)) || registry.requestFirst()
         }
