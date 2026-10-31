@@ -74,6 +74,8 @@ fun ThorLowerScreen(
     val playback by viewModel.playback.state.collectAsStateWithLifecycle()
     val preferences by viewModel.preferences.collectAsStateWithLifecycle()
     val libraryCategory by viewModel.libraryCategory.collectAsStateWithLifecycle()
+    val homeCategory by viewModel.homeCategory.collectAsStateWithLifecycle()
+    val artistBrowse by viewModel.artistBrowse.collectAsStateWithLifecycle()
     val searchEntry by viewModel.searchEntry.collectAsStateWithLifecycle()
     val latestScopeChange by rememberUpdatedState(onControllerScopeChanged)
     val seek by viewModel.seekPreview.collectAsStateWithLifecycle()
@@ -85,6 +87,7 @@ fun ThorLowerScreen(
     val menuRegistry = remember { ThorFocusRegistry() }
     val pageActionRegistry = remember { ThorFocusRegistry() }
     val pageActionBindings = remember { ThorPageActionBindings() }
+    val catalogPickerActive = pageActionBindings.has("catalog:picker-active")
     val accountInput = remember { com.ljyh.mei.thor.account.ThorAccountInputHost() }
     val playerConnection by viewModel.playerConnection.collectAsStateWithLifecycle()
     var pageActionSession by remember { mutableStateOf<ThorPageActionSession?>(null) }
@@ -247,7 +250,14 @@ fun ThorLowerScreen(
                 ThorCommand.PlayAll -> { viewModel.playPage(false); true }
                 ThorCommand.PageActions -> true
                 is ThorCommand.Shoulder -> true
-                is ThorCommand.Move -> registry.move(command.direction, command.repeated)
+                is ThorCommand.Move -> {
+                    val horizontal = command.direction == ThorDirection.Left || command.direction == ThorDirection.Right
+                    when {
+                        horizontal && pageActionBindings.has("catalog:picker-active") -> true
+                        horizontal && viewModel.cycleBrowseCategory(if (command.direction == ThorDirection.Left) -1 else 1) -> true
+                        else -> registry.move(command.direction, command.repeated)
+                    }
+                }
             }
         }
     }
@@ -256,7 +266,7 @@ fun ThorLowerScreen(
 
     val playerView = navigation.overlay == ThorOverlay.Player
     val hasBottomActions = navigation.overlay == null &&
-        (navigation.page is ThorPage.Detail || navigation.page is ThorPage.Collection ||
+        (navigation.page is ThorPage.Detail || navigation.page is ThorPage.Collection || navigation.page is ThorPage.Artist ||
             (navigation.page is ThorPage.Root && navigation.tab != ThorTab.My))
     val refreshOnlyRoot = navigation.overlay == null && navigation.page is ThorPage.Root &&
         (navigation.tab == ThorTab.Home || navigation.tab == ThorTab.Discover)
@@ -326,11 +336,13 @@ fun ThorLowerScreen(
                         ThorOverlay.Lyrics -> "A 跳转    B 返回"
                         else -> if (navigation.page is ThorPage.Account || navigation.page == ThorPage.AudioSettings || navigation.page == ThorPage.Equalizer)
                             "↑↓ 选择   A 确认   B 返回   Start 播放   Select 长按操作"
+                        else if (!catalogPickerActive && (navigation.page is ThorPage.Artist || navigation.page == ThorPage.Root(ThorTab.Home)))
+                            "↑↓ 列表   ←→ 分类   A 确认   B 返回   Select 长按操作"
                         else "↑↓ 列表   A 确认   B 返回   X 菜单   Select 长按操作"
                     }
                     Text(hint, modifier = if (playerView) Modifier else Modifier.weight(1f),
                         fontSize = 11.sp, color = theme.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (navigation.overlay == null) ThorBrowseBottomActions(viewModel, registry, navigation, library,
+                    if (navigation.overlay == null && !catalogPickerActive) ThorBrowseBottomActions(viewModel, registry, navigation, library,
                         onLegacyRoute, isScanning)
                 }
             }
@@ -370,7 +382,7 @@ fun ThorLowerScreen(
                 session.playbackEntry != null && session.playbackEntry != playback.currentEntryId) closePageActions()
         }
     }
-    LaunchedEffect(navigation.sceneKey, menu?.level, menu?.subject?.item?.key, pageActionSession != null, libraryCategory, searchEntry) {
+    LaunchedEffect(navigation.sceneKey, menu?.level, menu?.subject?.item?.key, pageActionSession != null, libraryCategory, homeCategory, artistBrowse?.section, catalogPickerActive, searchEntry) {
         latestScopeChange()
     }
 }

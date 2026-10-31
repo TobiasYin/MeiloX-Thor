@@ -59,6 +59,79 @@ class ThorShellViewModel @Inject constructor(
     val lyrics = lyricManager.lyricData
     private val mutableNavigation = MutableStateFlow(ThorNavigation(tab = ThorTab.entries.firstOrNull { it.name == savedState.get<String>("thor.tab") } ?: ThorTab.Home))
     val navigation = mutableNavigation.asStateFlow()
+    private val mutableHomeCategory = MutableStateFlow(ThorHomeCategory.entries.firstOrNull {
+        it.name == savedState.get<String>("thor.homeCategory")
+    } ?: ThorHomeCategory.Recommended)
+    val homeCategory = mutableHomeCategory.asStateFlow()
+    val catalogFilters = repository.catalogFilters
+    private val artistBrowser = ThorArtistBrowser(viewModelScope, repository::artistProfile,
+        repository::artistSongs, repository::artistAlbums)
+    val artistBrowse = artistBrowser.current
+
+    fun selectHomeCategory(category: ThorHomeCategory) {
+        if (navigation.value.page != ThorPage.Root(ThorTab.Home) || navigation.value.overlay != null || menu.value != null) return
+        clearExitGuard()
+        if (category != homeCategory.value) {
+            freshScene("root:Home:${category.name}")
+            mutablePreview.value = null
+            mutableHomeCategory.value = category
+            savedState["thor.homeCategory"] = category.name
+        }
+        ensureHomeCategory()
+    }
+
+    private fun ensureHomeCategory() {
+        val collection = homeCategory.value.collection
+        if (collection !in library.value.collections && collection !in library.value.loading)
+            repository.refresh(collection)
+    }
+
+    fun setPlaylistCategory(category: String) {
+        clearExitGuard()
+        mutablePreview.value = null
+        freshScene("root:Home:Playlists")
+        freshScene("root:Discover")
+        repository.setCatalogFilters(catalogFilters.value.copy(playlistCategory = category))
+    }
+    fun setArtistArea(area: Int) {
+        clearExitGuard(); mutablePreview.value = null; freshScene("root:Home:Artists")
+        repository.setCatalogFilters(catalogFilters.value.copy(artistArea = area))
+    }
+    fun setArtistType(type: Int) {
+        clearExitGuard(); mutablePreview.value = null; freshScene("root:Home:Artists")
+        repository.setCatalogFilters(catalogFilters.value.copy(artistType = type))
+    }
+    fun loadMore(collection: ThorCollection) = repository.loadMore(collection)
+    fun selectArtistSection(section: ThorArtistSection) {
+        val page = navigation.value.page as? ThorPage.Artist ?: return
+        if (navigation.value.overlay != null || menu.value != null) return
+        clearExitGuard()
+        if (artistBrowse.value?.section != section) {
+            freshScene("${page.key}:${section.name}")
+            mutablePreview.value = page.item
+        }
+        artistBrowser.select(section)
+    }
+    fun refreshArtist() = artistBrowser.refresh()
+    fun loadMoreArtist() = artistBrowser.loadMore()
+
+    /** Horizontal commands change categories directly; the controller never enters a tab. */
+    fun cycleBrowseCategory(delta: Int): Boolean {
+        if (navigation.value.overlay != null || menu.value != null || textEditing.value || delta == 0) return false
+        when (navigation.value.page) {
+            ThorPage.Root(ThorTab.Home) -> {
+                val categories = ThorHomeCategory.entries
+                selectHomeCategory(categories[(homeCategory.value.ordinal + delta).mod(categories.size)])
+            }
+            is ThorPage.Artist -> {
+                val sections = ThorArtistSection.entries
+                val section = artistBrowse.value?.section ?: return false
+                selectArtistSection(sections[(section.ordinal + delta).mod(sections.size)])
+            }
+            else -> return false
+        }
+        return true
+    }
     private val mutableLibraryCategory = MutableStateFlow((savedState.get<Int>("thor.libraryCategory") ?: 0).coerceIn(0, 2))
     val libraryCategory = mutableLibraryCategory.asStateFlow()
     fun selectLibraryCategory(category: Int) {
@@ -172,6 +245,8 @@ class ThorShellViewModel @Inject constructor(
         if (value.sceneKey != mutableNavigation.value.sceneKey) mutablePreview.value = null
         mutableNavigation.value = value
         savedState["thor.tab"] = value.tab.name
+        (value.page as? ThorPage.Artist)?.let { artistBrowser.open(it.item) }
+        if (value.page == ThorPage.Root(ThorTab.Home)) ensureHomeCategory()
     }
 
     fun switchTab(delta: Int) { if (menu.value == null) navigate(navigation.value.switchTab(delta)) }
@@ -216,6 +291,7 @@ class ThorShellViewModel @Inject constructor(
         searchRequestGeneration++
         searchJob?.cancel()
         detailJob?.cancel()
+        artistBrowser.invalidate()
         detailGeneration++
         playRequestGeneration++
         focus.clear()
@@ -316,7 +392,11 @@ class ThorShellViewModel @Inject constructor(
                 }
             }
             is ThorItemKey.QueueEntry -> selectQueueEntry(key.entryId)
-            is ThorItemKey.Destination -> Unit
+            is ThorItemKey.Artist -> {
+                push(ThorPage.Artist(item))
+                mutablePreview.value = item
+            }
+            is ThorItemKey.Destination -> ThorCollection.entries.firstOrNull { it.name == key.id }?.let(::openCollection)
             else -> {
                 push(ThorPage.Detail(item))
                 mutablePreview.value = item
@@ -362,7 +442,7 @@ class ThorShellViewModel @Inject constructor(
 
     fun playPage(shuffle: Boolean): Boolean {
         if (menu.value != null || seekPreview.value != null || textEditing.value) return false
-        val target = thorPagePlayback(navigation.value, library.value) ?: return false
+        val target = thorPagePlayback(navigation.value, library.value, artistBrowse.value) ?: return false
         when (val decision = thorBulkPlayback(target.tracks, shuffle)) {
             is ThorPlaybackDecision.Rejected -> {
                 playRequestGeneration++
@@ -532,6 +612,11 @@ class ThorShellViewModel @Inject constructor(
                 }
             }
             ThorMenuLevel.Actions -> when (menuRows().getOrNull(current.selection)?.action) {
+                ThorMenuAction.Artist -> {
+                    mutableMenu.value = null
+                    menuGeneration++
+                    open(current.subject.item)
+                }
                 ThorMenuAction.AddToPlaylist -> {
                     mutableMenu.value = current.intoPlaylists(playlistKeys(current, library.value))
                     repository.refresh(ThorCollection.OwnedPlaylists)

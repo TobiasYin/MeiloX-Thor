@@ -121,6 +121,10 @@ internal fun thorPageActions(
             vm.openMenu(ThorMenuSubject(item, id), ThorMenuAnchor(24f, 100f))
         }
     }
+    if (navigation.overlay == null && bindings?.has("catalog:picker-active") == true) {
+        callback("page:back", "返回")
+        return@buildList
+    }
     when (navigation.overlay) {
         ThorOverlay.Player -> {
             val song = playback.current
@@ -157,10 +161,26 @@ internal fun thorPageActions(
         }
         null -> when (val page = navigation.page) {
             is ThorPage.Root -> when (page.tab) {
-                ThorTab.Home, ThorTab.Discover -> {
+                ThorTab.Home -> {
+                    val category = vm.homeCategory.value
+                    ThorHomeCategory.entries.forEach { item ->
+                        action("home:category:${item.name}", item.title) { vm.selectHomeCategory(item) }
+                    }
+                    when (category) {
+                        ThorHomeCategory.Recommended -> action("home:daily", "每日推荐") { vm.openCollection(ThorCollection.DailySongs) }
+                        ThorHomeCategory.Playlists -> callback("catalog:playlist-filter", "歌单分类 · ${vm.catalogFilters.value.playlistCategory}")
+                        ThorHomeCategory.Artists -> {
+                            callback("catalog:artist-area", "歌手地区")
+                            callback("catalog:artist-type", "歌手类型")
+                        }
+                        ThorHomeCategory.Charts -> Unit
+                    }
                     searchAndMy()
-                    val collection = if (page.tab == ThorTab.Home) ThorCollection.Home else ThorCollection.Discover
-                    action("root:refresh", "刷新") { vm.refresh(collection) }
+                    action("root:refresh", "刷新") { vm.refresh(category.collection) }
+                }
+                ThorTab.Discover -> {
+                    searchAndMy()
+                    action("root:refresh", "刷新") { vm.refresh(ThorCollection.Discover) }
                 }
                 ThorTab.Library -> {
                     listOf("专辑" to 1, "歌曲" to 0, "歌单" to 2).forEach { (title, category) ->
@@ -186,10 +206,24 @@ internal fun thorPageActions(
                 val local = collection in setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums)
                 if (local) action("collection:scan", if (isScanning) "停止扫描" else "扫描音乐") { onLegacyRoute("local_music") }
                 action("collection:refresh", "刷新") { vm.refresh(collection) }
-                if (collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History)) {
+                if (collection == ThorCollection.DailySongs && !library.account.signedIn)
+                    action("collection:login", "登录网易云音乐") { vm.openInternalRoute("account/login") }
+                if (collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History, ThorCollection.DailySongs)) {
                     val enabled = library[collection].any { it.tracks.isNotEmpty() }
                     action("collection:shuffle", "L3 随机播放", enabled) { vm.playPage(true) }
                     action("collection:play", "R3 播放全部", enabled) { vm.playPage(false) }
+                }
+            }
+            is ThorPage.Artist -> {
+                val artist = vm.artistBrowse.value?.takeIf { it.item.key == page.item.key }
+                ThorArtistSection.entries.forEach { section ->
+                    action("artist:section:${section.name}", section.title) { vm.selectArtistSection(section) }
+                }
+                action("artist:refresh", "刷新", artist?.isLoading != true, vm::refreshArtist)
+                if (artist?.section != ThorArtistSection.Albums) {
+                    val enabled = artist?.items?.any { it.tracks.isNotEmpty() } == true
+                    action("artist:shuffle", if (artist?.hasMore == true) "L3 随机已加载" else "L3 随机播放", enabled) { vm.playPage(true) }
+                    action("artist:play", if (artist?.hasMore == true) "R3 播放已加载" else "R3 播放全部", enabled) { vm.playPage(false) }
                 }
             }
             is ThorPage.Detail -> {

@@ -2,6 +2,7 @@ package com.ljyh.mei.thor.state
 
 import com.ljyh.mei.thor.model.ThorCollection
 import com.ljyh.mei.thor.model.ThorItem
+import com.ljyh.mei.thor.model.ThorItemKey
 import com.ljyh.mei.thor.account.ThorAccountRoute
 
 enum class ThorTab(val title: String) { Home("首页"), Discover("发现"), Library("音乐库"), My("我的") }
@@ -11,6 +12,7 @@ sealed interface ThorPage {
     data class Root(val tab: ThorTab) : ThorPage { override val key get() = "root:${tab.name}" }
     data class Collection(val collection: ThorCollection) : ThorPage { override val key get() = "collection:${collection.name}" }
     data class Detail(val item: ThorItem) : ThorPage { override val key get() = "detail:${item.key.stableId}" }
+    data class Artist(val item: ThorItem) : ThorPage { override val key get() = "artist:${(item.key as ThorItemKey.Artist).id}" }
     data object Search : ThorPage { override val key = "search" }
     data object Appearance : ThorPage { override val key = "appearance" }
     data object Controls : ThorPage { override val key = "controls" }
@@ -58,7 +60,7 @@ data class ThorNavigation(
     /** Keep generic destinations, but discard every old account's loaded detail and Web context. */
     fun forChangedAccount(): ThorNavigation = copy(
         stacks = stacks.mapValues { (_, stack) -> stack.filter { page ->
-            page !is ThorPage.Detail && !(page is ThorPage.Account &&
+            page !is ThorPage.Detail && page !is ThorPage.Artist && !(page is ThorPage.Account &&
                 (page.route is ThorAccountRoute.Connections || page.route is ThorAccountRoute.Web))
         } },
     )

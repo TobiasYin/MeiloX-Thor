@@ -77,6 +77,7 @@ class ThorMusicRepository @Inject constructor(
     private val home: HomeRepository,
     private val searchRepository: SearchRepository,
     private val meloXRepository: MeloXRepository,
+    private val catalog: ThorCatalogRepository,
     private val gson: Gson,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -88,6 +89,11 @@ class ThorMusicRepository @Inject constructor(
     private val accountFence = ThorAccountFence()
     private val jobs = mutableMapOf<String, Job>()
     private val revisions = mutableMapOf<String, Long>()
+    private val mutableCatalogFilters = MutableStateFlow(ThorCatalogFilters())
+    val catalogFilters: StateFlow<ThorCatalogFilters> = mutableCatalogFilters
+    private data class CatalogCursor(val filters: ThorCatalogFilters, val offset: Int?, val cursor: Long?)
+    /** Guarded by jobs; collection content and its next token are committed in the same critical section. */
+    private val catalogCursors = mutableMapOf<ThorCollection, CatalogCursor>()
     private val undoActions = linkedMapOf<String, suspend () -> ThorOperationResult>()
     private val activeAccount get() = accountFence.account
 
@@ -141,7 +147,7 @@ class ThorMusicRepository @Inject constructor(
                     collectionFlags.value = emptyMap()
                     likeOverrides.update { it.forGeneration(accountFence.generation) }
                     playerRepository.resetLikeState()
-                    synchronized(jobs) { jobs.values.forEach(Job::cancel); jobs.clear() }
+                    synchronized(jobs) { jobs.values.forEach(Job::cancel); jobs.clear(); catalogCursors.clear() }
                 }
                 remote.update { old ->
                     val publicAccount = ThorAccountState(
@@ -183,6 +189,15 @@ class ThorMusicRepository @Inject constructor(
     }
 
     fun refresh(collection: ThorCollection? = null) {
+        if (collection in CATALOG_COLLECTIONS) {
+            fetchCatalog(checkNotNull(collection), append = false)
+            return
+        }
+        // New directories load on entry. Refresh-all also updates directories already visited,
+        // without eagerly issuing every catalog request at startup or after an account change.
+        if (collection == null) {
+            CATALOG_COLLECTIONS.filter { it in remote.value.collections }.forEach { fetchCatalog(it, append = false) }
+        }
         if (collection == null || collection in ACCOUNT_PLAYLIST_COLLECTIONS) refreshAccountPlaylists()
         if (collection == null || collection == ThorCollection.CollectedAlbums) {
             fetch("albums", setOf(ThorCollection.CollectedAlbums)) { account ->
@@ -211,6 +226,112 @@ class ThorMusicRepository @Inject constructor(
                 val blocks = home.getHomePageResourceShow(refresh = true).valueOrThrow()
                 mapOf(ThorCollection.Home to parseHomeResources(blocks.mapNotNull { it.dslData }, gson))
             }
+        }
+    }
+
+    fun setCatalogFilters(filters: ThorCatalogFilters) {
+        require(filters.artistArea in setOf(-1, 7, 96, 8, 16, 0))
+        require(filters.artistType in setOf(-1, 1, 2, 3))
+        val next = filters.copy(playlistCategory = filters.playlistCategory.trim().ifBlank { "全部" })
+        val old = mutableCatalogFilters.value
+        if (old == next) return
+        val affected = CATALOG_COLLECTIONS.filter { !sameCatalogFilters(it, old, next) }.toSet()
+        synchronized(jobs) {
+            mutableCatalogFilters.value = next
+            affected.forEach { collection ->
+                val key = "catalog:" + collection.name
+                jobs.remove(key)?.cancel()
+                revisions[key] = (revisions[key] ?: 0L) + 1L
+                catalogCursors.remove(collection)
+            }
+            remote.update { it.copy(collections = it.collections - affected, hasMore = it.hasMore - affected,
+                loading = it.loading - affected, loadingMore = it.loadingMore - affected, errors = it.errors - affected) }
+        }
+        affected.forEach { fetchCatalog(it, append = false) }
+    }
+
+    fun loadMore(collection: ThorCollection) {
+        if (collection in CATALOG_COLLECTIONS) fetchCatalog(collection, append = true)
+    }
+
+    private fun fetchCatalog(collection: ThorCollection, append: Boolean) {
+        val ticket = accountFence.capture(remote.value.account) ?: return
+        val key = "catalog:" + collection.name
+        synchronized(jobs) {
+            if (!accountFence.isCurrent(ticket) || remote.value.account.generation != ticket.generation) return
+            val filters = mutableCatalogFilters.value
+            // Publishing the page completes the request before its coroutine unwinds. A
+            // legitimate next click must not be swallowed by that already-published Job.
+            if (append && (collection in remote.value.loading || collection in remote.value.loadingMore)) return
+            val previous = catalogCursors[collection]
+            if (append && (collection !in remote.value.hasMore || previous == null ||
+                    !sameCatalogFilters(collection, previous.filters, filters))) return
+            val offset = if (append) previous?.offset ?: 0 else 0
+            val cursor = if (append) previous?.cursor ?: 0L else 0L
+            jobs[key]?.cancel()
+            val revision = (revisions[key] ?: 0L) + 1L
+            revisions[key] = revision
+            if (!append) catalogCursors.remove(collection)
+            remote.update { it.copy(
+                loading = if (append) it.loading else it.loading + collection,
+                loadingMore = if (append) it.loadingMore + collection else it.loadingMore - collection,
+                hasMore = if (append) it.hasMore else it.hasMore - collection,
+                errors = it.errors - collection) }
+            jobs[key] = scope.launch {
+                fun current() = accountFence.isCurrent(ticket) &&
+                    remote.value.account.generation == ticket.generation &&
+                    revisions[key] == revision && sameCatalogFilters(collection, filters, mutableCatalogFilters.value)
+                try {
+                    val page = accountFence.withTicket(ticket) {
+                        if (collection == ThorCollection.DailySongs && ticket.account == null) error("登录后查看每日推荐")
+                        ensureRemoteReady(ticket)
+                        catalog.page(collection, filters, offset, cursor, ticket.account?.sessionFingerprint)
+                    }
+                    synchronized(jobs) {
+                        if (!current()) return@synchronized
+                        catalogCursors[collection] = CatalogCursor(filters, page.nextOffset, page.nextCursor)
+                        remote.update { old ->
+                            if (!current()) old else old.copy(
+                                collections = old.collections + (collection to
+                                    ((if (append) old[collection] else emptyList()) + page.items).distinctBy { it.key }),
+                                hasMore = if (page.hasMore) old.hasMore + collection else old.hasMore - collection,
+                                loading = old.loading - collection, loadingMore = old.loadingMore - collection,
+                                errors = old.errors - collection)
+                        }
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    synchronized(jobs) {
+                        remote.update { old -> if (!current()) old else old.copy(
+                            loading = old.loading - collection, loadingMore = old.loadingMore - collection,
+                            errors = old.errors + (collection to
+                                if (collection == ThorCollection.DailySongs && ticket.account == null) "登录后查看每日推荐"
+                                else "读取失败，请检查网络并重试")) }
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun artistProfile(item: ThorItem): ThorArtistProfile = withCatalogRead { ticket ->
+        catalog.artistProfile(item, ticket.account?.sessionFingerprint)
+    }
+
+    suspend fun artistSongs(id: Long, offset: Int): ThorCatalogPage = withCatalogRead { ticket ->
+        catalog.artistSongs(id, offset, ticket.account?.sessionFingerprint)
+    }
+
+    suspend fun artistAlbums(id: Long, offset: Int): ThorCatalogPage = withCatalogRead { ticket ->
+        catalog.artistAlbums(id, offset, ticket.account?.sessionFingerprint)
+    }
+
+    private suspend fun <T> withCatalogRead(action: suspend (ThorAccountTicket) -> T): T = withContext(Dispatchers.IO) {
+        val ticket = accountFence.ticketForCall()
+        check(accountFence.capture(state.value.account) === ticket) { "账号已变化，请重试" }
+        accountFence.withTicket(ticket) {
+            ensureRemoteReady(ticket)
+            action(ticket)
         }
     }
 
@@ -354,7 +475,7 @@ class ThorMusicRepository @Inject constructor(
             device[ThorCollection.OwnedPlaylists].filter { (it.key as? ThorItemKey.Playlist)?.local == true })
             .filter { "${it.title} ${it.subtitle} ${it.description}".contains(term, true) }
         ensureRemoteReady(ticket)
-        val responses = coroutineScope { listOf(1, 10, 1000).map { type ->
+        val responses = coroutineScope { listOf(1, 10, 100, 1000).map { type ->
             async { searchRepository.search(term, type, 40) }
         }.awaitAll() }
         accountFence.checkCurrent(ticket)
@@ -366,6 +487,9 @@ class ThorMusicRepository @Inject constructor(
                 result.toSongMediaMetadata().map { it.toThorItem() } +
                     result.albums.orEmpty().map { album -> ThorItem(ThorItemKey.Album(album.id), album.name,
                         album.artists.joinToString(" / ") { it.name }, album.picUrl, album.description.orEmpty(), album.size) } +
+                    result.artists.orEmpty().mapNotNull { artist ->
+                        thorCatalogArtistItem(gson.toJsonTree(artist).asJsonObject)
+                    } +
                     result.playlists.orEmpty().map { playlist -> ThorItem(ThorItemKey.Playlist(playlist.id.toString()),
                         playlist.name, playlist.creator.nickname, playlist.coverImgUrl, trackCount = playlist.trackCount,
                         owned = account?.userId == playlist.creator.userId.toString()) }
@@ -826,6 +950,8 @@ class ThorMusicRepository @Inject constructor(
         private const val DEVICE_SCOPE = "device"
         private val TRACKS_TYPE = object : TypeToken<List<MediaMetadata>>() {}.type
         private val ACCOUNT_PLAYLIST_COLLECTIONS = setOf(ThorCollection.OwnedPlaylists, ThorCollection.SavedPlaylists, ThorCollection.LikedSongs)
+        private val CATALOG_COLLECTIONS = setOf(ThorCollection.RecommendedPlaylists, ThorCollection.Toplists,
+            ThorCollection.Artists, ThorCollection.DailySongs)
         private val ACCOUNT_COLLECTIONS = ACCOUNT_PLAYLIST_COLLECTIONS + ThorCollection.CollectedAlbums
         private val DEVICE_READ_COLLECTIONS = setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums, ThorCollection.Downloads, ThorCollection.History)
     }
@@ -919,6 +1045,12 @@ internal suspend fun awaitThorDeviceIdentity(
     fence.checkCurrent(ticket)
     prepare(ticket.account?.sessionFingerprint)
     fence.checkCurrent(ticket)
+}
+
+internal fun sameCatalogFilters(collection: ThorCollection, first: ThorCatalogFilters, second: ThorCatalogFilters): Boolean = when (collection) {
+    ThorCollection.RecommendedPlaylists -> first.playlistCategory == second.playlistCategory
+    ThorCollection.Artists -> first.artistArea == second.artistArea && first.artistType == second.artistType
+    else -> true
 }
 
 private fun JsonObject.stringValue(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive }

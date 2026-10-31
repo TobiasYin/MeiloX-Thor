@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,7 +46,7 @@ internal fun ThorPageHeader(registry: ThorFocusRegistry, title: String, count: I
 }
 
 private val libraryHeaderCollections = setOf(ThorCollection.CollectedAlbums, ThorCollection.LikedSongs, ThorCollection.OwnedPlaylists, ThorCollection.SavedPlaylists)
-private val accountCollections = libraryHeaderCollections + ThorCollection.History
+private val accountCollections = libraryHeaderCollections + setOf(ThorCollection.History, ThorCollection.DailySongs)
 
 @UnstableApi
 @Composable
@@ -81,7 +82,7 @@ internal fun ThorBrowseBottomActions(
     when (val page = navigation.page) {
         is ThorPage.Root -> when (page.tab) {
             ThorTab.Home, ThorTab.Discover -> {
-                val collection = if (page.tab == ThorTab.Home) ThorCollection.Home else ThorCollection.Discover
+                val collection = if (page.tab == ThorTab.Home) vm.homeCategory.value.collection else ThorCollection.Discover
                 Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     ThorButton(registry, "root:refresh", "", Modifier.size(48.dp), icon = Icons.Outlined.Refresh,
                         flat = true, contentDescription = "刷新", onClick = { vm.refresh(collection) })
@@ -100,7 +101,7 @@ internal fun ThorBrowseBottomActions(
         is ThorPage.Collection -> {
             val items = library[page.collection]
             val tracks = items.flatMap { it.tracks }
-            val playable = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History)
+            val playable = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History, ThorCollection.DailySongs)
             Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (page.collection == ThorCollection.OwnedPlaylists) ThorButton(registry, "collection:create", "新建歌单", primary = true,
                     icon = Icons.Outlined.Add, onClick = vm::createPlaylist)
@@ -113,6 +114,22 @@ internal fun ThorBrowseBottomActions(
                     ThorButton(registry, "collection:shuffle", "L3 随机播放", Modifier.widthIn(min = 96.dp), enabled = tracks.isNotEmpty(),
                         onClick = { vm.playPage(true) })
                     ThorButton(registry, "collection:play", "R3 播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = tracks.isNotEmpty(),
+                        onClick = { vm.playPage(false) })
+                }
+            }
+        }
+        is ThorPage.Artist -> {
+            val state by vm.artistBrowse.collectAsStateWithLifecycle()
+            val current = state?.takeIf { it.item.key == page.item.key }
+            val songs = current?.section != ThorArtistSection.Albums
+            val partial = current?.hasMore == true
+            val enabled = current?.items?.any { it.tracks.isNotEmpty() } == true
+            Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                ThorButton(registry, "artist:refresh", "", icon = Icons.Outlined.Refresh, contentDescription = "刷新", flat = true, onClick = vm::refreshArtist)
+                if (songs) {
+                    ThorButton(registry, "artist:shuffle", if (partial) "L3 随机已加载" else "L3 随机播放", Modifier.widthIn(min = 96.dp), enabled = enabled,
+                        onClick = { vm.playPage(true) })
+                    ThorButton(registry, "artist:play", if (partial) "R3 播放已加载" else "R3 播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = enabled,
                         onClick = { vm.playPage(false) })
                 }
             }
@@ -180,11 +197,29 @@ private fun ThorThemeSample(registry: ThorFocusRegistry, pack: ThorThemePack, se
     }
 }
 
+/** Explicit pagination keeps one closed list and hands its tail cursor to the new first row. */
+internal data class ThorListContinuation(
+    val loading: Boolean,
+    val error: String? = null,
+    val append: Boolean = true,
+    val onLoad: () -> Unit,
+)
+
+@Composable
+internal fun ThorCatalogContinuationRow(
+    registry: ThorFocusRegistry, key: String, loading: Boolean, error: String?, onClick: () -> Unit,
+) {
+    ThorButton(registry, key, if (loading) "正在加载" else if (error != null) "加载失败 · 重试" else "加载更多",
+        Modifier.fillMaxWidth().height(56.dp).testTag("catalog-load-more"), icon = if (loading) null else Icons.Outlined.ExpandMore,
+        selected = registry.selectedKey == key, flat = true, onClick = { if (!loading) onClick() })
+}
+
 @UnstableApi
 @Composable
 internal fun ThorBrowseList(
     vm: ThorShellViewModel, registry: ThorFocusRegistry, scene: String, items: List<ThorItem>,
     modifier: Modifier = Modifier, sourcePlaylist: ThorItemKey.Playlist? = null,
+    continuation: ThorListContinuation? = null,
     onItem: ((ThorItem, Int) -> Unit)? = null,
 ) {
     val library by vm.library.collectAsStateWithLifecycle()
@@ -193,7 +228,7 @@ internal fun ThorBrowseList(
         (library[ThorCollection.CollectedAlbums] + library[ThorCollection.SavedPlaylists]).map { it.key }.toSet()
     }
     val listState = rememberLazyListState()
-    val keys = remember(scene, items) {
+    val itemKeys = remember(scene, items) {
         val occurrences = mutableMapOf<String, Int>()
         items.map { item ->
             val id = item.key.stableId
@@ -202,21 +237,48 @@ internal fun ThorBrowseList(
             "$scene:item:$id:$occurrence"
         }
     }
-    val focus = BindThorListFocus(registry, scene, keys, items, listState, vm) { index ->
-        val item = items[index]
-        when {
-            onItem != null -> onItem(item, index)
-            items.all { it.key is ThorItemKey.Song && it.tracks.isNotEmpty() } -> vm.play(items.flatMap { it.tracks }, index,
-                (vm.navigation.value.page as? ThorPage.Collection)?.collection?.title ?: "播放列表")
-            else -> vm.open(item)
+    val tailKey = "$scene:more:${items.size}"
+    val keys = if (continuation != null) itemKeys + tailKey else itemKeys
+    var appendFrom by remember(scene) { mutableStateOf<Int?>(null) }
+    val handoff by rememberUpdatedState(when {
+        appendFrom != null && items.size > appendFrom!! -> itemKeys.getOrNull(appendFrom!!)
+        continuation == null -> itemKeys.lastOrNull()
+        else -> null
+    })
+    // Only a departed pagination row may suggest a new target. Song identity, duplicate order,
+    // ordinary return focus and exact viewport memory continue to use the existing VM contract.
+    val memory = remember(vm, scene) { object : ThorListFocusMemory {
+        override fun readFocus(scene: String): String? {
+            val saved = vm.rememberedFocus(scene)
+            return if (saved?.startsWith("$scene:more:") == true && handoff != null) handoff else saved
+        }
+        override fun readScroll(scene: String) = vm.rememberedListScroll(scene)
+        override fun saveFocus(scene: String, key: String) = vm.rememberFocus(scene, key)
+        override fun saveScroll(scene: String, key: String, offset: Int) = vm.rememberListScroll(scene, key, offset)
+        override fun preview(item: ThorItem?) { if (item != null) vm.preview(item) }
+    } }
+    val focus = BindThorListFocus(registry, scene, keys, items + if (continuation != null) listOf(null) else emptyList(), listState, memory) { index ->
+        if (index == items.size) {
+            continuation?.takeUnless { it.loading }?.let {
+                appendFrom = items.size.takeIf { _ -> it.append }
+                it.onLoad()
+            }
+        } else {
+            val item = items[index]
+            when {
+                onItem != null -> onItem(item, index)
+                items.all { it.key is ThorItemKey.Song && it.tracks.isNotEmpty() } -> vm.play(items.flatMap { it.tracks }, index,
+                    (vm.navigation.value.page as? ThorPage.Collection)?.collection?.title ?: "播放列表")
+                else -> vm.open(item)
+            }
         }
     }
     LazyColumn(modifier.fillMaxWidth().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp)) {
-        itemsIndexed(items, key = { index, _ -> keys[index] }) { index, item ->
-            ThorMusicRow(registry, keys[index], item,
+        itemsIndexed(items, key = { index, _ -> itemKeys[index] }) { index, item ->
+            ThorMusicRow(registry, itemKeys[index], item,
                 trailing = item.trackCount?.let { "$it" },
                 onClick = { focus.activate(index) },
-                onMenu = { anchor -> focus.onFocused(index); vm.openMenu(ThorMenuSubject(item, keys[index], sourcePlaylist), anchor) },
+                onMenu = { anchor -> focus.onFocused(index); vm.openMenu(ThorMenuSubject(item, itemKeys[index], sourcePlaylist), anchor) },
                 onFocused = { focus.onFocused(index) },
                 leadingIcon = destinationIcon(item),
                 mark = when (val key = item.key) {
@@ -225,6 +287,9 @@ internal fun ThorBrowseList(
                     else -> null
                 },
             )
+        }
+        if (continuation != null) item(key = tailKey) {
+            ThorCatalogContinuationRow(registry, tailKey, continuation.loading, continuation.error) { focus.activate(items.size) }
         }
     }
 }
@@ -248,20 +313,25 @@ internal fun ThorBrowsePage(
         is ThorPage.Root -> when (page.tab) {
             ThorTab.My -> ThorMyPage(vm, registry, library, onLegacyRoute)
             ThorTab.Library -> ThorLibraryPage(vm, registry, library)
-            else -> {
-                val collection = if (page.tab == ThorTab.Home) ThorCollection.Home else ThorCollection.Discover
+            ThorTab.Home -> ThorHomeDiscoveryPage(vm, registry, library, pageActions)
+            ThorTab.Discover -> {
+                val collection = if (page.tab == ThorTab.Home) vm.homeCategory.value.collection else ThorCollection.Discover
                 Column(Modifier.fillMaxSize()) {
                     ThorPageHeader(registry, page.tab.title, onSearch = { vm.push(ThorPage.Search) }, onMy = { vm.selectTab(ThorTab.My) })
                     val items = library[collection]
                     if (items.isEmpty()) ThorEmptyState(vm, registry, library.errors[collection] ?: if (collection in library.loading) "正在加载" else "还没有内容",
                         if (collection in library.loading) null else "刷新", { vm.refresh(collection) }, Modifier.weight(1f), collection in library.loading)
-                    else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f))
+                    else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f),
+                        continuation = if (collection in library.hasMore || collection in library.loadingMore || library.errors[collection] != null)
+                            ThorListContinuation(collection in library.loadingMore || collection in library.loading, library.errors[collection], append = collection in library.hasMore) {
+                                if (collection in library.hasMore) vm.loadMore(collection) else vm.refresh(collection)
+                            } else null)
                 }
             }
         }
         is ThorPage.Collection -> Column(Modifier.fillMaxSize()) {
             val items = library[page.collection]
-            val songList = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History)
+            val songList = page.collection in setOf(ThorCollection.LocalSongs, ThorCollection.LikedSongs, ThorCollection.Downloads, ThorCollection.History, ThorCollection.DailySongs)
             if (page.collection in libraryHeaderCollections) ThorCollectionHeader(vm, registry, page.collection, items.size, onBack)
             else ThorPageHeader(registry, page.collection.title, items.size, onBack = onBack, countUnit = if (songList) "首" else if (page.collection == ThorCollection.LocalAlbums) "张" else "个")
             if (items.isEmpty()) {
@@ -274,6 +344,7 @@ internal fun ThorBrowsePage(
                     }, Modifier.weight(1f), busy)
             } else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f))
         }
+        is ThorPage.Artist -> ThorArtistDiscoveryPage(vm, registry, page.item, onBack)
         is ThorPage.Detail -> Column(Modifier.fillMaxSize()) {
             val item = page.item
             ThorPageHeader(registry, item.title, item.trackCount ?: item.tracks.size, onBack)
@@ -453,7 +524,7 @@ private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry
 
 @Composable
 @UnstableApi
-private fun ThorEmptyState(vm: ThorShellViewModel, registry: ThorFocusRegistry, message: String, action: String?, onAction: () -> Unit, modifier: Modifier = Modifier, loading: Boolean = false) {
+internal fun ThorEmptyState(vm: ThorShellViewModel, registry: ThorFocusRegistry, message: String, action: String?, onAction: () -> Unit, modifier: Modifier = Modifier, loading: Boolean = false) {
     BindThorOptionFocus(vm, registry, if (action != null) listOf("empty:action") else emptyList(), ThorFocusLayout.Vertical)
     LaunchedEffect(action, loading) { vm.clearPreview() }
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {

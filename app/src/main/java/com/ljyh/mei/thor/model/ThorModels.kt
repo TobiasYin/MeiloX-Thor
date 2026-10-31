@@ -13,6 +13,9 @@ sealed interface ThorItemKey {
     data class Album(val id: Long, val local: Boolean = false) : ThorItemKey {
         override val stableId get() = "album:$local:$id"
     }
+    data class Artist(val id: Long) : ThorItemKey {
+        override val stableId get() = "artist:$id"
+    }
     data class Playlist(val id: String, val local: Boolean = false) : ThorItemKey {
         override val stableId get() = "playlist:$local:$id"
     }
@@ -80,6 +83,7 @@ enum class ThorCollection(val title: String) {
     Home("首页"), Discover("发现"), LocalSongs("本地音乐"), LocalAlbums("本地专辑"),
     LikedSongs("喜欢的音乐"), CollectedAlbums("收藏专辑"),
     OwnedPlaylists("创建的歌单"), SavedPlaylists("收藏歌单"), Downloads("下载"), History("最近播放"),
+    RecommendedPlaylists("推荐歌单"), Toplists("排行榜"), Artists("歌手"), DailySongs("每日推荐"),
 }
 
 data class ThorLibraryState(
@@ -88,6 +92,8 @@ data class ThorLibraryState(
     val songLikes: Map<Long, Boolean> = emptyMap(),
     val loading: Set<ThorCollection> = emptySet(),
     val errors: Map<ThorCollection, String> = emptyMap(),
+    val hasMore: Set<ThorCollection> = emptySet(),
+    val loadingMore: Set<ThorCollection> = emptySet(),
 ) {
     operator fun get(collection: ThorCollection): List<ThorItem> = collections[collection].orEmpty()
 }

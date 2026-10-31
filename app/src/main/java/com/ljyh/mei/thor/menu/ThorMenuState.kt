@@ -8,7 +8,7 @@ data class ThorMenuAnchor(val x: Float, val y: Float)
 enum class ThorMenuLevel { Actions, Playlists, Name, ConfirmDelete }
 enum class ThorDeleteChoice { Cancel, Delete }
 enum class ThorMenuAction {
-    Like, Collect, PlayNext, Enqueue, AddToPlaylist, Album, RemoveFromPlaylist, RemoveFromQueue, SkipCurrent, Rename, Delete,
+    Like, Collect, PlayNext, Enqueue, AddToPlaylist, Album, Artist, RemoveFromPlaylist, RemoveFromQueue, SkipCurrent, Rename, Delete,
 }
 data class ThorMenuRow(val action: ThorMenuAction, val title: String, val destructive: Boolean = false, val toggled: Boolean? = null)
 
@@ -105,7 +105,9 @@ data class ThorMenuState(
         targets.map { ThorPlaylistTarget.Existing(it) } + ThorPlaylistTarget.Create
 }
 
-fun ThorMenuState.actionRows(liked: Boolean): List<ThorMenuRow> = buildList {
+fun ThorMenuState.actionRows(liked: Boolean): List<ThorMenuRow> {
+    if (subject.item.key is ThorItemKey.Artist) return listOf(ThorMenuRow(ThorMenuAction.Artist, "查看歌手"))
+    return buildList {
     val item = subject.item
     val song = item.key is ThorItemKey.Song || item.key is ThorItemKey.QueueEntry
     if (song) add(ThorMenuRow(ThorMenuAction.Like, if (liked) "取消喜欢" else "喜欢", toggled = liked))
@@ -127,4 +129,5 @@ fun ThorMenuState.actionRows(liked: Boolean): List<ThorMenuRow> = buildList {
         add(ThorMenuRow(ThorMenuAction.Rename, "重命名"))
         add(ThorMenuRow(ThorMenuAction.Delete, "删除歌单", true))
     }
+}
 }

@@ -6,6 +6,7 @@ import com.ljyh.mei.data.repository.PlayerRepository
 import com.ljyh.mei.data.repository.PlaylistRepository
 import com.ljyh.mei.data.repository.SearchRepository
 import com.ljyh.mei.thor.data.ThorMusicRepository
+import com.ljyh.mei.thor.data.ThorCatalogRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -16,6 +17,7 @@ import dagger.hilt.components.SingletonComponent
 interface ThorLiveCatalogEntryPoint {
     fun meloXRepository(): MeloXRepository
     fun thorMusicRepository(): ThorMusicRepository
+    fun thorCatalogRepository(): ThorCatalogRepository
     fun playerRepository(): PlayerRepository
     fun playlistRepository(): PlaylistRepository
     fun searchRepository(): SearchRepository

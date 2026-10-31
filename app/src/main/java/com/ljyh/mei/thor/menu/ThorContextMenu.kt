@@ -466,6 +466,7 @@ private fun menuActionIcon(action: ThorMenuAction, filled: Boolean = false) = wh
     ThorMenuAction.Enqueue -> ThorDesignIcons.icon("list-end")
     ThorMenuAction.AddToPlaylist -> ThorDesignIcons.icon("list-plus")
     ThorMenuAction.Album -> Icons.Outlined.Album
+    ThorMenuAction.Artist -> Icons.Outlined.Person
     ThorMenuAction.RemoveFromPlaylist, ThorMenuAction.RemoveFromQueue -> ThorDesignIcons.icon("list-minus")
     ThorMenuAction.SkipCurrent -> Icons.Outlined.SkipNext
     ThorMenuAction.Rename -> Icons.Outlined.Edit

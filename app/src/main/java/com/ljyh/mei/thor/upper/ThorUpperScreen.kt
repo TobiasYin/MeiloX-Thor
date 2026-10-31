@@ -147,6 +147,7 @@ private fun ThorUpperContent(
                     verticalArrangement = Arrangement.Center) {
                     val eyebrow = when {
                         playbackScene -> if (playing) "正在播放" else "已暂停"
+                        item?.key is ThorItemKey.Artist -> "歌手"
                         item?.key is ThorItemKey.Album -> if (item.collected) "已收藏专辑" else "专辑"
                         item?.key is ThorItemKey.Playlist -> if (item.owned) "创建的歌单" else if (item.collected) "已收藏歌单" else "歌单"
                         item?.key is ThorItemKey.Song -> if (item.key.local) "本地音乐" else "歌曲"
