@@ -1,7 +1,7 @@
 Third-Party Notices
 ===================
 
-MeiloX is distributed under the GNU General Public License, version 3 (see
+MeiloX and the MeiloX-Thor adaptation are distributed under the GNU General Public License, version 3 (see
 LICENSE). The components below remain under their own terms. This file is a
 notice and does not replace any upstream license text.
 
@@ -91,7 +91,7 @@ removed or separately licensed before public distribution.
 Bouncy Castle
 -------------
 The URS compatibility path uses Bouncy Castle Provider `bcprov-jdk18on`
-version 1.85.2. Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc.
+version 1.86. Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc.
 It is distributed under the Bouncy Castle License:
 https://www.bouncycastle.org/license.html
 
@@ -156,12 +156,12 @@ https://github.com/DanteAlighieri13210914/pv-tool
 
 PV Tool-derived material may be used only for non-commercial purposes unless
 the copyright holder grants separate written permission. The GPLv3 license
-for Mei does not replace or broaden the PV Tool license.
+for MeiloX and MeiloX-Thor does not replace or broaden the PV Tool license.
 
 ONNX Runtime
 ------------
 The Android ONNX Runtime artifact
-(`com.microsoft.onnxruntime:onnxruntime-android:1.28.0`) is Copyright (c)
+(`com.microsoft.onnxruntime:onnxruntime-android:1.31.0`) is Copyright (c)
 Microsoft and contributors and is licensed
 under the MIT License:
 https://github.com/microsoft/onnxruntime
@@ -173,3 +173,13 @@ SF Pro is an Apple font included in this private, personal-use project as
 glyphs used by MeloX. It must not be extracted or redistributed separately,
 and public distribution of builds requires a fresh review of Apple's font
 license terms. Apple retains all rights in SF Pro.
+
+Lucide / Feather icons in the Thor interface
+------------------------------------------
+The Thor interface uses Lucide SVG path data. Lucide is distributed under
+the ISC License; icons derived from Feather retain Cole Bemis's MIT License.
+The complete upstream copyright and license notices are retained in:
+app/src/main/assets/licenses/lucide.LICENSE
+
+Source: https://github.com/lucide-icons/lucide
+The MeiloX-Thor adaptation does not replace or broaden these licenses.
