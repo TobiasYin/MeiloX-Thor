@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "source_commit": "5ab62a79a4fd55242a262e98f0cd96a6350a3277",
+  "package": "com.neoruaa.meilox",
+  "apk": "app/build/outputs/apk/debug/app-debug.apk",
+  "size_bytes": 74451927,
+  "sha256": "7c0f5b6d16e2bce6966722f9c8df0e95a8fc6e9c70cb0a274ac9f44143d94e8e",
+  "installed_apk_checksum_matches": true,
+  "testing_policy": "dedicated_dual_screen_emulator_only",
+  "emulator": {
+    "avd": "thor_agent_dual_api36",
+    "serial": "emulator-5560",
+    "android_api": 36,
+    "upper": {
+      "logical_display_id": 0,
+      "width": 1920,
+      "height": 1080,
+      "density": 369
+    },
+    "lower": {
+      "logical_display_id": 4,
+      "width": 1240,
+      "height": 1080,
+      "density": 369
+    }
+  },
+  "verification": {
+    "debug_app_and_test_apks": "passed",
+    "jvm": {
+      "tests": 480,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "native_embedded_windows_and_fields": {
+      "tests": 6,
+      "passed": 6,
+      "seconds": 19.308
+    },
+    "native_existing_controller_focus_menu_theme": {
+      "tests": 32,
+      "passed": 32,
+      "seconds": 129.304
+    },
+    "account_web_focused_recheck": {
+      "tests": 1,
+      "passed": 1,
+      "seconds": 7.034
+    },
+    "final_web_main_dispatcher_fix_rechecked_with": [
+      "native_embedded_windows_and_fields",
+      "account_web_focused_recheck"
+    ]
+  },
+  "real_credentials_submitted": false,
+  "verification_sms_sent": false,
+  "physical_devices_tested": false,
+  "final_emulator_page": "ThorActivity / 音频与播放",
+  "limitations": [
+    "Live server captcha completion and fresh account sign-in were not submitted.",
+    "Synthetic captcha tests verify the production window and controller host, not a server challenge.",
+    "USB hardware audio behavior cannot be verified on this emulator."
+  ]
+}
