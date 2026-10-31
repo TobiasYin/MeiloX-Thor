@@ -1,0 +1,58 @@
+{
+  "environment": "AYN_Thor_physical",
+  "isPhysicalThorPerformanceResult": true,
+  "recordedAtUtc": "2026-10-31T18:29:22.505929Z",
+  "deviceModel": "AYN Thor",
+  "sdkInt": 33,
+  "frameDriver": "Production AndroidUiDispatcher/Choreographer; ActivityScenario without ComposeTestRule",
+  "scene": "ThorUpperScreen + local PNG/Coil palette extraction + CD case + ArtworkFlow + real SyncedLyrics",
+  "mode": "ArtworkFlow",
+  "theme": "Glass/Night/High",
+  "playing": true,
+  "reduceMotion": false,
+  "syntheticLyricPlaybackSpeed": 1.5,
+  "warmupMs": 1800,
+  "warmupFrameCallbacks": 107,
+  "sampleDurationMs": 5000,
+  "count": 298,
+  "droppedMetricsCallbacks": 0,
+  "droppedMetricsMeaning": "Undelivered metrics callbacks; not a count of missed display frames",
+  "totalDuration": {
+    "supportedSamples": 298,
+    "p50Ms": 26.642208,
+    "p95Ms": 28.254541,
+    "maxMs": 31.122448
+  },
+  "drawDuration": {
+    "supportedSamples": 298,
+    "p50Ms": 1.419583,
+    "p95Ms": 1.936667,
+    "maxMs": 5.644063
+  },
+  "gpuDuration": {
+    "supportedSamples": 298,
+    "p50Ms": 1.623438,
+    "p95Ms": 2.030053,
+    "maxMs": 2.489636
+  },
+  "syncDuration": {
+    "supportedSamples": 298,
+    "p50Ms": 0.066198,
+    "p95Ms": 0.096094,
+    "maxMs": 0.93724
+  },
+  "commandIssueDuration": {
+    "supportedSamples": 298,
+    "p50Ms": 16.009948,
+    "p95Ms": 17.485209,
+    "maxMs": 20.552865
+  },
+  "display": {
+    "displayId": 0,
+    "windowWidthPx": 1920,
+    "windowHeightPx": 1080,
+    "reportedRefreshRateHz": 60.000003814697266
+  },
+  "screenshot": "upper-native-night.png",
+  "scope": "AYN Thor synthetic native-window timings only; no general playback FPS threshold or extrapolation"
+}

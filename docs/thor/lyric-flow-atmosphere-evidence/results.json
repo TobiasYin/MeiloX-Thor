@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "environment": "AYN_Thor_physical",
+  "androidSdk": 33,
+  "upperPixels": [
+    1920,
+    1080
+  ],
+  "lowerPixels": [
+    1240,
+    1080
+  ],
+  "jvm": {
+    "tests": 1241,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native": {
+    "uniqueMethods": 33,
+    "passed": 33,
+    "failures": 0,
+    "skipped": 0,
+    "durationSeconds": 130.713,
+    "methods": [
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorLyricFlowInstrumentedTest",
+        "test": "sixMaterialAppearancesKeepProgressWithoutMotionAndKeepTranslationBoundsStable",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorLyricFlowInstrumentedTest",
+        "test": "playbackFramesOnlyRedrawWordsAndPauseHiddenAndReducedMotionStopTheDecorativeClock",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorLyricFlowInstrumentedTest",
+        "test": "actualMediaClockCrossesTheLineBoundaryWithoutWaitingForAnObservableBridgeTick",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorLyricFlowInstrumentedTest",
+        "test": "plainLrcUsesContinuousLineProgressAndNeverReportsInventedWordTiming",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackBackdropInstrumentedTest",
+        "test": "modesIntensityAndAllSixThemesKeepTheRealCoverAndLyricLayoutInPlace",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackBackdropInstrumentedTest",
+        "test": "defaultIntensityMutedCoverColorsReachTheReadingSideWhileReducedMotionStaysPixelStable",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackBackdropInstrumentedTest",
+        "test": "flowChangesRealPixelsThenPauseVisibilityAndReducedMotionStopDecorativeFrames",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackBackdropInstrumentedTest",
+        "test": "allSixMaterialAppearancesActuallyPaintAndKeepTheLyricZoneReadable",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.playback.ThorVisualEffectsLiveInstrumentedTest",
+        "test": "actualOnlineArtworkAndLyricsRenderVisibleMovingFlowInDayAndNight",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "upperAndLowerEdgesActuallyFadeTheSameRenderedLineInDayAndNight",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "productionFifteenSecondIdleTimerReturnsToTheCurrentLineWithoutSeeking",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "upcomingTranslationIsAlreadyVisibleAndFocusDoesNotResizeItsRow",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "dayAndNightLongTextTranslationSpacingAndPaddedClickTargetsAreRealLayouts",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "fullUpperScreenUsesTheExtraHeightForRealBilingualText",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "anotherDragReplacesTheDeadlineAndAnOldTimerCannotResumeFollowing",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "inactiveLyricsIgnoreTouchSelectionAndScrolling",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "differentlySizedBilingualLinesFollowWithoutOvershootingAndCorrectingBack",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "aSingleTapOnABrowsedLineSelectsThatTimeOnceAndResumesFollowing",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "playbackClockAdvancesWithoutMovingTheBrowsedViewportAndIdleCanResumeFollowing",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "draggingAndFlingingBrowseWithoutSeeking",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest",
+        "test": "aRealDragInterruptsFollowAnimationAndLaterPlaybackUpdatesStillFollow",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest",
+        "test": "hiddenAndReducedMotionStopFramesWhileReducedMotionStillAllowsDirectFaceAccess",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest",
+        "test": "startingPlaybackInterruptsAnAlreadySpinningBlownCaseWithoutResidualRevolutions",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest",
+        "test": "playingRejectsFullRawAirflowAndRendersOnlySmallSlowBreathingInPlayerAndBrowse",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest",
+        "test": "pausingEasesTheRenderedPoseBackThenStopsItsFrameLoop",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest",
+        "test": "touchTakesOwnershipWhilePlayingAndReleaseDoesNotResumeTheHeldRawAirflow",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest",
+        "test": "caseDraggingAndLyricTouchBrowsingAndSeekContinueWithoutInputFocus",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest",
+        "test": "touchingThenRequestingDpadOrSystemKeysNeverSelectsAnUpperNodeOrAddsACaseBorder",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest",
+        "test": "upperFocusExclusionDoesNotDisableASiblingNativeTextInput",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest",
+        "test": "realWindowFocusLossAndRestorationAfterTouchDoesNotRestoreAnUpperSelection",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.theme.ThorThemeMotionInstrumentedTest",
+        "test": "reEnablingMotionCompletesTheThemeTransitionWithAVirtualFrameClock",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest",
+        "test": "liveOnlineLyricsDragIdleReturnAndLineTouchSeekTheExistingPlayer",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.upper.ThorBackdropFrameTimingInstrumentedTest",
+        "test": "recordsRealFullUpperWindowFramesWithCoverExtractionAndScrollingLyrics",
+        "status": "passed"
+      }
+    ]
+  },
+  "scope": "Related visual regressions and actual online integration only; not a repeat or sum of previous 91-method acceptance.",
+  "manualBlowTest": "Not repeated, as requested by user.",
+  "functionalSourceCommit": "d87367a82f9daa51b72c928e81c73f82bde97f63"
+}

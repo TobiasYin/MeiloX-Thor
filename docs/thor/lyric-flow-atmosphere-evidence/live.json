@@ -1,0 +1,33 @@
+{
+  "environment": "AYN_Thor_physical",
+  "status": "passed",
+  "initialPreferences": {
+    "backgroundMode": "ArtworkFlow",
+    "intensity": "Medium",
+    "reduceMotion": false,
+    "reduceTransparency": false,
+    "appearance": "Day"
+  },
+  "lyricSource": "QQMusic",
+  "lyricLines": 41,
+  "timedSyllables": 391,
+  "actualPlayerProgressed": true,
+  "phases": [
+    {
+      "appearance": "Day",
+      "changedBackgroundSamples": 9,
+      "maximumChannelDelta": 11,
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "appearance": "Night",
+      "changedBackgroundSamples": 16,
+      "maximumChannelDelta": 21,
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "preferencesRestored": true,
+  "queueRestored": true
+}
