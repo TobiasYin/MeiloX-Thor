@@ -1,0 +1,26 @@
+{
+  "sourceCommit": "59d30dda58679a5404f9baf12eebadb1ea7dcfeb",
+  "avd": "thor_agent_dual_api36",
+  "adbSerial": "emulator-5560",
+  "adbServerPort": 5038,
+  "physicalDeviceTested": false,
+  "appId": "com.neoruaa.meilox",
+  "apk": "app/build/outputs/apk/debug/app-debug.apk",
+  "apkBytes": 74451927,
+  "apkSha256": "35ff5f00e825d84c7d15a7185f53b47e599be8469e4479762a53ae8a1232a7e6",
+  "installedApkSha256": "35ff5f00e825d84c7d15a7185f53b47e599be8469e4479762a53ae8a1232a7e6",
+  "unitTests": {
+    "tests": 524,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "nativeTests": {
+    "tests": 29,
+    "failures": 0,
+    "durationSeconds": 211.993
+  },
+  "input": "Synthetic maximum airflow injected through the real ThorUpperScreen; no physical microphone test",
+  "newNativeCases": 5,
+  "newJvmCases": 17
+}
