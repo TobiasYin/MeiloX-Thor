@@ -6,7 +6,7 @@ data class Tracks(
     @SerializedName("code")
     val code: Int,
     @SerializedName("privileges")
-    val privileges: List<PlaylistDetail.Privilege>,
+    val privileges: List<PlaylistDetail.Privilege>? = null,
     @SerializedName("songs")
     val songs: List<PlaylistDetail.Playlist.Track>
 )

@@ -74,7 +74,7 @@ data class Data(
     @SerializedName("position")
     val position: Int,
     @SerializedName("privilege")
-    val privilege: Privilege,
+    val privilege: Privilege? = null,
     @SerializedName("reason")
     val reason: String,
     @SerializedName("reasonId")
@@ -315,15 +315,15 @@ data class Privilege(
     @SerializedName("pc")
     val pc: Any,
     @SerializedName("pl")
-    val pl: Int,
+    val pl: Int? = null,
     @SerializedName("plLevel")
     val plLevel: String,
     @SerializedName("plLevels")
     val plLevels: Any,
     @SerializedName("playMaxBrLevel")
-    val playMaxBrLevel: String,
+    val playMaxBrLevel: String? = null,
     @SerializedName("playMaxbr")
-    val playMaxbr: Int,
+    val playMaxbr: Int? = null,
     @SerializedName("preSell")
     val preSell: Boolean,
     @SerializedName("realPayed")
@@ -335,7 +335,7 @@ data class Privilege(
     @SerializedName("sp")
     val sp: Int,
     @SerializedName("st")
-    val st: Int,
+    val st: Int? = null,
     @SerializedName("subp")
     val subp: Int,
     @SerializedName("toast")

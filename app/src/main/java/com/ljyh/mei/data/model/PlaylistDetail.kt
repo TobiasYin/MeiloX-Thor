@@ -12,7 +12,7 @@ data class PlaylistDetail(
     @SerializedName("playlist")
     val playlist: Playlist,
     @SerializedName("privileges")
-    val privileges: List<Privilege>,
+    val privileges: List<Privilege>? = null,
     @SerializedName("relatedVideos")
     val relatedVideos: Any,
     @SerializedName("resEntrance")
@@ -387,7 +387,7 @@ data class PlaylistDetail(
             @SerializedName("sq")
             val sq: Sq?,
             @SerializedName("st")
-            val st: Int,
+            val st: Int? = null,
             @SerializedName("t")
             val t: Int,
             @SerializedName("tagPicList")
@@ -405,8 +405,9 @@ data class PlaylistDetail(
             @SerializedName("jm")
             val jm: AudioResource? = null,
             @SerializedName("dl")
-            val dl: AudioResource? = null
-        ) {
+            val dl: AudioResource? = null,
+            @SerializedName("privilege") val privilege: SongPlaybackPrivilege? = null
+) {
             data class AudioResource(
                 @SerializedName("br")
                 val br: Int = 0,
@@ -566,13 +567,13 @@ data class PlaylistDetail(
         @SerializedName("pc")
         val pc: Any,
         @SerializedName("pl")
-        val pl: Int,
+        val pl: Int? = null,
         @SerializedName("plLevel")
         val plLevel: String,
         @SerializedName("playMaxBrLevel")
-        val playMaxBrLevel: String,
+        val playMaxBrLevel: String? = null,
         @SerializedName("playMaxbr")
-        val playMaxbr: Int,
+        val playMaxbr: Int? = null,
         @SerializedName("preSell")
         val preSell: Boolean,
         @SerializedName("realPayed")
@@ -584,7 +585,7 @@ data class PlaylistDetail(
         @SerializedName("sp")
         val sp: Int,
         @SerializedName("st")
-        val st: Int,
+        val st: Int? = null,
         @SerializedName("subp")
         val subp: Int,
         @SerializedName("toast")
@@ -624,7 +625,7 @@ fun PlaylistDetail.toMiniPlaylistDetail():MiniPlaylistDetail{
         name = playlist.name,
         description = playlist.description,
         id = playlist.Id,
-        tracks = playlist.tracks.map { it.toMediaMetadata() },
+        tracks = toMediaMetadata(),
         trackIds = playlist.trackIds.map { it.id },
         count = playlist.trackCount,
         creatorUserId = playlist.creator.userId,

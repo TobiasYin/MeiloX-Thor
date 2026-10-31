@@ -23,6 +23,7 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
@@ -30,6 +31,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -40,7 +42,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MusicServiceQualityRecoveryTest {
     @Test
-    fun repeatedSourceFailuresStopAcrossRealQueueTransitionsAndRetainTheQueue() {
+    fun pausedRepeatedSourceFailuresNeverStartCandidateRecoveryOrChangeTheQueue() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("issue59Recovery") == "true")
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -78,55 +80,54 @@ class MusicServiceQualityRecoveryTest {
                 val player = currentService.player
                 player.removeListener(restoreListener)
                 assertFalse("Run the opt-in regression while paused", player.playWhenReady)
-                assertTrue("The saved queue needs six entries to verify the retry limit", player.mediaItemCount >= 6)
+                assertTrue("The saved queue needs six entries with other candidates available", player.mediaItemCount >= 6)
+                currentService.queueManager.cancelServerShuffle()
                 original = QueueSnapshot.capture(player)
                 originalItems = List(player.mediaItemCount, player::getMediaItemAt)
-                player.shuffleModeEnabled = false
-                player.repeatMode = Player.REPEAT_MODE_ALL
-                player.seekTo(0, 0L)
+                assertNotNull("The paused queue must retain a selected entry", player.currentMediaItem?.queueEntryId)
             }
             listener = null
-            repeat(5) { failureIndex ->
-                val transitioned = CountDownLatch(1)
-                var failedEntry: String? = null
-                var nextEntry: String? = null
-                val transitionListener = object : Player.Listener {
-                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                        if (mediaItem?.queueEntryId == nextEntry && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
-                            transitioned.countDown()
-                        }
-                    }
+            val seekEvents = AtomicInteger()
+            val transitionListener = object : Player.Listener {
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK) seekEvents.incrementAndGet()
                 }
-                listener = transitionListener
+            }
+            // Inspect immediately in the same Main callback as the injected error. A wrongly
+            // started job cannot finish before this assertion and hide an unwanted candidate scan.
+            val recoveryJob = MusicService::class.java.getDeclaredField("unavailableRecoveryJob").apply { isAccessible = true }
+            listener = transitionListener
+            instrumentation.runOnMainSync { currentService.player.addListener(transitionListener) }
+            repeat(8) {
                 instrumentation.runOnMainSync {
-                    val player = currentService.player
-                    failedEntry = player.currentMediaItem?.queueEntryId
-                    nextEntry = player.getMediaItemAt(player.nextMediaItemIndex).queueEntryId
-                    assertNotNull(failedEntry)
-                    assertNotNull(nextEntry)
-                    player.addListener(transitionListener)
+                    assertFalse(currentService.player.playWhenReady)
                     currentService.onPlayerError(
                         PlaybackException("Injected unavailable source", null, PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS),
                     )
-                }
-                if (failureIndex < 4) {
-                    assertTrue("Automatic skip must publish its real SEEK event", transitioned.await(10, TimeUnit.SECONDS))
+                    assertNull("An already-paused error must not start candidate probing", recoveryJob.get(currentService))
                 }
                 instrumentation.waitForIdleSync()
                 instrumentation.runOnMainSync {
                     val player = currentService.player
-                    player.removeListener(transitionListener)
-                    assertEquals(original!!.entryIds, QueueSnapshot.capture(player).entryIds)
+                    val saved = checkNotNull(original)
+                    val current = QueueSnapshot.capture(player)
+                    assertEquals(saved.mediaIds, current.mediaIds)
+                    assertEquals(saved.entryIds, current.entryIds)
+                    assertEquals(saved.index, current.index)
+                    assertEquals(saved.entryIds[saved.index], player.currentMediaItem?.queueEntryId)
+                    assertEquals("Paused errors must retain the selected retry position", saved.positionMs, current.positionMs)
+                    assertEquals(saved.shuffleOrder, current.shuffleOrder)
+                    assertEquals(saved.shuffleEnabled, current.shuffleEnabled)
+                    assertEquals(saved.repeatMode, current.repeatMode)
                     assertFalse(player.playWhenReady)
-                    if (failureIndex < 4) {
-                        assertEquals(nextEntry, player.currentMediaItem?.queueEntryId)
-                    } else {
-                        assertEquals("The fifth failure must stop before another request", Player.STATE_IDLE, player.playbackState)
-                        assertEquals(failedEntry, player.currentMediaItem?.queueEntryId)
-                    }
+                    assertEquals("Repeated paused errors must never seek across the queue", 0, seekEvents.get())
+                    assertNull(recoveryJob.get(currentService))
                 }
-                listener = null
             }
+            instrumentation.runOnMainSync {
+                currentService.player.removeListener(transitionListener)
+            }
+            listener = null
         } finally {
             try {
                 service?.let { currentService ->

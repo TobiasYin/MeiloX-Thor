@@ -9,8 +9,13 @@ import com.ljyh.mei.constants.CookieKey
 import com.ljyh.mei.constants.UserAvatarUrlKey
 import com.ljyh.mei.constants.UserIdKey
 import com.ljyh.mei.constants.UserNicknameKey
+import com.ljyh.mei.data.model.PlaylistDetail
+import com.ljyh.mei.data.model.SongPlaybackPrivilege
+import com.ljyh.mei.data.model.withPlaybackPrivilege
+import com.ljyh.mei.data.model.mergedSongPlaybackPrivilege
+import com.ljyh.mei.data.model.withoutPlaybackAvailability
 import com.ljyh.mei.data.model.MediaMetadata
-import com.ljyh.mei.data.model.api.toMediaData
+import com.ljyh.mei.data.model.api.toSongMediaMetadata
 import com.ljyh.mei.data.model.room.SourceType
 import com.ljyh.mei.data.model.toMediaMetadata
 import com.ljyh.mei.data.network.NeteaseSessionType
@@ -204,7 +209,7 @@ class ThorMusicRepository @Inject constructor(
         if (collection == null || collection == ThorCollection.Home) {
             fetch("home", setOf(ThorCollection.Home)) {
                 val blocks = home.getHomePageResourceShow(refresh = true).valueOrThrow()
-                mapOf(ThorCollection.Home to parseHomeResources(blocks.mapNotNull { it.dslData }))
+                mapOf(ThorCollection.Home to parseHomeResources(blocks.mapNotNull { it.dslData }, gson))
             }
         }
     }
@@ -304,17 +309,16 @@ class ThorMusicRepository @Inject constructor(
         when (val key = item.key) {
             is ThorItemKey.Song -> if (key.local) {
                 state.value[ThorCollection.LocalSongs].firstOrNull { it.key == key } ?: error("本地歌曲已不存在")
-            } else if (item.tracks.isNotEmpty()) item else {
+            } else {
                 ensureRemoteReady(ticket)
                 val tracks = playerRepository.getSongDetail(key.id.toString()).valueOrThrow()
                 checkReadAccount()
                 check(tracks.code == 200) { "歌曲读取失败" }
-                tracks.songs.firstOrNull { it.id == key.id }?.toMediaMetadata()?.toThorItem() ?: error("歌曲已不可用")
+                tracks.toMediaMetadata().firstOrNull { it.id == key.id }?.toThorItem() ?: error("歌曲已不可用")
             }
             is ThorItemKey.Album -> {
                 if (key.local) return@withContext state.value[ThorCollection.LocalAlbums].firstOrNull { it.key == key }
                     ?: error("本地专辑已不存在，请重新扫描")
-                if (hasCompleteTracks(item)) return@withContext decorate(item)
                 ensureRemoteReady(ticket)
                 val detail = playlists.getAlbumDetail(key.id.toString()).valueOrThrow()
                 checkReadAccount()
@@ -322,7 +326,7 @@ class ThorMusicRepository @Inject constructor(
                 decorate(item.copy(title = detail.album.name, artworkUri = detail.album.picUrl,
                     subtitle = detail.album.artists.joinToString(" / ") { it.name },
                     description = detail.album.description.orEmpty(), trackCount = detail.songs.size,
-                    tracks = detail.songs.map { it.toMediaMetadata() }))
+                    tracks = detail.toMediaMetadata()))
             }
             is ThorItemKey.Playlist -> {
                 if (key.local) return@withContext localPlaylist(key.id)
@@ -359,7 +363,7 @@ class ThorMusicRepository @Inject constructor(
         val online = responses.filterIsInstance<Resource.Success<com.ljyh.mei.data.model.api.SearchResult>>()
             .filter { it.data.code == 200 }.flatMap { response ->
                 val result = response.data.result
-                result.songs.orEmpty().map { it.toMediaData().toThorItem() } +
+                result.toSongMediaMetadata().map { it.toThorItem() } +
                     result.albums.orEmpty().map { album -> ThorItem(ThorItemKey.Album(album.id), album.name,
                         album.artists.joinToString(" / ") { it.name }, album.picUrl, album.description.orEmpty(), album.size) } +
                     result.playlists.orEmpty().map { playlist -> ThorItem(ThorItemKey.Playlist(playlist.id.toString()),
@@ -680,11 +684,11 @@ class ThorMusicRepository @Inject constructor(
             else -> error("此项目不能收藏")
         }
         return ThorFavoriteEntity(scope, kind, id, local, item.title, item.subtitle, item.artworkUri,
-            item.description, gson.toJson(item.tracks), System.currentTimeMillis())
+            item.description, gson.toJson(item.tracks.map { it.withoutPlaybackAvailability() }), System.currentTimeMillis())
     }
 
     private fun decodeTracks(json: String): List<MediaMetadata> = runCatching {
-        gson.fromJson<List<MediaMetadata>>(json, TRACKS_TYPE).orEmpty()
+        gson.fromJson<List<MediaMetadata>>(json, TRACKS_TYPE).orEmpty().map { it.withoutPlaybackAvailability() }
     }.getOrDefault(emptyList())
 
     private fun favoriteItem(record: ThorFavoriteEntity): ThorItem = ThorItem(
@@ -700,11 +704,11 @@ class ThorMusicRepository @Inject constructor(
 
     private fun members(id: String, tracks: List<MediaMetadata>): List<ThorPlaylistTrackEntity> =
         tracks.distinctBy(::songIdentity).mapIndexed { index, song ->
-            ThorPlaylistTrackEntity(id, songIdentity(song), index, gson.toJson(song))
+            ThorPlaylistTrackEntity(id, songIdentity(song), index, gson.toJson(song.withoutPlaybackAvailability()))
         }
 
     private fun memberTrack(record: ThorPlaylistTrackEntity): MediaMetadata? = runCatching {
-        gson.fromJson(record.metadataJson, MediaMetadata::class.java)
+        gson.fromJson(record.metadataJson, MediaMetadata::class.java)?.withoutPlaybackAvailability()
     }.getOrNull()
 
     private suspend fun localPlaylist(id: String): ThorItem {
@@ -816,7 +820,7 @@ private fun publicOperationError(error: Exception): String {
 }
 
 /** Only project actual routable resources, never invent cards for unsupported modules. */
-internal fun parseHomeResources(elements: List<JsonElement>): List<ThorItem> {
+internal fun parseHomeResources(elements: List<JsonElement>, gson: Gson = Gson()): List<ThorItem> {
     val result = mutableListOf<ThorItem>()
     fun visit(element: JsonElement) {
         if (element.isJsonArray) { element.asJsonArray.forEach(::visit); return }
@@ -832,14 +836,35 @@ internal fun parseHomeResources(elements: List<JsonElement>): List<ThorItem> {
                 type == "song" -> ThorItemKey.Song(id)
                 else -> null
             }
-            if (key != null) result += ThorItem(key, title, obj.stringValue("subTitle").orEmpty(),
-                obj.stringValue("coverImg") ?: obj.stringValue("picUrl"))
+            if (key != null) {
+                val song = if (key is ThorItemKey.Song) homeSongMetadata(obj, key.id, gson) else null
+                result += ThorItem(key, title, obj.stringValue("subTitle").orEmpty(),
+                    obj.stringValue("coverImg") ?: obj.stringValue("picUrl"), tracks = listOfNotNull(song))
+            }
         }
         obj.entrySet().forEach { visit(it.value) }
     }
     elements.forEach(::visit)
     return result.distinctBy { it.key }
 }
+
+/** Use only an actual complete song object supplied by home DSL; missing metadata stays unresolved. */
+private fun homeSongMetadata(resource: JsonObject, id: Long, gson: Gson): MediaMetadata? = runCatching {
+    fun JsonObject.objectValue(name: String) = get(name)?.takeIf { it.isJsonObject }?.asJsonObject
+    val song = resource.objectValue("resourceExtInfo")?.objectValue("songData")
+        ?: resource.objectValue("songData") ?: return@runCatching null
+    if (song.get("id")?.asLong != id || song.stringValue("name").isNullOrBlank() ||
+        song.objectValue("al") == null || song.get("ar")?.isJsonArray != true || !song.has("dt")) return@runCatching null
+    val decoded = gson.fromJson(song, PlaylistDetail.Playlist.Track::class.java)
+    val metadata = decoded.toMediaMetadata()
+    val resourcePrivilege = resource.objectValue("privilege")?.let {
+        gson.fromJson(it, SongPlaybackPrivilege::class.java).let { privilege ->
+            if (privilege.id == null) privilege.copy(id = id) else privilege
+        }
+    }
+    if (resourcePrivilege == null) metadata else metadata.withPlaybackPrivilege(
+        mergedSongPlaybackPrivilege(id, gson.fromJson(song.get("privilege"), SongPlaybackPrivilege::class.java), resourcePrivilege, decoded.st))
+}.getOrNull()
 
 /** Keep the accepted generation across SDK/registration suspension, including A -> B -> A. */
 internal suspend fun awaitThorDeviceIdentity(

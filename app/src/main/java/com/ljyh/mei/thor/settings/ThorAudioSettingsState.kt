@@ -12,7 +12,7 @@ data class ThorAudioSettingsState(
     val loopPlayback: Boolean = true,
     val concurrentPlayback: Boolean = false,
     val cloudShuffle: Boolean = true,
-    val skipUnavailable: Boolean = false,
+    val skipUnavailable: Boolean = true,
     val previousDirect: Boolean = true,
     val restorePosition: Boolean = true,
     val restoreState: Boolean = true,
@@ -43,7 +43,7 @@ internal fun decodeThorAudioSettings(p: Preferences): ThorAudioSettingsState {
         loopPlayback = p[LoopPlaybackKey] ?: true,
         concurrentPlayback = p[AllowConcurrentPlaybackKey] ?: false,
         cloudShuffle = p[CloudShuffleEnabledKey] ?: true,
-        skipUnavailable = p[NoAudioSourceKey] ?: false,
+        skipUnavailable = p[NoAudioSourceKey] ?: true,
         previousDirect = p[PreviousPlaybackKey] ?: true,
         restorePosition = p[RestorePlaybackPositionKey] ?: true,
         restoreState = p[RestorePlaybackStateKey] ?: true,
@@ -79,7 +79,7 @@ internal fun decodeThorEqualizerGains(serialized: String?, preset: EqualizerPres
 
 enum class ThorAudioToggle(internal val key: Preferences.Key<Boolean>, internal val default: Boolean) {
     Loop(LoopPlaybackKey, true), Concurrent(AllowConcurrentPlaybackKey, false),
-    CloudShuffle(CloudShuffleEnabledKey, true), SkipUnavailable(NoAudioSourceKey, false),
+    CloudShuffle(CloudShuffleEnabledKey, true), SkipUnavailable(NoAudioSourceKey, true),
     PreviousDirect(PreviousPlaybackKey, true), RestorePosition(RestorePlaybackPositionKey, true),
     RestoreState(RestorePlaybackStateKey, true), AutoMix(AutoMixEnabledKey, false),
     TempoMatching(AutoMixTempoMatchingKey, true), Equalizer(EqualizerEnabledKey, false),

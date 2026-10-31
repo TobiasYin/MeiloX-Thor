@@ -1,6 +1,8 @@
 package com.ljyh.mei.data.model.api
 
 import com.google.gson.annotations.SerializedName
+import com.ljyh.mei.data.model.withPlaybackPrivilege
+import com.ljyh.mei.data.model.mergedSongPlaybackPrivilege
 import com.ljyh.mei.data.model.MediaMetadata
 import com.ljyh.mei.data.model.room.Playlist
 import com.ljyh.mei.ui.model.Album
@@ -36,8 +38,9 @@ data class SearchResult(
         @SerializedName("albums")
         val albums: List<Album>?,
         @SerializedName("djRadios")
-        val podcasts: List<Podcast>?
-    ) {
+        val podcasts: List<Podcast>?,
+        @SerializedName("privileges") val privileges: List<com.ljyh.mei.data.model.SongPlaybackPrivilege>? = null
+) {
         data class Podcast(
             @SerializedName("id") val id: Long,
             @SerializedName("name") val name: String,
@@ -81,8 +84,9 @@ data class SearchResult(
             @SerializedName("mark")
             val mark: Long,
             @SerializedName("status")
-            val status: Int
-        ) {
+            val status: Int,
+            @SerializedName("privilege") val privilege: com.ljyh.mei.data.model.SongPlaybackPrivilege? = null
+) {
             data class Album(
                 @SerializedName("publishTime")
                 val publishTime: Long,
@@ -327,7 +331,7 @@ data class SearchResult(
 
 
 
-fun SearchResult.Result.Song.toMediaData(): MediaMetadata {
+fun SearchResult.Result.Song.toMediaData(separatePrivilege: com.ljyh.mei.data.model.SongPlaybackPrivilege? = null): MediaMetadata {
     return MediaMetadata(
         id = id,
         title = name,
@@ -345,7 +349,7 @@ fun SearchResult.Result.Song.toMediaData(): MediaMetadata {
             id = album.id,
             title = album.name
         )
-    )
+    ).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, privilege, separatePrivilege))
 }
 
 
@@ -375,4 +379,10 @@ fun SearchResult.Result.Album.toAlbum(): Album {
             )
         },
     )
+}
+
+/** Search backends may return permission arrays independently of song order. */
+fun SearchResult.Result.toSongMediaMetadata(): List<MediaMetadata> {
+    val byId = privileges.orEmpty().associateBy { it.id }
+    return songs.orEmpty().map { it.toMediaData(byId[it.id]) }
 }

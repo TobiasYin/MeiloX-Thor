@@ -2,6 +2,7 @@ package com.ljyh.mei.thor.menu
 
 import com.ljyh.mei.thor.model.ThorItemKey
 import com.ljyh.mei.thor.model.ThorMenuSubject
+import com.ljyh.mei.thor.model.isPlaybackUnavailable
 
 data class ThorMenuAnchor(val x: Float, val y: Float)
 enum class ThorMenuLevel { Actions, Playlists, Name, ConfirmDelete }
@@ -111,8 +112,10 @@ fun ThorMenuState.actionRows(liked: Boolean): List<ThorMenuRow> = buildList {
     if (item.key is ThorItemKey.Album || item.key is ThorItemKey.Playlist && !item.owned) {
         add(ThorMenuRow(ThorMenuAction.Collect, if (item.collected) "取消收藏" else "收藏", toggled = item.collected))
     }
-    add(ThorMenuRow(ThorMenuAction.PlayNext, "下一首播放"))
-    add(ThorMenuRow(ThorMenuAction.Enqueue, "加入播放队列"))
+    if (!item.isPlaybackUnavailable) {
+        add(ThorMenuRow(ThorMenuAction.PlayNext, "下一首播放"))
+        add(ThorMenuRow(ThorMenuAction.Enqueue, "加入播放队列"))
+    }
     add(ThorMenuRow(ThorMenuAction.AddToPlaylist, "加入歌单"))
     if (song && item.tracks.firstOrNull()?.album?.id != null) add(ThorMenuRow(ThorMenuAction.Album, "查看专辑"))
     if (subject.sourcePlaylist != null) add(ThorMenuRow(ThorMenuAction.RemoveFromPlaylist, "从歌单移除", true))

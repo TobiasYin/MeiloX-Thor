@@ -122,7 +122,7 @@ internal fun ThorAudioSettingsPage(
                     toggle("loop", "队列循环播放", state.loopPlayback, ThorAudioToggle.Loop)
                     toggle("concurrent", "允许与其他应用同时播放", state.concurrentPlayback, ThorAudioToggle.Concurrent)
                     toggle("cloud-shuffle", "云随机", state.cloudShuffle, ThorAudioToggle.CloudShuffle)
-                    toggle("skip", "跳过不可用歌曲", state.skipUnavailable, ThorAudioToggle.SkipUnavailable)
+                    toggle("skip", "音源不可用时尝试下一首", state.skipUnavailable, ThorAudioToggle.SkipUnavailable)
                     add(AudioSettingRow("audio:previous", "上一首按键", if (state.previousDirect) "切换曲目" else "先回到开头",
                         enabled = state.loaded) { settings.toggle(ThorAudioToggle.PreviousDirect) })
                     toggle("restore-position", "恢复播放位置", state.restorePosition, ThorAudioToggle.RestorePosition)

@@ -17,6 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import com.ljyh.mei.thor.model.isPlaybackUnavailable
+import com.ljyh.mei.thor.model.playbackUnavailableReason
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -158,6 +161,7 @@ internal fun ThorMusicRow(
     mark: ImageVector? = null,
 ) {
     val theme = com.ljyh.mei.thor.theme.LocalThorTheme.current
+    val unavailable = item.isPlaybackUnavailable
     var bounds by remember(key) { mutableStateOf(Rect.Zero) }
     val interactions = remember(key) { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
@@ -205,11 +209,15 @@ internal fun ThorMusicRow(
             .thorMaterial(ThorSurfaceRole.MusicRow, focused = selected, selected = selected, pressed = pressed)
             .semantics {
                 this.selected = selected
-                when (mark?.name?.substringAfterLast('.')) {
-                    "Favorite" -> stateDescription = "已喜欢"
-                    "Bookmark" -> stateDescription = "已收藏"
-                    else -> Unit
+                val states = buildList {
+                    item.playbackUnavailableReason?.let(::add)
+                    when (mark?.name?.substringAfterLast('.')) {
+                        "Favorite" -> add("已喜欢")
+                        "Bookmark" -> add("已收藏")
+                        else -> Unit
+                    }
                 }
+                if (states.isNotEmpty()) stateDescription = states.joinToString("，")
             }
             .combinedClickable(
                 interactionSource = interactions,
@@ -224,13 +232,14 @@ internal fun ThorMusicRow(
     ) {
         if (leadingIcon != null) Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
             Icon(thorLineIcon(leadingIcon), null, Modifier.size(16.dp), tint = if (selected) theme.selectedText else theme.secondary)
-        } else ThorCover(item, Modifier.size(36.dp))
+        } else ThorCover(item, Modifier.size(36.dp).alpha(if (unavailable) .45f else 1f))
         Column(Modifier.weight(1f)) {
-            Text(item.title, fontSize = theme.typography.body, lineHeight = 21.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = theme.text)
+            Text(item.title, fontSize = theme.typography.body, lineHeight = 21.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (unavailable) theme.secondary else theme.text)
             if (item.subtitle.isNotEmpty() && item.subtitle != item.title) Text(item.subtitle, fontSize = theme.typography.secondary, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = theme.secondary)
         }
         if (mark != null) Icon(thorLineIcon(mark), null, Modifier.size(16.dp), tint = theme.accent)
-        if (trailing != null) Text(trailing, color = theme.secondary, fontSize = theme.typography.secondary, maxLines = 1)
+        if (unavailable) Text("不可播放", color = theme.secondary, fontSize = theme.typography.secondary, maxLines = 1)
+        else if (trailing != null) Text(trailing, color = theme.secondary, fontSize = theme.typography.secondary, maxLines = 1)
         else Icon(thorLineIcon(Icons.Outlined.ChevronRight), null, Modifier.size(16.dp), tint = theme.secondary)
     }
     }

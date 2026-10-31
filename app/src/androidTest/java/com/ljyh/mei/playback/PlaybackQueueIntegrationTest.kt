@@ -52,6 +52,7 @@ class PlaybackQueueIntegrationTest {
         Fixture().use { fixture ->
             val session = onMain {
                 MediaSession.Builder(InstrumentationRegistry.getInstrumentation().targetContext, fixture.player)
+                    .setId("queue-integration-${System.nanoTime()}")
                     .setCallback(object : MediaSession.Callback {
                         override fun onConnectAsync(session: MediaSession, controller: MediaSession.ControllerInfo) =
                             Futures.immediateFuture(MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)

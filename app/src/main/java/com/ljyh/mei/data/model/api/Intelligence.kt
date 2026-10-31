@@ -89,7 +89,7 @@ data class SongInfo(
     @SerializedName("pop")
     val pop: Int,
     @SerializedName("privilege")
-    val privilege: Privilege,
+    val privilege: Privilege? = null,
     @SerializedName("pst")
     val pst: Int,
     @SerializedName("publishTime")
@@ -107,7 +107,7 @@ data class SongInfo(
     @SerializedName("s_id")
     val sId: Long,
     @SerializedName("st")
-    val st: Int,
+    val st: Int? = null,
     @SerializedName("t")
     val t: Int,
     @SerializedName("tns")
@@ -244,15 +244,15 @@ data class Privilege(
     @SerializedName("payed")
     val payed: Int,
     @SerializedName("pl")
-    val pl: Int,
+    val pl: Int? = null,
     @SerializedName("plLevel")
     val plLevel: String,
     @SerializedName("plLevels")
     val plLevels: Any,
     @SerializedName("playMaxBrLevel")
-    val playMaxBrLevel: String,
+    val playMaxBrLevel: String? = null,
     @SerializedName("playMaxbr")
-    val playMaxbr: Int,
+    val playMaxbr: Int? = null,
     @SerializedName("preSell")
     val preSell: Boolean,
     @SerializedName("rightSource")
@@ -262,7 +262,7 @@ data class Privilege(
     @SerializedName("sp")
     val sp: Int,
     @SerializedName("st")
-    val st: Int,
+    val st: Int? = null,
     @SerializedName("subp")
     val subp: Int,
     @SerializedName("toast")

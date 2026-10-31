@@ -19,13 +19,14 @@ class ThorAudioSettingsStateTest {
         assertEquals(0, s.tailCutBars)
         assertFalse(s.autoMix)
         assertFalse(s.equalizer)
+        assertTrue(s.skipUnavailable)
         assertTrue(p.asMap().isEmpty())
     }
 
     @Test fun existingKeysAndCaseInsensitiveEnumsAreReused() {
         val p = preferencesOf(MusicQualityKey to "lossless", AudioOutputModeKey to "AAudio",
             NotificationLeftActionKey to "FloatingLyrics", AutoMixModeKey to "Fixed",
-            PreviousPlaybackKey to false, RestorePlaybackStateKey to false)
+            PreviousPlaybackKey to false, RestorePlaybackStateKey to false, NoAudioSourceKey to false)
         val s = decodeThorAudioSettings(p)
         assertEquals(MusicQuality.LOSSLESS, s.quality)
         assertEquals(AudioOutputMode.AAudio, s.output)
@@ -33,6 +34,7 @@ class ThorAudioSettingsStateTest {
         assertEquals(AutoMixMode.Fixed, s.mixMode)
         assertFalse(s.previousDirect)
         assertFalse(s.restoreState)
+        assertFalse(s.skipUnavailable)
     }
 
     @Test fun unsupportedUsbIsNotSelectableBelowAndroidFourteenButStoredChoiceRemainsVisible() {

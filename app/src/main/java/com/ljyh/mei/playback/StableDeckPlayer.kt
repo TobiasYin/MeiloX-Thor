@@ -85,6 +85,8 @@ class StableDeckPlayer(
         private set
     internal var onQueueEdited: ((replaced: Boolean) -> Unit)? = null
     internal var onSeekRequested: (() -> Unit)? = null
+    /** Independent of QueueManager's hooks; runs before an explicit external player operation. */
+    internal var onRecoveryInterrupted: (() -> Unit)? = null
     internal var isExternalMediaRequest: (() -> Boolean)? = null
 
     internal fun <T> withInternalQueueUpdate(block: () -> T): T {
@@ -98,7 +100,10 @@ class StableDeckPlayer(
 
     private fun notifyQueueEdit(replaced: Boolean = false) {
         if (replaced) queueIdentityEpoch++
-        if (internalQueueUpdateDepth == 0) onQueueEdited?.invoke(replaced)
+        if (internalQueueUpdateDepth == 0) {
+            onRecoveryInterrupted?.invoke()
+            onQueueEdited?.invoke(replaced)
+        }
     }
 
     internal fun setPlaybackOrder(order: List<Int>, userEdit: Boolean = false) {
@@ -141,6 +146,31 @@ class StableDeckPlayer(
         notifyQueueEdit(replaced = true)
         // A full replacement has no retained occurrences to collide with.
         return super.handleSetMediaItems(normalizeQueueMediaItems(mediaItems), startIndex, startPositionMs)
+    }
+
+    override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
+        if (internalQueueUpdateDepth == 0) onRecoveryInterrupted?.invoke()
+        return super.handleSetPlayWhenReady(playWhenReady)
+    }
+
+    override fun handleStop(): ListenableFuture<*> {
+        if (internalQueueUpdateDepth == 0) onRecoveryInterrupted?.invoke()
+        return super.handleStop()
+    }
+
+    override fun handlePrepare(): ListenableFuture<*> {
+        if (internalQueueUpdateDepth == 0) onRecoveryInterrupted?.invoke()
+        return super.handlePrepare()
+    }
+
+    override fun handleSetShuffleModeEnabled(shuffleModeEnabled: Boolean): ListenableFuture<*> {
+        if (internalQueueUpdateDepth == 0) onRecoveryInterrupted?.invoke()
+        return super.handleSetShuffleModeEnabled(shuffleModeEnabled)
+    }
+
+    override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> {
+        if (internalQueueUpdateDepth == 0) onRecoveryInterrupted?.invoke()
+        return super.handleSetRepeatMode(repeatMode)
     }
 
     override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
@@ -233,7 +263,10 @@ class StableDeckPlayer(
         positionMs: Long,
         seekCommand: Int,
     ): ListenableFuture<*> {
-        if (internalQueueUpdateDepth == 0) onSeekRequested?.invoke()
+        if (internalQueueUpdateDepth == 0) {
+            onRecoveryInterrupted?.invoke()
+            onSeekRequested?.invoke()
+        }
         val result = if (seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS) {
             if (activeDeck.hasPreviousMediaItem()) {
                 activeDeck.seekToPreviousMediaItem()

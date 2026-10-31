@@ -34,6 +34,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
@@ -73,6 +75,7 @@ import com.ljyh.mei.ui.component.player.hasFloatingLyricsBackgroundPermission
 import androidx.lifecycle.Lifecycle
 import com.ljyh.mei.R
 import com.ljyh.mei.constants.AllowConcurrentPlaybackKey
+import com.ljyh.mei.constants.NoAudioSourceKey
 import com.ljyh.mei.constants.AudioOutputMode
 import com.ljyh.mei.constants.AudioOutputModeKey
 import com.ljyh.mei.constants.IsShuffleModeKey
@@ -85,7 +88,6 @@ import com.ljyh.mei.constants.CloudShuffleEnabledKey
 import com.ljyh.mei.constants.CookieKey
 import com.ljyh.mei.constants.MusicQuality
 import com.ljyh.mei.constants.MusicQualityKey
-import com.ljyh.mei.constants.NoAudioSourceKey
 import com.ljyh.mei.constants.RepeatModeKey
 import com.ljyh.mei.constants.UserAgent
 import com.ljyh.mei.data.model.MediaMetadata
@@ -122,14 +124,17 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import timber.log.Timber
@@ -159,7 +164,7 @@ class MusicService : MediaLibraryService(),
     private lateinit var usbAudioOutput: UsbAudioOutput
     val audioOutputStatus get() = usbAudioOutput.status
     private var audioOutputMode = AudioOutputMode.AudioTrack
-    private var skipUnavailableSources = false
+    private var skipUnavailableSources = true
     val context = this
     private lateinit var mediaSession: MediaLibrarySession
     private var notificationLeftAction = NotificationAction.PlayMode
@@ -209,6 +214,14 @@ class MusicService : MediaLibraryService(),
     lateinit var mediaUriProvider: MediaUriProvider
 
     private val playbackFailures = PlaybackFailureTracker()
+    private val mutablePlaybackFailure = MutableStateFlow<PlaybackRuntimeFailure?>(null)
+    val playbackFailure = mutablePlaybackFailure.asStateFlow()
+    private val unavailableCampaign = PlaybackRecoveryCampaign(nowMs = SystemClock::elapsedRealtime)
+    private var unavailableRecoveryJob: Job? = null
+    private var unavailableRecoveryGeneration = 0L
+    private var automaticRecoveryEntryId: String? = null
+    private var isCommittingUnavailableRecovery = false
+    private var observedPlaybackEntryId: String? = null
     private var failureProgressJob: Job? = null
     private var sourceRecoveryJob: Job? = null
     private var sourceRecoveryMediaId: String? = null
@@ -317,6 +330,7 @@ class MusicService : MediaLibraryService(),
             .setSeekForwardIncrementMs(5000)
             .build()
         player = StableDeckPlayer(firstDeck, secondDeck, playbackAudioAttributes, handleAudioFocus)
+        player.onRecoveryInterrupted = { if (!isRefreshingPlaybackSource) cancelUnavailableRecovery() }
         listOf(firstDeck, secondDeck).forEachIndexed { index, deck ->
             deck.addAnalyticsListener(object : AnalyticsListener {
                 override fun onAudioDecoderInitialized(
@@ -457,9 +471,16 @@ class MusicService : MediaLibraryService(),
                 }
         }
         scope.launch {
-            context.dataStore.data.map { it[NoAudioSourceKey] ?: false }
-                .distinctUntilChanged()
-                .collect { skipUnavailableSources = it }
+            context.dataStore.data.map { it[NoAudioSourceKey] ?: true }.distinctUntilChanged().collect {
+                skipUnavailableSources = it
+                if (!it) {
+                    val wasRecovering = unavailableRecoveryJob?.isActive == true
+                    cancelRecoveryWork(cancelSameTrack = false)
+                    if (wasRecovering) player.playerError?.let { error ->
+                        pauseAfterPlaybackFailure(error.errorCode, error.cause)
+                    }
+                }
+            }
         }
         scope.launch {
             context.dataStore.data.map { preferences ->
@@ -474,6 +495,8 @@ class MusicService : MediaLibraryService(),
                 val accountChanged = notificationAccount != account
                 if (accountChanged) {
                     notificationAccount = account
+                    cancelUnavailableRecovery()
+                    mutablePlaybackFailure.value = null
                     playerRepository.resetLikeState()
                 }
                 notificationSignedIn = !account.first.isNullOrBlank() && !account.second.isNullOrBlank()
@@ -665,6 +688,7 @@ class MusicService : MediaLibraryService(),
     }
 
     fun resetRejectedPlaybackSources() {
+        cancelUnavailableRecovery()
         sourceRecoveryJob?.cancel()
         sourceRecoveryJob = null
         sourceRecoveryAttempts = 0
@@ -788,8 +812,9 @@ class MusicService : MediaLibraryService(),
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-        if (playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
+        if (playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST && !isCommittingUnavailableRecovery) {
             playbackFailures.reset()
+            mutablePlaybackFailure.value = null
         }
         updateAudioEffectSession()
         if (!::audioPlayer.isInitialized) return
@@ -895,6 +920,10 @@ class MusicService : MediaLibraryService(),
                     realtimeMs = SystemClock.elapsedRealtime(),
                     isPlaying = player.isPlaying,
                 )
+                if (playbackFailures.consecutiveFailures == 0) {
+                    unavailableCampaign.reset()
+                    automaticRecoveryEntryId = null
+                }
                 delay(FAILURE_PROGRESS_SAMPLE_MS)
             }
         }
@@ -1235,6 +1264,7 @@ class MusicService : MediaLibraryService(),
     }
 
     override fun onDestroy() {
+        cancelUnavailableRecovery()
         if (::flymeLyricsPublisher.isInitialized) flymeLyricsPublisher.release()
         NotificationManagerCompat.from(this).cancel(FLOATING_LYRICS_NOTIFICATION_ID)
         if (::systemLyricsBridge.isInitialized) systemLyricsBridge.release()
@@ -1400,6 +1430,9 @@ class MusicService : MediaLibraryService(),
 
     override fun onBind(intent: Intent?) = super.onBind(intent) ?: binder
     override fun onPlayerError(error: PlaybackException) {
+        // One terminal recovery campaign owns this entry; duplicate notifications must not
+        // start a competing same-track retry while candidate probing is already in progress.
+        if (unavailableRecoveryJob?.isActive == true) return
         failureProgressJob?.cancel()
         failureProgressJob = null
         playbackFailures.resetProgress()
@@ -1423,7 +1456,7 @@ class MusicService : MediaLibraryService(),
 
         if (shouldRefreshPlaybackSource(error.errorCode)) {
             if (!scheduleSourceRecovery()) {
-                Toast.makeText(context, "播放源刷新失败，请稍后重试", Toast.LENGTH_SHORT).show()
+                recoverUnavailablePlayback(error.errorCode, error.cause, PlaybackRuntimeFailureKind.SourceRecovery)
             }
             return
         }
@@ -1449,21 +1482,149 @@ class MusicService : MediaLibraryService(),
             }
         }
 
-        val isSourceError = error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ||
-                error.cause is SourceNotFoundException ||
-                error.message?.contains("Unable to resolve url") == true
+        recoverUnavailablePlayback(error.errorCode, error.cause)
+    }
 
-        if (isSourceError) {
-            when (handleUnavailablePlaybackSource(player, skipUnavailableSources, playbackFailures)) {
-                UnavailableSourceResult.PausedCurrent -> Toast.makeText(context, "音源不可用，已暂停当前歌曲", Toast.LENGTH_SHORT).show()
-                UnavailableSourceResult.FailureLimit -> Toast.makeText(context, "播放失败，已连续跳过多首歌曲", Toast.LENGTH_LONG).show()
-                UnavailableSourceResult.QueueEnded -> Toast.makeText(context, "播放结束，部分歌曲无法加载", Toast.LENGTH_SHORT).show()
-                UnavailableSourceResult.Skipped -> Unit
+    private fun pauseAfterPlaybackFailure(
+        errorCode: Int,
+        cause: Throwable?,
+        kind: PlaybackRuntimeFailureKind = playbackRuntimeFailureKind(errorCode, cause),
+        message: String = kind.message,
+    ) {
+        val current = player.currentMediaItem
+        cancelUnavailableRecovery()
+        player.withInternalQueueUpdate { handleUnavailablePlaybackSource(player) }
+        if (errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) {
+            // An explicit later retry should obtain a fresh signed URL. This neither deletes
+            // cached audio nor rejects its quality, and never initiates another automatic load.
+            current?.mediaId?.takeIf(String::isNotBlank)?.let(mediaUriProvider::invalidate)
+        }
+        val failure = PlaybackRuntimeFailure(current?.mediaId, current?.queueEntryId, kind, errorCode, message)
+        mutablePlaybackFailure.value = failure
+        Toast.makeText(context, failure.message, Toast.LENGTH_SHORT).show()
+    }
+
+    /** User controls cancel the pending search before any asynchronous queue hydration starts. */
+    fun cancelUnavailableRecovery() = cancelRecoveryWork(cancelSameTrack = true)
+
+    private fun cancelRecoveryWork(cancelSameTrack: Boolean) {
+        unavailableRecoveryGeneration++
+        unavailableRecoveryJob?.cancel()
+        unavailableRecoveryJob = null
+        automaticRecoveryEntryId = null
+        unavailableCampaign.reset()
+        playbackFailures.reset()
+        if (cancelSameTrack) {
+            sourceRecoveryJob?.cancel()
+            sourceRecoveryJob = null
+        }
+    }
+
+    private fun recoveryEntryId(item: MediaItem, index: Int): String =
+        item.queueEntryId ?: "index:$index:${item.mediaId}"
+
+    private fun recoverUnavailablePlayback(
+        errorCode: Int,
+        cause: Throwable?,
+        kind: PlaybackRuntimeFailureKind = playbackRuntimeFailureKind(errorCode, cause),
+    ) {
+        if (unavailableRecoveryJob?.isActive == true) return
+        val failed = player.currentMediaItem
+        if (!skipUnavailableSources || !player.playWhenReady || failed == null) {
+            pauseAfterPlaybackFailure(errorCode, cause, kind)
+            return
+        }
+        val failedIndex = player.currentMediaItemIndex
+        val epoch = player.queueIdentityEpoch
+        val items = List(player.mediaItemCount, player::getMediaItemAt)
+        val signature = items.mapIndexed { index, item -> recoveryEntryId(item, index) }
+        val failedEntry = recoveryEntryId(failed, failedIndex)
+        val logicalOrder = player.playbackOrderIndices().ifEmpty { items.indices.toList() }
+        val offset = logicalOrder.indexOf(failedIndex)
+        val nextIndices = if (offset < 0) emptyList() else logicalOrder.drop(offset + 1) +
+            if (player.repeatMode == Player.REPEAT_MODE_ALL) logicalOrder.take(offset) else emptyList()
+        val candidates = nextIndices.map { index -> PlaybackRecoveryCandidate(signature[index], items[index]) }
+        if (playbackFailures.consecutiveFailures == 0) unavailableCampaign.reset()
+        // Retain the existing sustained-progress accounting; candidate/time limits belong to
+        // unavailableCampaign rather than the old immediate-skip counter.
+        playbackFailures.recordFailure()
+        unavailableCampaign.markFailed(failedEntry)
+        val generation = ++unavailableRecoveryGeneration
+        fun stillCurrent(): Boolean = generation == unavailableRecoveryGeneration && skipUnavailableSources &&
+            player.playWhenReady && player.queueIdentityEpoch == epoch &&
+            player.currentMediaItemIndex == failedIndex && player.currentMediaItem?.mediaId == failed.mediaId &&
+            player.currentMediaItem?.queueEntryId == failed.queueEntryId &&
+            List(player.mediaItemCount) { recoveryEntryId(player.getMediaItemAt(it), it) } == signature &&
+            player.playbackOrderIndices().ifEmpty { items.indices.toList() } == logicalOrder
+
+        unavailableRecoveryJob = scope.launch {
+            try {
+                val (quality, enabled) = withContext(Dispatchers.IO) {
+                    val saved = context.dataStore.data.first()
+                    (saved[MusicQualityKey]?.let(::normalizePlaybackQuality) ?: MusicQuality.EXHIGH.text) to
+                        (saved[NoAudioSourceKey] ?: true)
+                }
+                if (!enabled) {
+                    if (stillCurrent()) pauseAfterPlaybackFailure(errorCode, cause, kind)
+                    return@launch
+                }
+                val result = scanPlaybackRecoveryCandidates(candidates, unavailableCampaign,
+                    isCurrent = ::stillCurrent,
+                    probe = { probeRecoveryCandidate(it, quality) },
+                    commit = { candidate ->
+                        if (!stillCurrent()) false else {
+                            val index = signature.indexOf(candidate.entryId)
+                            if (index < 0) false else {
+                                automaticRecoveryEntryId = candidate.entryId
+                                playbackFailures.expectAutomaticSkip(candidate.value.queueEntryId ?: candidate.value.mediaId)
+                                isCommittingUnavailableRecovery = true
+                                try {
+                                    player.withInternalQueueUpdate {
+                                        player.seekToDefaultPosition(index)
+                                        player.prepare()
+                                        player.playWhenReady = true
+                                    }
+                                } finally { isCommittingUnavailableRecovery = false }
+                                true
+                            }
+                        }
+                    })
+                if (result == PlaybackRecoveryResult.Exhausted && stillCurrent()) {
+                    pauseAfterPlaybackFailure(errorCode, cause, kind, "暂未找到可播放的下一首，已暂停当前歌曲")
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                if (stillCurrent()) pauseAfterPlaybackFailure(errorCode, cause, kind)
+            } finally {
+                if (generation == unavailableRecoveryGeneration) unavailableRecoveryJob = null
             }
-            Timber.tag("MusicService").e("Play failure detected. Count: %s", playbackFailures.consecutiveFailures)
-        } else {
-            Toast.makeText(context, "播放出错: ${error.errorCodeName}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Full disk cache/downloads stay usable offline; only an actual network source is probed. */
+    private suspend fun probeRecoveryCandidate(item: MediaItem, quality: String): Boolean = withContext(Dispatchers.IO) {
+        val directUri = item.localConfiguration?.uri?.takeIf { !it.scheme.isNullOrBlank() }
+        val local = mediaUriProvider.resolveLocalSource(item.mediaId)
+        val uri = if (local != null) local.uri else {
+            val cached = findFullyCachedPlaybackKey(CacheManager.getSimpleCache(context), item.mediaId, quality)
+            if (cached != null && !mediaUriProvider.isRejectedCachedSource(item.mediaId, cached)) return@withContext true
+            directUri ?: mediaUriProvider.resolveMediaSource(item.mediaId, quality).uri
+        }
+        runInterruptible {
+            val source = CacheManager.getRecoveryProbeDataSourceFactory(context).createDataSource()
+            try {
+                source.open(DataSpec.Builder().setUri(uri).setLength(1).build())
+                val contentType = source.responseHeaders.entries.firstOrNull { it.key.equals("Content-Type", true) }
+                    ?.value?.firstOrNull()?.substringBefore(';')?.lowercase(java.util.Locale.ROOT)
+                if (contentType == "text/html" || contentType == "application/json" || contentType == "text/json") false
+                else source.read(ByteArray(1), 0, 1) > 0
+            } catch (error: HttpDataSource.InvalidResponseCodeException) {
+                // Only expire the signed URL alias; never persist a copyright decision or
+                // discard downloaded/cached media after an HTTP response.
+                mediaUriProvider.invalidate(item.mediaId)
+                throw error
+            } finally { runCatching { source.close() } }
         }
     }
 
@@ -1537,7 +1698,10 @@ class MusicService : MediaLibraryService(),
                 throw error
             } catch (error: Exception) {
                 Timber.tag("MusicService").e(error, "Unable to refresh source for %s", mediaId)
-                Toast.makeText(context, "播放源刷新失败，请稍后重试", Toast.LENGTH_SHORT).show()
+                if (player.currentMediaItem?.mediaId == mediaId &&
+                    player.currentMediaItem?.queueEntryId == entryId && player.currentMediaItemIndex == index
+                ) recoverUnavailablePlayback(PlaybackException.ERROR_CODE_IO_UNSPECIFIED, error,
+                    PlaybackRuntimeFailureKind.SourceRecovery)
             }
         }
         return true
@@ -1545,6 +1709,15 @@ class MusicService : MediaLibraryService(),
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         if (isRefreshingPlaybackSource) return
+        val nextKey = mediaItem?.let { recoveryEntryId(it, player.currentMediaItemIndex) }
+        val entryChanged = nextKey != observedPlaybackEntryId
+        observedPlaybackEntryId = nextKey
+        if ((entryChanged && nextKey != automaticRecoveryEntryId) || reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT)
+            cancelUnavailableRecovery()
+        mutablePlaybackFailure.value?.let { failure ->
+            if (failure.mediaId != mediaItem?.mediaId || failure.queueEntryId != mediaItem?.queueEntryId)
+                mutablePlaybackFailure.value = null
+        }
         playbackFailures.onMediaItemTransition(mediaItem?.queueEntryId ?: mediaItem?.mediaId, reason)
         if (mediaItem?.mediaId != qualityMediaId) resetCurrentQualityState(mediaItem?.mediaId)
         recordPlaybackDuration(

@@ -40,7 +40,7 @@ data class EveryDaySongs(
             @SerializedName("pop")
             val pop: Int,
             @SerializedName("st")
-            val st: Int,
+            val st: Int? = null,
             @SerializedName("rt")
             val rt: String,
             @SerializedName("fee")
@@ -122,7 +122,7 @@ data class EveryDaySongs(
             @SerializedName("recommendReason")
             val recommendReason: String,
             @SerializedName("privilege")
-            val privilege: Privilege,
+            val privilege: Privilege? = null,
             @SerializedName("alg")
             val alg: String
         ) {
@@ -227,9 +227,9 @@ data class EveryDaySongs(
                 @SerializedName("realPayed")
                 val realPayed: Int,
                 @SerializedName("st")
-                val st: Int,
+                val st: Int? = null,
                 @SerializedName("pl")
-                val pl: Int,
+                val pl: Int? = null,
                 @SerializedName("dl")
                 val dl: Int,
                 @SerializedName("sp")
@@ -255,13 +255,13 @@ data class EveryDaySongs(
                 @SerializedName("preSell")
                 val preSell: Boolean,
                 @SerializedName("playMaxbr")
-                val playMaxbr: Int,
+                val playMaxbr: Int? = null,
                 @SerializedName("downloadMaxbr")
                 val downloadMaxbr: Int,
                 @SerializedName("maxBrLevel")
                 val maxBrLevel: String,
                 @SerializedName("playMaxBrLevel")
-                val playMaxBrLevel: String,
+                val playMaxBrLevel: String? = null,
                 @SerializedName("downloadMaxBrLevel")
                 val downloadMaxBrLevel: String,
                 @SerializedName("plLevel")

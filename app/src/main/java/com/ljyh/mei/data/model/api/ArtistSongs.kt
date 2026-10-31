@@ -69,7 +69,7 @@ data class ArtistSong(
         @SerializedName("al")
         val al: Al,
         @SerializedName("st")
-        val st: Int,
+        val st: Int? = null,
         @SerializedName("noCopyrightRcmd")
         val noCopyrightRcmd: Any,
         @SerializedName("songJumpInfo")
@@ -133,7 +133,7 @@ data class ArtistSong(
         @SerializedName("videoInfo")
         val videoInfo: VideoInfo,
         @SerializedName("privilege")
-        val privilege: Privilege,
+        val privilege: Privilege? = null,
         @SerializedName("eq")
         val eq: String
     ) {
@@ -258,9 +258,9 @@ data class ArtistSong(
             @SerializedName("payed")
             val payed: Int,
             @SerializedName("st")
-            val st: Int,
+            val st: Int? = null,
             @SerializedName("pl")
-            val pl: Int,
+            val pl: Int? = null,
             @SerializedName("dl")
             val dl: Int,
             @SerializedName("sp")
@@ -282,13 +282,13 @@ data class ArtistSong(
             @SerializedName("preSell")
             val preSell: Boolean,
             @SerializedName("playMaxbr")
-            val playMaxbr: Int,
+            val playMaxbr: Int? = null,
             @SerializedName("downloadMaxbr")
             val downloadMaxbr: Int,
             @SerializedName("maxBrLevel")
             val maxBrLevel: String,
             @SerializedName("playMaxBrLevel")
-            val playMaxBrLevel: String,
+            val playMaxBrLevel: String? = null,
             @SerializedName("downloadMaxBrLevel")
             val downloadMaxBrLevel: String,
             @SerializedName("plLevel")

@@ -1,6 +1,7 @@
 package com.ljyh.mei.thor.model
 
 import com.ljyh.mei.data.model.MediaMetadata
+import com.ljyh.mei.data.model.isExplicitlyUnavailable
 
 /** Stable identities are deliberately distinct from display labels and list indices. */
 sealed interface ThorItemKey {
@@ -36,6 +37,14 @@ data class ThorItem(
 ) {
     val artwork get() = ThorArtworkSpec(key.stableId, artworkUri, artworkUri, title, subtitle)
 }
+
+/** Unavailable songs stay browsable/manageable, but their playback actions are rejected. */
+val ThorItem.isPlaybackUnavailable: Boolean
+    get() = (key is ThorItemKey.Song || key is ThorItemKey.QueueEntry) &&
+        tracks.firstOrNull()?.isExplicitlyUnavailable == true
+
+val ThorItem.playbackUnavailableReason: String?
+    get() = if (isPlaybackUnavailable) tracks.firstOrNull()?.availabilityReason ?: "当前无播放权限" else null
 
 fun MediaMetadata.toThorItem() = ThorItem(
     key = ThorItemKey.Song(id, isLocal),

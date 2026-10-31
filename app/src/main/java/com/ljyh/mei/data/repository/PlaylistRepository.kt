@@ -262,7 +262,7 @@ class PlaylistRepository(
             checkSession()
             collectPlaylistTracksIncrementally(
                 orderedIds = playlist.trackIds.map { it.id },
-                initialTracks = playlist.tracks.map { it.toMediaMetadata() },
+                initialTracks = detail.toMediaMetadata(),
                 retainedTracks = retainedTracks,
                 key = MediaMetadata::id,
                 loadBatch = { ids ->
@@ -270,7 +270,7 @@ class PlaylistRepository(
                     val response = apiService.getSongDetail(GetSongDetails(ids.joinToString(",")), expectedSession)
                     checkSession()
                     check(response.code == 200) { "Unable to load songs (${response.code})" }
-                    response.songs.map { it.toMediaMetadata() }
+                    response.toMediaMetadata()
                 },
                 onSnapshot = { tracks ->
                     checkSession()

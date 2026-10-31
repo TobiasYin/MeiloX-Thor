@@ -1,5 +1,6 @@
 package com.ljyh.mei.data.model
 
+import com.google.gson.annotations.JsonAdapter
 import android.net.Uri
 import android.os.Bundle
 import androidx.annotation.OptIn
@@ -16,6 +17,7 @@ import com.ljyh.mei.utils.netease.NeteaseUtils.getResourceLink
 
 
 @Immutable
+@JsonAdapter(MediaMetadataAvailabilityAdapter::class)
 data class MediaMetadata(
     val id: Long,
     val title: String,
@@ -27,6 +29,8 @@ data class MediaMetadata(
     val tns:String?=null,
     val isPodcast: Boolean = false,
     val isLocal: Boolean = false,
+    val availability: SongPlaybackAvailability = SongPlaybackAvailability.Unknown,
+    val availabilityReason: String? = null,
 ) {
     data class Artist(
         val id: Long,
@@ -64,7 +68,7 @@ fun PodcastProgram.toMediaMetadata() = MediaMetadata(
     isPodcast = true,
 )
 
-fun PlaylistDetail.Playlist.Track.toMediaMetadata() = MediaMetadata(
+fun PlaylistDetail.Playlist.Track.toMediaMetadata(privilege: PlaylistDetail.Privilege? = null) = MediaMetadata(
     id = id,
     title = name,
     coverUrl=al.picUrl,
@@ -81,7 +85,7 @@ fun PlaylistDetail.Playlist.Track.toMediaMetadata() = MediaMetadata(
         title = al.name?:"",
     ),
     tns= tns?.firstOrNull()
-)
+).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, this.privilege, privilege?.toPlaybackPrivilege(), st))
 
 
 
@@ -100,7 +104,7 @@ fun AlbumDetail.Song.toMediaMetadata() = MediaMetadata(
         id = al.id,
         title = al.name
     )
-)
+).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, privilege?.toPlaybackPrivilege(), null, st))
 
 
 
@@ -121,7 +125,7 @@ fun EveryDaySongs.Data.DailySong.toMediaMetadata() = MediaMetadata(
         title = al.name
     ),
     tns= tns?.firstOrNull()
-)
+).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, privilege?.toPlaybackPrivilege(), null, st))
 
 
 
@@ -142,7 +146,7 @@ fun ArtistSong.HotSong.toMediaMetadata() = MediaMetadata(
         id = al.id,
         title = al.name
     )
-)
+).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, privilege?.toPlaybackPrivilege(), null, st))
 
 
 // For Intelligence mode - converts Intelligence.Data.songInfo to MediaMetadata
@@ -156,7 +160,7 @@ fun com.ljyh.mei.data.model.api.Data.toMediaMetadata() = MediaMetadata(
     duration = songInfo.dt.toLong(),
     album = MediaMetadata.Album(id = songInfo.al.id.toLong(), title = songInfo.al.name),
     tns = songInfo.tns?.firstOrNull()
-)
+).withPlaybackPrivilege(mergedSongPlaybackPrivilege(songInfo.id, songInfo.privilege?.toPlaybackPrivilege(), null, songInfo.st))
 
 // For FM mode - converts Radio.Data to MediaMetadata
 fun com.ljyh.mei.data.model.weapi.Data.toMediaMetadata() = MediaMetadata(
@@ -169,7 +173,7 @@ fun com.ljyh.mei.data.model.weapi.Data.toMediaMetadata() = MediaMetadata(
     duration = duration.toLong(),
     album = MediaMetadata.Album(id = album.id.toLong(), title = album.name),
     tns = transNames?.firstOrNull()
-)
+).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, privilege?.toPlaybackPrivilege(), null))
 
 
 

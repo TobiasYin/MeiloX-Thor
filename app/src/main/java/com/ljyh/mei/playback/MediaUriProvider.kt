@@ -249,7 +249,7 @@ class MediaUriProvider @Inject constructor(
         val candidates = try {
             val detail = apiService.getSongDetail(GetSongDetails(mediaId))
             val track = detail.songs.firstOrNull { it.id.toString() == mediaId }
-            val privilege = detail.privileges.firstOrNull { it.id.toString() == mediaId }
+            val privilege = detail.privileges.orEmpty().firstOrNull { it.id.toString() == mediaId }
             if (detail.code == 200) track?.availableMusicQualities(privilege).orEmpty() else emptyList()
         } catch (e: CancellationException) {
             throw e

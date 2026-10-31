@@ -25,6 +25,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import timber.log.Timber
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 
 @UnstableApi
@@ -49,6 +50,15 @@ object CacheManager {
             }
             .build()
     }
+
+    private val recoveryProbeHttpClient by lazy {
+        mediaHttpClient.newBuilder().callTimeout(4, TimeUnit.SECONDS)
+            .connectTimeout(4, TimeUnit.SECONDS).readTimeout(4, TimeUnit.SECONDS).build()
+    }
+
+    /** Read-only one-byte candidate checks must not create partial or falsely complete cache entries. */
+    fun getRecoveryProbeDataSourceFactory(context: Context): DefaultDataSource.Factory =
+        DefaultDataSource.Factory(context, OkHttpDataSource.Factory(recoveryProbeHttpClient))
 
     /**
      * 获取 SimpleCache 的单例。
@@ -110,7 +120,7 @@ object CacheManager {
         val contentLength = ContentMetadata.getContentLength(contentMetadata)
 
         // 如果不知道总长度，说明还没下载完或者没存长度信息，视为未完全缓存
-        if (contentLength == C.LENGTH_UNSET.toLong()) return false
+        if (contentLength <= 0L) return false
         // 检查缓存的字节数是否 >= 总长度
         val cachedBytes = cache.getCachedBytes(key, 0, contentLength)
         return cachedBytes >= contentLength

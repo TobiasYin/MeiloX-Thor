@@ -22,6 +22,9 @@ import com.ljyh.mei.thor.data.ThorMusicRepository
 import com.ljyh.mei.thor.menu.*
 import com.ljyh.mei.thor.model.*
 import com.ljyh.mei.thor.playback.ThorPlaybackBridge
+import com.ljyh.mei.thor.playback.ThorPlaybackDecision
+import com.ljyh.mei.thor.playback.thorBulkPlayback
+import com.ljyh.mei.thor.playback.thorSongTrackIndex
 import com.ljyh.mei.thor.state.*
 import com.ljyh.mei.thor.theme.decodeThorPreferences
 import com.ljyh.mei.utils.dataStore
@@ -50,7 +53,7 @@ class ThorShellViewModel @Inject constructor(
     private val lyricManager: LyricManager,
 ) : ViewModel() {
     val library = repository.state
-    val playback = ThorPlaybackBridge(viewModelScope)
+    val playback = ThorPlaybackBridge(viewModelScope) { showMessage(it, false) }
     private val mutablePlayerConnection = MutableStateFlow<PlayerConnection?>(null)
     val playerConnection = mutablePlayerConnection.asStateFlow()
     val lyrics = lyricManager.lyricData
@@ -201,6 +204,7 @@ class ThorShellViewModel @Inject constructor(
     private fun applyAccountGeneration(generation: Long) {
         if (generation == handledAccountGeneration) return
         handledAccountGeneration = generation
+        playback.invalidateAccountAvailability()
         clearExitGuard()
         mutableMenu.value = null
         quickPlayerHistory.clear()
@@ -295,16 +299,19 @@ class ThorShellViewModel @Inject constructor(
     fun open(item: ThorItem) {
         when (val key = item.key) {
             is ThorItemKey.Song -> {
-                if (item.tracks.isNotEmpty()) play(item.tracks, 0, item.description.ifBlank { item.title })
+                val generation = ++playRequestGeneration
+                if (item.tracks.isNotEmpty()) playExactSong(item, key)
                 else {
-                    val generation = ++playRequestGeneration
                     val accountGeneration = library.value.account.generation
                     viewModelScope.launch {
                         try {
                             val loaded = repository.load(item)
-                            if (generation == playRequestGeneration && accountGeneration == library.value.account.generation) play(loaded.tracks, 0, loaded.title)
+                            if (generation == playRequestGeneration && accountGeneration == library.value.account.generation) playExactSong(loaded, key)
                         } catch (cancellation: CancellationException) { throw cancellation }
-                        catch (error: Exception) { if (generation == playRequestGeneration) showMessage(error.message ?: "歌曲读取失败", false) }
+                        catch (error: Exception) {
+                            if (generation == playRequestGeneration && accountGeneration == library.value.account.generation)
+                                showMessage(error.message ?: "歌曲读取失败", false)
+                        }
                     }
                 }
             }
@@ -331,20 +338,23 @@ class ThorShellViewModel @Inject constructor(
         }
     }
 
+    private fun playExactSong(item: ThorItem, key: ThorItemKey.Song) {
+        val index = thorSongTrackIndex(item.tracks, key.id, key.local)
+        if (index < 0) {
+            showMessage(if (item.tracks.isEmpty()) "没有可播放的歌曲" else "歌曲信息已变化，请重新选择", false)
+            return
+        }
+        play(item.tracks, index, item.description.ifBlank { item.title })
+    }
+
     fun play(tracks: List<MediaMetadata>, index: Int = 0, title: String = "播放列表", shuffle: Boolean? = null) {
         playRequestGeneration++
         if (playback.play(tracks, index, title, shuffle)) showPlayer()
-        else showMessage(if (tracks.isEmpty()) "没有可播放的歌曲" else "播放器正在连接，请稍后重试", false)
     }
 
     fun selectQueueEntry(entryId: String): Boolean {
-        val current = playback.state.value
-        if (!current.connected) { showMessage("播放器正在连接，请稍后重试", false); return false }
-        if (entryId.isBlank() || current.queue.none { it.entryId == entryId }) {
-            showMessage("队列已更新，请重新选择", false)
-            return false
-        }
-        playback.select(entryId)
+        playRequestGeneration++
+        if (!playback.select(entryId)) return false
         // QuickPlayerHistory collapses Q/P into one player while retaining the browsing return.
         showPlayer()
         return true
@@ -353,7 +363,13 @@ class ThorShellViewModel @Inject constructor(
     fun playPage(shuffle: Boolean): Boolean {
         if (menu.value != null || seekPreview.value != null || textEditing.value) return false
         val target = thorPagePlayback(navigation.value, library.value) ?: return false
-        play(target.tracks, if (shuffle) target.tracks.indices.random() else 0, target.title, shuffle)
+        when (val decision = thorBulkPlayback(target.tracks, shuffle)) {
+            is ThorPlaybackDecision.Rejected -> {
+                playRequestGeneration++
+                showMessage(decision.message, false)
+            }
+            is ThorPlaybackDecision.Accepted -> play(decision.selection.tracks, decision.selection.index, target.title, shuffle)
+        }
         return true
     }
 
