@@ -1,0 +1,593 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-01",
+  "environment": "AYN_Thor_physical",
+  "functionalSourceCommit": "6b59b9e01fc8cca3a2e72f5b451cfde84156f879",
+  "device": {
+    "model": "AYN Thor",
+    "sdkInt": 33,
+    "upper": {
+      "logicalDisplay": 0,
+      "width": 1920,
+      "height": 1080
+    },
+    "lower": {
+      "logicalDisplay": 4,
+      "width": 1240,
+      "height": 1080
+    },
+    "densityDpi": 369
+  },
+  "unitTests": {
+    "tests": 1222,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "instrumentedTests": {
+    "distinctPassed": 91,
+    "finalFailed": 0,
+    "finalAssumptions": 0,
+    "nativeComponentFixtureMethods": 74,
+    "liveMethods": 17,
+    "injectedFailureMethodsWithinLive": 3
+  },
+  "groups": [
+    {
+      "log": "physical-session-preflight.log",
+      "seconds": 0.53,
+      "statusCodes": {
+        "0": 1
+      }
+    },
+    {
+      "log": "physical-cloud-live-catalog-with-public-seeds-awake.log",
+      "seconds": 8.23,
+      "statusCodes": {
+        "0": 1
+      }
+    },
+    {
+      "log": "physical-account-audio.log",
+      "seconds": 9.424,
+      "statusCodes": {
+        "0": 2
+      }
+    },
+    {
+      "log": "physical-theme-window.log",
+      "seconds": 13.574,
+      "statusCodes": {
+        "0": 2
+      }
+    },
+    {
+      "log": "physical-regression-a.log",
+      "seconds": 75.026,
+      "statusCodes": {
+        "0": 27
+      }
+    },
+    {
+      "log": "physical-regression-b.log",
+      "seconds": 42.282,
+      "statusCodes": {
+        "0": 32
+      }
+    },
+    {
+      "log": "physical-regression-d.log",
+      "seconds": 11.917,
+      "statusCodes": {
+        "0": 7
+      }
+    },
+    {
+      "log": "physical-regression-c-microphone.log",
+      "seconds": 28.486,
+      "statusCodes": {
+        "0": 6
+      }
+    },
+    {
+      "log": "physical-unavailable-rows.log",
+      "seconds": 5.921,
+      "statusCodes": {
+        "0": 3
+      }
+    },
+    {
+      "log": "physical-live-playback.log",
+      "seconds": 39.884,
+      "statusCodes": {
+        "0": 7
+      }
+    },
+    {
+      "log": "physical-final-management-search-lyrics.log",
+      "seconds": 39.524,
+      "statusCodes": {
+        "0": 2,
+        "-2": 1
+      }
+    },
+    {
+      "log": "physical-final-cloud-search-return.log",
+      "seconds": 28.215,
+      "statusCodes": {
+        "0": 1,
+        "-2": 1
+      }
+    },
+    {
+      "log": "physical-final-search-return-behavior.log",
+      "seconds": 10.398,
+      "statusCodes": {
+        "0": 1
+      }
+    }
+  ],
+  "methods": [
+    {
+      "method": "com.ljyh.mei.playback.ThorLivePlaybackInstrumentedTest#actualServerDeniedSourceProbesPastDeniedCandidateAndCommitsOnlyThePlayableEntry",
+      "status": "passed",
+      "evidence": "physical-live-playback.log"
+    },
+    {
+      "method": "com.ljyh.mei.playback.ThorLivePlaybackInstrumentedTest#independentOnlinePreconditionRunsTheExistingInjectedDecoderRecovery",
+      "status": "passed",
+      "evidence": "physical-live-playback.log"
+    },
+    {
+      "method": "com.ljyh.mei.playback.ThorLivePlaybackInstrumentedTest#independentOnlinePreconditionRunsTheExistingInjectedStallAndQualityFallbackRecovery",
+      "status": "passed",
+      "evidence": "physical-live-playback.log"
+    },
+    {
+      "method": "com.ljyh.mei.playback.ThorLivePlaybackInstrumentedTest#independentPausedQueuePreconditionRunsTheExistingRepeatedFailureRegression",
+      "status": "passed",
+      "evidence": "physical-live-playback.log"
+    },
+    {
+      "method": "com.ljyh.mei.playback.ThorLivePlaybackInstrumentedTest#onlinePlaybackAdvancesPausesResumesSeeksAndRealTriggersFollowQueueOrder",
+      "status": "passed",
+      "evidence": "physical-live-playback.log"
+    },
+    {
+      "method": "com.ljyh.mei.playback.ThorLivePlaybackInstrumentedTest#repeatAllWithOnlyServerDeniedEntriesStopsWithinTheCampaignAndEmitsOneFinalFailure",
+      "status": "passed",
+      "evidence": "physical-live-playback.log"
+    },
+    {
+      "method": "com.ljyh.mei.playback.ThorLivePlaybackInstrumentedTest#serverDeniedSourceWithSkippingDisabledPausesAndRetainsTheCurrentEntry",
+      "status": "passed",
+      "evidence": "physical-live-playback.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorBackgroundSettingsInstrumentedTest#realAppearanceButtonsPersistBackgroundChoicesAndCleanRemovesIntensityFromControllerScope",
+      "status": "passed",
+      "evidence": "physical-regression-c-microphone.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorEmbeddedWindowsInstrumentedTest#audioEqualizerAndQuickPlayerKeepBothOriginalWindowsAlive",
+      "status": "passed",
+      "evidence": "physical-regression-d.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorEmbeddedWindowsInstrumentedTest#startInsideTheAttachedCaptchaReturnsToTheGlobalPlayerAndCancelsItsRequest",
+      "status": "passed",
+      "evidence": "physical-regression-d.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorEmbeddedWindowsInstrumentedTest#syntheticCaptchaUsesTheLowerParentWindowAndRealAAndBInput",
+      "status": "passed",
+      "evidence": "physical-regression-d.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest#liveAudioButtonsReachTheExistingServiceDspAndEveryChangedPreferenceIsRestored",
+      "status": "passed",
+      "evidence": "physical-account-audio.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest#liveMyProfileBindingsDevicesAndAuthorizationsStayInsideTheSameTwoWindows",
+      "status": "passed",
+      "evidence": "physical-account-audio.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest#liveOnlineLyricsDragIdleReturnAndLineTouchSeekTheExistingPlayer",
+      "status": "passed",
+      "evidence": "physical-final-management-search-lyrics.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest#liveSearchButtonSubmitsTheVisibleQueryAndActualSongAPlayerBRestoresListFocusAndScroll",
+      "status": "passed",
+      "evidence": "physical-final-search-return-behavior.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest#liveSystemDayNightAndArtworkFlowPreviewKeepBothWindowsFocusAndPlaybackIdentity",
+      "status": "passed",
+      "evidence": "physical-theme-window.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest#liveSystemVolumeAndRealLowerWindowFocusRoundTripNeverFocusTheUpperArtwork",
+      "status": "passed",
+      "evidence": "physical-theme-window.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.artwork.ThorAirflowCaseInstrumentedTest#reducedMotionKeepsTheRenderedCaseStillEvenWhenTheDetectorReportsStrongAirflow",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.artwork.ThorAirflowCaseInstrumentedTest#thorMicWeakAndStrongPcmMoveTheRenderedCaseAndSilenceEventuallyLeavesItStill",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.audio.ThorLiveMicrophoneInstrumentedTest#realServicePlaybackStopsTheActualMicrophoneAndPauseRestartsItTwice",
+      "status": "passed",
+      "evidence": "physical-regression-c-microphone.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.data.ThorLiveCatalogInstrumentedTest#liveSessionProfileIsValid",
+      "status": "passed",
+      "evidence": "physical-session-preflight.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.data.ThorLiveCatalogInstrumentedTest#realCatalogPermissionsAndRepositoryMappingsMatchCurrentSession",
+      "status": "passed",
+      "evidence": "physical-cloud-live-catalog-with-public-seeds-awake.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.data.ThorLiveManagementInstrumentedTest#reversibleCloudManagementReadsBackFromServerAndCleansItsOwnPlaylist",
+      "status": "passed",
+      "evidence": "physical-final-cloud-search-return.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorControllerAdapterInstrumentedTest#bothShoulderHoldsUseTheMainLooperAndReleaseWithoutTap",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorControllerAdapterInstrumentedTest#bothShoulderTapsEmitOneTapAndOneRelease",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorControllerAdapterInstrumentedTest#editingResetAndNativeSelectUpDoNotConsumeTheNextFreshTap",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorControllerAdapterInstrumentedTest#nonBackInputObserverIgnoresBackNeutralAndDriftButSeesRealActivity",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorControllerAdapterInstrumentedTest#selectTapDefersQueueUntilUpAndLongHoldOpensOnlyPageActions",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorControllerAdapterInstrumentedTest#startStillRoutesExactlyOnceDuringTextEditing",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorControllerAdapterInstrumentedTest#triggerStrokesUseAttachedAxisCapabilitiesOrDigitalFallback",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorTextInputInstrumentedTest#editingConsumesControllerPlaybackAndKeepsHeadsetControls",
+      "status": "passed",
+      "evidence": "physical-regression-d.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.input.ThorTextInputInstrumentedTest#editingRetainsGamepadFormActionsAndLeavesPhysicalNavigationToIme",
+      "status": "passed",
+      "evidence": "physical-regression-d.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.theme.ThorThemeMotionInstrumentedTest#reEnablingMotionCompletesTheThemeTransitionWithAVirtualFrameClock",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorAccountFieldInstrumentedTest#controllerFocusDoesNotEditAndExplicitCancelRestoresNormalNavigation",
+      "status": "passed",
+      "evidence": "physical-regression-d.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorAccountFieldInstrumentedTest#imeDoneDoesNotSubmitAndTouchEditorDisposalReleasesItsSession",
+      "status": "passed",
+      "evidence": "physical-regression-d.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#aFreshEntryResetsEvenAStillVisiblePartiallyScrolledFirstRow",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#aRemovedSavedKeyReturnsToTheFirstRowAndNeverToARegisteredHeader",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#aValidSavedFocusWithoutScrollWaitsForScopeBeforeItsNativeRequest",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#anInitiallyEmptyAsyncListWaitsForItsFirstRowWithoutFocusingChrome",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#explicitlyAllowedSpatialControlsUseNativeFocusAndSkipDisabledAndChromeTargets",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#invalidSavedFocusAndScrollResetAPartiallyVisibleFirstRow",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#listBoundariesCannotReachChromeAndTouchingChromeDoesNotRetargetConfirm",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#rapidOffscreenMovementConfirmsThePreparedRowAndThenObtainsItsNativeFocus",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest#returningToAListRestoresItsOwnKeyAndScrollInsteadOfTheOtherScene",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorMenuInputInstrumentedTest#aNewSubjectStartsANewNameSessionInsteadOfKeepingThePreviousDraft",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorMenuInputInstrumentedTest#characterByCharacterRenameIgnoresLaggingParentEchoAndSavesTheEntireLocalValue",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorMenuInputInstrumentedTest#heldPressSurvivesRecompositionAndReleaseCannotAlsoOpenThePlaylist",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorMenuInputInstrumentedTest#nameLimitAndImeDoneUseTheSameLatestEightyCharacters",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorMenuInputInstrumentedTest#scrollingBeforeLongPressCancelsBothMenuAndClick",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorPageActionMenuInstrumentedTest#BClosesWithoutActivationAndRestoresThePreviousContentScopeAndFocusedRow",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorPageActionMenuInstrumentedTest#closeAndActionRowsRemainTouchableWithoutMakingTheCloseButtonAControllerTarget",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorPageActionMenuInstrumentedTest#disabledItemsAreSkippedAndNeitherBoundaryNorHorizontalInputLeavesTheMenu",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorPageActionMenuInstrumentedTest#rapidMovementScrollsBeyondTheViewportAndAConfirmsTheLatestUncomposedAction",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorPlaybackListReturnInstrumentedTest#controllerPlaybackAndBackRestoreTheSelectedSongAndPixelScrollOffset",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorPlaybackListReturnInstrumentedTest#touchingAnotherSongPersistsItsIdentityBeforeTheListIsReplaced",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorPlaybackListReturnInstrumentedTest#touchingThePartiallyVisibleFirstSongKeepsItsExactClippedOffsetAfterBack",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorSearchAndNoticeInstrumentedTest#imeAndControllerBindingsUseTheSameLatestQueryAndClosingEditingDoesNotSubmit",
+      "status": "passed",
+      "evidence": "physical-regression-c-microphone.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorSearchAndNoticeInstrumentedTest#repeatNoticesRestartTheirTimerUndoExpiresAndErrorsRemain",
+      "status": "passed",
+      "evidence": "physical-regression-c-microphone.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorSearchAndNoticeInstrumentedTest#theFirstTouchOnSearchSubmitsTheVisibleEditorEvenBeforeItsProjectionCatchesUp",
+      "status": "passed",
+      "evidence": "physical-regression-c-microphone.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorUnavailableMusicRowInstrumentedTest#allMaterialDayNightModesKeepReadableDenialInkFocusAndRowGeometry",
+      "status": "passed",
+      "evidence": "physical-unavailable-rows.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorUnavailableMusicRowInstrumentedTest#deniedSongsAndQueueOccurrencesStayNavigableAndManageableWithoutPlaying",
+      "status": "passed",
+      "evidence": "physical-unavailable-rows.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorUnavailableMusicRowInstrumentedTest#feeOnlyUnknownLocalFilesAndPodcastsRemainUnmarkedAndPassTheRealSelectionGate",
+      "status": "passed",
+      "evidence": "physical-unavailable-rows.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorVisualContractInstrumentedTest#allSixThemesKeepTheSameNativeFocusAndControlBounds",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorVisualContractInstrumentedTest#flatIconAndCircularTransportKeepFortyEightSixtyEightySixtyDpBounds",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorVisualContractInstrumentedTest#musicRowIsFiftySixDpWithARealThirtySixDpCover",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.ui.ThorVisualContractInstrumentedTest#selectedFocusedAndHeldPressPaintTogetherWithoutMovingTheRow",
+      "status": "passed",
+      "evidence": "physical-regression-b.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorBackdropFrameTimingInstrumentedTest#recordsRealFullUpperWindowFramesWithCoverExtractionAndScrollingLyrics",
+      "status": "passed",
+      "evidence": "physical-regression-c-microphone.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackBackdropInstrumentedTest#allSixMaterialAppearancesActuallyPaintAndKeepTheLyricZoneReadable",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackBackdropInstrumentedTest#flowChangesRealPixelsThenPauseVisibilityAndReducedMotionStopDecorativeFrames",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackBackdropInstrumentedTest#modesIntensityAndAllSixThemesKeepTheRealCoverAndLyricLayoutInPlace",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest#hiddenAndReducedMotionStopFramesWhileReducedMotionStillAllowsDirectFaceAccess",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest#pausingEasesTheRenderedPoseBackThenStopsItsFrameLoop",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest#playingRejectsFullRawAirflowAndRendersOnlySmallSlowBreathingInPlayerAndBrowse",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest#startingPlaybackInterruptsAnAlreadySpinningBlownCaseWithoutResidualRevolutions",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorPlaybackCaseMotionInstrumentedTest#touchTakesOwnershipWhilePlayingAndReleaseDoesNotResumeTheHeldRawAirflow",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest#caseDraggingAndLyricTouchBrowsingAndSeekContinueWithoutInputFocus",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest#realWindowFocusLossAndRestorationAfterTouchDoesNotRestoreAnUpperSelection",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest#touchingThenRequestingDpadOrSystemKeysNeverSelectsAnUpperNodeOrAddsACaseBorder",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperDisplayOnlyInstrumentedTest#upperFocusExclusionDoesNotDisableASiblingNativeTextInput",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#aRealDragInterruptsFollowAnimationAndLaterPlaybackUpdatesStillFollow",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#aSingleTapOnABrowsedLineSelectsThatTimeOnceAndResumesFollowing",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#anotherDragReplacesTheDeadlineAndAnOldTimerCannotResumeFollowing",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#dayAndNightLongTextTranslationSpacingAndPaddedClickTargetsAreRealLayouts",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#differentlySizedBilingualLinesFollowWithoutOvershootingAndCorrectingBack",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#draggingAndFlingingBrowseWithoutSeeking",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#fullUpperScreenUsesTheExtraHeightForRealBilingualText",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#inactiveLyricsIgnoreTouchSelectionAndScrolling",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#playbackClockAdvancesWithoutMovingTheBrowsedViewportAndIdleCanResumeFollowing",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#productionFifteenSecondIdleTimerReturnsToTheCurrentLineWithoutSeeking",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#upcomingTranslationIsAlreadyVisibleAndFocusDoesNotResizeItsRow",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    },
+    {
+      "method": "com.ljyh.mei.thor.upper.ThorUpperLyricsInstrumentedTest#upperAndLowerEdgesActuallyFadeTheSameRenderedLineInDayAndNight",
+      "status": "passed",
+      "evidence": "physical-regression-a.log"
+    }
+  ],
+  "notCounted": {
+    "protocolComparison": "five current-session variants measured; not a functional acceptance method",
+    "interactiveBreath": "user confirmed normal and requested no repeat; waiting runner not counted, cleanup verified",
+    "emulatorPreflight": "not merged into physical results",
+    "obsoleteTestApkAssumptions": "five skipped attempts excluded; current hard-gate device rerun passed"
+  }
+}

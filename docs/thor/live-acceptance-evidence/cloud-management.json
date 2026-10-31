@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "environment": "AYN_Thor_physical",
+  "checkedAtEpochMs": 1793468146029,
+  "accountVerified": true,
+  "cleanup_ok": true,
+  "steps": {
+    "like_server_readback": true,
+    "like_undo_server_readback": true,
+    "album_server_readback": true,
+    "album_undo_server_readback": true,
+    "playlist_create_server_readback": true,
+    "playlist_add_server_readback": true,
+    "duplicate_add_did_not_duplicate": true,
+    "playlist_existing_append_order_readback": true,
+    "playlist_existing_append_undo_readback": true,
+    "playlist_remove_server_readback": true,
+    "playlist_remove_undo_order_readback": true,
+    "playlist_rename_server_readback": true,
+    "playlist_rename_undo_readback": true,
+    "playlist_delete_server_readback": true
+  },
+  "playlistAddReadback": {
+    "attempts": 1,
+    "trackCount": 2,
+    "trackIdCount": 2,
+    "expected_count": 2,
+    "actualMatchesOrder": true,
+    "actualMatchesReverseOrder": false,
+    "sameMembership": true
+  },
+  "counts": {
+    "publicTracksUsed": 3,
+    "temporaryPlaylistsCreated": 1,
+    "temporaryPlaylistsDeleted": 1
+  },
+  "cleanup": {
+    "likeRestored": true,
+    "albumRestored": true,
+    "temporaryPlaylistAbsent": true
+  },
+  "journalRetained": false
+}
