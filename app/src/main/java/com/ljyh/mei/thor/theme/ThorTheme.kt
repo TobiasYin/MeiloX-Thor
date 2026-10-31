@@ -361,6 +361,11 @@ data class ThorLyricLayoutTokens(
     val auxiliaryTopGap: Dp = 8.dp,
     val auxiliaryGap: Dp = 6.dp,
     val lineHeight: androidx.compose.ui.unit.TextUnit = 1.5.em,
+    val edgeFadeTop: Dp = 24.dp,
+    val edgeFadeBottom: Dp = 36.dp,
+    val followAnchorFraction: Float = .23f,
+    val viewportVerticalInsetFraction: Float = .05f,
+    val titleGap: Dp = 12.dp,
 )
 
 @Immutable
@@ -372,8 +377,8 @@ data class ThorTypographyTokens(
     val secondary: androidx.compose.ui.unit.TextUnit = 12.sp,
     val control: androidx.compose.ui.unit.TextUnit = 14.sp,
     val caption: androidx.compose.ui.unit.TextUnit = 11.sp,
-    val lyricCurrent: androidx.compose.ui.unit.TextUnit = 28.sp,
-    val lyricAdjacent: androidx.compose.ui.unit.TextUnit = 19.sp,
+    val lyricCurrent: androidx.compose.ui.unit.TextUnit = 24.sp,
+    val lyricAdjacent: androidx.compose.ui.unit.TextUnit = 22.sp,
     val lyricTranslation: androidx.compose.ui.unit.TextUnit = 14.sp,
 )
 

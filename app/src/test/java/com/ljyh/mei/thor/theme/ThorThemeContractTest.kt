@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import com.google.gson.JsonParser
 import com.ljyh.mei.thor.model.ThorThemePack
 import java.nio.file.Files
@@ -59,6 +60,14 @@ class ThorThemeContractTest {
             assertEquals(lyrics["auxiliaryTopGap"].asInt.dp, actual.lyricLayout.auxiliaryTopGap)
             assertEquals(lyrics["auxiliaryGap"].asInt.dp, actual.lyricLayout.auxiliaryGap)
             assertEquals(lyrics["lineHeightEm"].asFloat.em, actual.lyricLayout.lineHeight)
+            assertEquals(lyrics["edgeFadeTop"].asInt.dp, actual.lyricLayout.edgeFadeTop)
+            assertEquals(lyrics["edgeFadeBottom"].asInt.dp, actual.lyricLayout.edgeFadeBottom)
+            assertEquals(lyrics["followAnchorFraction"].asFloat, actual.lyricLayout.followAnchorFraction, 0f)
+            assertEquals(lyrics["viewportVerticalInsetFraction"].asFloat, actual.lyricLayout.viewportVerticalInsetFraction, 0f)
+            assertEquals(lyrics["titleGap"].asInt.dp, actual.lyricLayout.titleGap)
+            val typography = JsonParser.parseString(designFile("theme-tokens.json")).asJsonObject["foundation"].asJsonObject["typography"].asJsonObject
+            assertEquals(typography["lyricCurrent"].asJsonObject["size"].asInt.sp, actual.typography.lyricCurrent)
+            assertEquals(typography["lyricAdjacent"].asJsonObject["size"].asInt.sp, actual.typography.lyricAdjacent)
         }
     }
 

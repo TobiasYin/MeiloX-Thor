@@ -15,12 +15,14 @@
       "secondary": {"size": 12, "weight": 400},
       "control": {"size": 14, "weight": 400},
       "caption": {"size": 11, "weight": 400},
-      "lyricCurrent": {"size": 28, "weight": 500},
-      "lyricAdjacent": {"size": 19, "weight": 400},
+      "lyricCurrent": {"size": 24, "weight": 500},
+      "lyricAdjacent": {"size": 22, "weight": 400},
       "lyricTranslation": {"size": 14, "weight": 400}
     },
     "lyricLayout": {
-      "rowGap": 16, "rowVerticalInset": 8, "auxiliaryTopGap": 8, "auxiliaryGap": 6, "lineHeightEm": 1.5
+      "rowGap": 16, "rowVerticalInset": 8, "auxiliaryTopGap": 8, "auxiliaryGap": 6, "lineHeightEm": 1.5,
+      "edgeFadeTop": 24, "edgeFadeBottom": 36, "followAnchorFraction": 0.23,
+      "viewportVerticalInsetFraction": 0.05, "titleGap": 12
     },
     "motion": {
       "pressMs": 120, "surfaceMs": 180, "caseMs": 320, "menuEnterMs": 170,

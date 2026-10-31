@@ -46,7 +46,7 @@
 
 主题可调整细节质感，不能自行更改按钮最小热区、列表行高、标题结构、播放器控制组位置或底部操作分区。排布尺寸由组件契约与设备档确定；字体和间距的变化不得突破这组边界。
 
-上屏歌词使用共享 `foundation.lyricLayout` token组：`rowGap=16`、`rowVerticalInset=8`（上下各8）、`auxiliaryTopGap=8`、`auxiliaryGap=6`、`lineHeightEm=1.5`。间距为设计逻辑单位，原生映射到实际窗口；当前行28、相邻行19、译文14的字号保持不变，每行热区至少48dp。三主题与日夜采用同一排版基线，主题只替换语义色和材质；拖动浏览、全部滚动停止15秒恢复跟随、单击复核entry后seek并play属于交互层，不能由主题改变，也不作为界面常驻解释文案。
+上屏歌词使用共享 `foundation.lyricLayout` token组：`rowGap=16`、`rowVerticalInset=8`（上下各8）、`auxiliaryTopGap=8`、`auxiliaryGap=6`、`lineHeightEm=1.5`。间距为设计逻辑单位，原生映射到实际窗口；当前行24、相邻行22、译文14，每行热区至少48dp。较小的主/邻字号差减少切行时的换行差异，主行仍以字重、语义色与逐字进度强调。歌词上下留白各占窗口高度5%，标题间距12dp；顶部24dp、底部36dp使用真实alpha渐隐，跟随锚点为视口的23%，首末行也能进入清晰区域。以上值分别由 `viewportVerticalInsetFraction`、`titleGap`、`edgeFadeTop`、`edgeFadeBottom`、`followAnchorFraction` 统一提供。三主题与日夜采用同一排版基线；拖动浏览、全部滚动停止15秒恢复跟随、单击复核entry后seek并play属于交互层，不能由主题改变，也不作为界面常驻解释文案。
 
 ## 4. 组件契约
 
