@@ -1,0 +1,39 @@
+{
+  "sourceCommit": "1dfc5e60b7896260c33fd15f976678e6f20a54b5",
+  "appId": "com.neoruaa.meilox",
+  "apk": "app/build/outputs/apk/debug/app-debug.apk",
+  "apkBytes": 74062061,
+  "apkSha256": "bb5bc6c24561dbf581ccd93987575d61f8f5530f0afb42030446e7031c5befce",
+  "installedApkSha256": "bb5bc6c24561dbf581ccd93987575d61f8f5530f0afb42030446e7031c5befce",
+  "avd": "thor_agent_dual_api36",
+  "adbSerial": "emulator-5560",
+  "adbServerPort": 5038,
+  "physicalDeviceTested": false,
+  "unitTests": {
+    "fullAppSuite": true,
+    "tests": 1204,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "nativeTests": {
+    "uniqueTests": 69,
+    "failures": 0,
+    "runs": [
+      {
+        "log": "availability-and-recovery.txt",
+        "tests": 6,
+        "failures": 0,
+        "durationSeconds": 7.156
+      },
+      {
+        "log": "related-regressions.txt",
+        "tests": 63,
+        "failures": 0,
+        "durationSeconds": 112.926
+      }
+    ]
+  },
+  "scope": "Permission JSON fixtures, synthetic metadata, real StableDeck with fake resolvers and local WAV; no live copyright-account verification or cloud mutations",
+  "optInSavedQueueServiceTestsExecuted": false
+}
