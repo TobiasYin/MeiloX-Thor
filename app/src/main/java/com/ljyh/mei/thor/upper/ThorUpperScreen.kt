@@ -141,6 +141,8 @@ private fun ThorUpperContent(
                     artwork = item.artwork, airflow = if (preferences.airflowEnabled) airflow else 0f,
                     visible = active, floating = item.key !is ThorItemKey.Destination && (!playbackScene || playing),
                     onAmbientPalette = { ambient = it }, modifier = Modifier.fillMaxSize(),
+                    airflowAllowed = !playing,
+                    playbackBreathing = playing && item.key !is ThorItemKey.Destination,
                 ) else Icon(Icons.Outlined.Album, null, Modifier.size(110.dp), tint = theme.secondary)
             }
             BoxWithConstraints(Modifier.weight(.48f).fillMaxHeight()

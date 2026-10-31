@@ -50,6 +50,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 /** Dedicated handheld entry. The two compositions share one state and service connection. */
@@ -141,9 +145,14 @@ class ThorActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 launch { viewModel.textEditing.collect { displayHost.inputRouter.setTextEditing(it) } }
-                launch { viewModel.preferences.collect { preferences ->
-                    if (preferences.airflowEnabled && !legacyActive && hasMicrophonePermission()) airflow.start() else airflow.stop()
-                } }
+                launch {
+                    try {
+                        combine(
+                            viewModel.preferences.map { it.airflowEnabled }.distinctUntilChanged(),
+                            viewModel.playback.state.map { it.connected to it.playing }.distinctUntilChanged(),
+                        ) { _, _ -> Unit }.collect { syncAirflowCapture() }
+                    } finally { airflow.stop() }
+                }
             }
         }
         lifecycleScope.launch {
@@ -160,6 +169,7 @@ class ThorActivity : ComponentActivity() {
     @Composable
     private fun LowerContent() {
         val preferences by viewModel.preferences.collectAsStateWithLifecycle()
+        val playback by viewModel.playback.state.collectAsStateWithLifecycle()
         val status by airflow.status.collectAsStateWithLifecycle()
         val error by airflow.error.collectAsStateWithLifecycle()
         val step by airflow.calibrationStep.collectAsStateWithLifecycle()
@@ -170,13 +180,18 @@ class ThorActivity : ComponentActivity() {
         val scan by localLibrary.scanState.collectAsStateWithLifecycle()
         ThorTheme(preferences) {
             ThorLowerScreen(viewModel, commands, ::finish, ::openLegacy, ::requestAirflow, ::calibrate,
-                airflowStatus = error ?: calibrationFeedback ?: when {
-                    step == ThorAirflowCalibrationStep.Quiet -> "保持安静"
-                    step == ThorAirflowCalibrationStep.Gentle -> "轻吹麦克风"
-                    step == ThorAirflowCalibrationStep.Strong -> "用力吹麦克风"
-                    preferences.airflowEnabled && preferences.reduceMotion -> "减少动态已开启"
-                    status == ThorAirflowStatus.Listening -> "等待吹气"
-                    else -> ""
+                airflowStatus = when {
+                    preferences.airflowEnabled && playback.playing -> "播放中已暂停吹气"
+                    preferences.airflowEnabled && !playback.connected -> "等待播放器连接"
+                    preferences.airflowEnabled && !hasMicrophonePermission() -> "麦克风未授权"
+                    else -> error ?: calibrationFeedback ?: when {
+                        step == ThorAirflowCalibrationStep.Quiet -> "保持安静"
+                        step == ThorAirflowCalibrationStep.Gentle -> "轻吹麦克风"
+                        step == ThorAirflowCalibrationStep.Strong -> "用力吹麦克风"
+                        preferences.airflowEnabled && preferences.reduceMotion -> "减少动态已开启"
+                        status == ThorAirflowStatus.Listening -> "等待吹气"
+                        else -> ""
+                    }
                 }, isScanning = scan.isScanning,
                 airflowStrength = strength,
                 airflowCalibrationProgress = if (step != null) progress else 0f,
@@ -215,6 +230,7 @@ class ThorActivity : ComponentActivity() {
         if (::displayHost.isInitialized) displayHost.inputRouter.reset()
         viewModel.cancelSeek()
         viewModel.clearExitGuard()
+        if (::airflow.isInitialized) airflow.stop()
         super.onPause()
     }
     override fun onStop() {
@@ -235,7 +251,7 @@ class ThorActivity : ComponentActivity() {
         displayHost.start()
         bindPlayback()
         viewModel.playback.setVisible(true)
-        if (viewModel.preferences.value.airflowEnabled && hasMicrophonePermission()) airflow.start()
+        syncAirflowCapture()
     }
     private fun releaseConnection() { viewModel.attachPlayer(null); connection?.dispose(); connection = null; connectionJob?.cancel(); connectionJob = null }
     private fun unbindPlayback() { if (bound) { bound = false; unbindService(serviceConnection) }; releaseConnection() }
@@ -276,16 +292,47 @@ class ThorActivity : ComponentActivity() {
         else if (hasMicrophonePermission()) setAirflowEnabled(true)
         else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
     }
+    private fun airflowCapturePolicy(enabled: Boolean = viewModel.preferences.value.airflowEnabled): ThorAirflowCapturePolicy {
+        val playback = viewModel.playback.state.value
+        return ThorAirflowCapturePolicy(enabled, hasMicrophonePermission(),
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED), legacyActive,
+            playback.connected, playback.playing)
+    }
+    private fun syncAirflowCapture(enabled: Boolean = viewModel.preferences.value.airflowEnabled): Boolean {
+        return if (airflowCapturePolicy(enabled).shouldCapture) airflow.start()
+        else { airflow.stop(); true }
+    }
     private fun setAirflowEnabled(enabled: Boolean) {
-        val accepted = !enabled || airflow.start()
+        // Enabling while playback/lifecycle temporarily blocks capture still saves the user's intent.
+        val accepted = syncAirflowCapture(enabled)
         viewModel.updatePreferences { it.copy(airflowEnabled = enabled && accepted) }
-        if (!enabled) airflow.stop()
         if (!accepted) viewModel.showMessage(airflow.error.value ?: "麦克风暂不可用", false)
-        else viewModel.showMessage(if (enabled) "吹气已开启" else "吹气已关闭")
+        else viewModel.showMessage(when {
+            !enabled -> "吹气已关闭"
+            airflowCapturePolicy(true).pausedForPlayback -> "播放中已暂停吹气"
+            !viewModel.playback.state.value.connected -> "等待播放器连接"
+            else -> "吹气已开启"
+        })
     }
     private fun calibrate() {
+        val policy = airflowCapturePolicy()
+        if (!policy.shouldCapture) {
+            airflow.stop()
+            viewModel.showMessage(when {
+                policy.playing -> "播放中已暂停吹气"
+                !policy.enabled -> "请先开启吹气"
+                !policy.playbackConnected -> "等待播放器连接"
+                !policy.hasPermission -> "请先允许麦克风权限"
+                else -> "请返回应用后校准"
+            }, success = policy.playing)
+            return
+        }
+        if (!syncAirflowCapture()) {
+            viewModel.showMessage(airflow.error.value ?: "麦克风暂不可用", false)
+            return
+        }
         if (airflow.calibrationStep.value != null) return
-        airflow.calibrate(airflow.nextCalibrationStep.value)
+        if (!airflow.calibrate(airflow.nextCalibrationStep.value)) viewModel.showMessage("麦克风暂不可用", false)
     }
     private fun openLegacy(route: String) {
         if (viewModel.openInternalRoute(route)) return

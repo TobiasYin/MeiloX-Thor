@@ -46,10 +46,13 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
         private set
     var reducedMotion: Boolean = false
         private set
+    var airflowAllowed: Boolean = true
+        private set
     // Source intent survives touch ownership; pause/reduced motion explicitly discard it.
     private var requestedAirflow = 0.0
     private var filtered = 0.0
     private var reducedDragTravel = 0.0
+    private var airflowMomentum = false
 
     val pose get() = CasePose(angle, pitch, lift = lift)
     val needsFrame get() = !reducedMotion && (phase != CaseMotionPhase.Idle || lift > .001)
@@ -61,16 +64,34 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
     }
 
     fun setAirflow(strength: Float) {
-        if (reducedMotion) return
+        if (reducedMotion || !airflowAllowed) return
         requestedAirflow = if (strength.isFinite()) strength.toDouble().coerceIn(0.0, 1.0) else 0.0
         if (phase == CaseMotionPhase.Dragging) return
         if (requestedAirflow > 0.0) resumeAirflow()
+    }
+
+    /** Cancel microphone momentum without taking ownership away from touch or a manual turn. */
+    fun setAirflowAllowed(allowed: Boolean) {
+        if (airflowAllowed == allowed) return
+        airflowAllowed = allowed
+        if (allowed) return
+        requestedAirflow = 0.0
+        filtered = 0.0
+        if (phase == CaseMotionPhase.Dragging || !airflowMomentum) return
+        // Do not project hundreds of degrees of old microphone velocity into the new target.
+        // The nearest visible face is at most 90 degrees away and starts at zero velocity.
+        velocity = 0.0
+        target = nearestFace(angle)
+        airflowMomentum = false
+        phase = CaseMotionPhase.Settling
+        if (reducedMotion) snap()
     }
 
     fun beginDrag() {
         filtered = 0.0
         velocity = 0.0
         reducedDragTravel = 0.0
+        airflowMomentum = false
         phase = CaseMotionPhase.Dragging
     }
 
@@ -100,13 +121,14 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
     fun endDrag(secondsSinceLastMove: Double = 0.0) {
         if (phase != CaseMotionPhase.Dragging) return
         if (secondsSinceLastMove > .09) velocity = 0.0
-        if (!reducedMotion && requestedAirflow > 0.0) resumeAirflow() else settle()
+        if (!reducedMotion && airflowAllowed && requestedAirflow > 0.0) resumeAirflow() else settle()
     }
 
     fun turn(direction: Int) {
         if (direction == 0) return
         requestedAirflow = 0.0
         filtered = 0.0
+        airflowMomentum = false
         target = nearestFace(angle) + if (direction > 0) 180.0 else -180.0
         velocity = if (direction > 0) 150.0 else -150.0
         phase = CaseMotionPhase.Settling
@@ -117,6 +139,7 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
     fun pause() {
         requestedAirflow = 0.0
         filtered = 0.0
+        airflowMomentum = false
         target = nearestFace(angle)
         snap()
     }
@@ -158,6 +181,7 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
     }
 
     private fun resumeAirflow() {
+        airflowMomentum = true
         phase = CaseMotionPhase.Airflow
         // A quick touch drag can reach 900°/s; airflow always resumes within its own 600°/s cap.
         velocity = velocity.coerceIn(0.0, config.maximumSpeed)
@@ -171,5 +195,6 @@ class CaseMotion(val config: CaseMotionConfig = CaseMotionConfig()) {
         pitch = 6.0
         lift = 0.0
         phase = CaseMotionPhase.Idle
+        airflowMomentum = false
     }
 }

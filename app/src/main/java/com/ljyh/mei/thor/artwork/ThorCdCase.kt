@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -77,9 +78,35 @@ import kotlinx.coroutines.withContext
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.exp
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Extracted once per decoded cover; never used as text or focus ink. */
 data class CaseAmbientPalette(val body: Color, val glow: Color, val accent: Color = glow)
+
+/** Non-observable instrumentation data; the ordinary application supplies no collector. */
+internal data class ThorCaseFrame(
+    val pose: CasePose,
+    /** Actual decorative vertical offset in dp, positive upward, excluding direct-touch lift. */
+    val bobDp: Double,
+    val phase: CaseMotionPhase,
+    val airflowAllowed: Boolean,
+    val playbackBreathing: Boolean,
+    val active: Boolean,
+    val reducedMotion: Boolean,
+)
+
+internal class ThorCaseDiagnostics {
+    val frameTicks = AtomicInteger()
+    @Volatile var latest: ThorCaseFrame? = null
+        private set
+
+    fun record(frame: ThorCaseFrame, tick: Boolean = false) {
+        latest = frame
+        if (tick) frameTicks.incrementAndGet()
+    }
+}
+
+internal val LocalThorCaseDiagnostics = staticCompositionLocalOf<ThorCaseDiagnostics?> { null }
 
 /** The caller controls visibility and airflow; this view never changes music selection or playback. */
 @Composable
@@ -91,13 +118,20 @@ fun ThorCdCase(
     floating: Boolean = true,
     onAmbientColor: (Color) -> Unit = {},
     onAmbientPalette: (CaseAmbientPalette) -> Unit = {},
+    airflowAllowed: Boolean = true,
+    playbackBreathing: Boolean = false,
 ) {
     val theme = LocalThorTheme.current
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var lifecycleVisible by remember(lifecycleOwner) { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     val active = visible && lifecycleVisible
+    val latestActive by rememberUpdatedState(active)
+    val latestPlaybackBreathing by rememberUpdatedState(playbackBreathing)
     val motion = remember { CaseMotion() }
+    val breathing = remember { CaseBreathing() }
+    val breathingPose = remember { mutableStateOf(breathing.pose) }
+    val diagnostics = LocalThorCaseDiagnostics.current
     val wakeFrames = remember { Channel<Unit>(Channel.CONFLATED) }
     val pose = remember { mutableStateOf(motion.pose) }
     val hover = remember { mutableFloatStateOf(0f) }
@@ -118,6 +152,18 @@ fun ThorCdCase(
     var touchFocused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
 
+    fun recordMotion(tick: Boolean = false) {
+        diagnostics?.record(ThorCaseFrame(
+            pose = breathingPose.value.applyTo(pose.value),
+            bobDp = (hover.floatValue * 3.0 + breathingPose.value.bobDp) * (1.0 - pose.value.lift),
+            phase = motion.phase,
+            airflowAllowed = motion.airflowAllowed,
+            playbackBreathing = latestPlaybackBreathing,
+            active = latestActive,
+            reducedMotion = motion.reducedMotion,
+        ), tick)
+    }
+
     // Event 1=input, 2=actual frame, 3=inactive/reduced, 4=idle. No artwork or user data.
     fun logMotion(event: Int, dt: Double = 0.0, force: Boolean = false) {
         if (!BuildConfig.DEBUG) return
@@ -137,12 +183,14 @@ fun ThorCdCase(
             lifecycleVisible = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); motion.pause() }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); motion.pause(); breathing.pause() }
     }
     DisposableEffect(wakeFrames) { onDispose { wakeFrames.cancel() } }
     LaunchedEffect(theme.reduceMotion) {
         motion.setReducedMotion(theme.reduceMotion)
         pose.value = motion.pose
+        if (theme.reduceMotion) { breathing.pause(); breathingPose.value = breathing.pose }
+        recordMotion()
     }
     LaunchedEffect(artwork.key, active, theme.reduceMotion) {
         entrance.snapTo(0f)
@@ -184,37 +232,47 @@ fun ThorCdCase(
         val loadedBack = if (artwork.backUri == artwork.frontUri) loadedFront else load(artwork.backUri) ?: loadedFront
         if (isCurrentRequest()) back.value = loadedBack
     }
-    LaunchedEffect(active, airflow, theme.reduceMotion) {
+    LaunchedEffect(active, airflow, theme.reduceMotion, airflowAllowed) {
+        motion.setAirflowAllowed(airflowAllowed)
         if (active) motion.setAirflow(airflow) else motion.pause()
         pose.value = motion.pose
         logMotion(1)
+        recordMotion()
         wakeFrames.trySend(Unit)
     }
-    LaunchedEffect(active, theme.reduceMotion, floating) {
+    LaunchedEffect(active, theme.reduceMotion, floating, playbackBreathing, airflowAllowed, diagnostics) {
         if (!active || theme.reduceMotion) {
             motion.pause(); pose.value = motion.pose; hover.floatValue = 0f
             hoverClock[1] = 0.0
+            breathing.pause(); breathingPose.value = breathing.pose
             logMotion(3, force = true)
+            recordMotion()
             return@LaunchedEffect
         }
         while (isActive) {
-            if (!floating && !motion.needsFrame && hoverClock[1] < .001) wakeFrames.receive()
+            if (!floating && !playbackBreathing && !motion.needsFrame && hoverClock[1] < .001 && !breathing.needsFrame) wakeFrames.receive()
             var previous = 0L
-            while (isActive && (floating || motion.needsFrame || hoverClock[1] >= .001)) {
+            while (isActive && (floating || playbackBreathing || motion.needsFrame || hoverClock[1] >= .001 || breathing.needsFrame)) {
                 val frame = withFrameNanos { it }
                 val dt = if (previous == 0L) 0.0 else ((frame - previous) / 1_000_000_000.0).coerceIn(0.0, .05)
                 previous = frame
                 pose.value = motion.advance(dt)
                 logMotion(2, dt)
-                hoverClock[1] += ((if (floating) 1.0 else 0.0) - hoverClock[1]) * (1 - exp(-dt / .45))
+                val browseFloating = floating && !playbackBreathing
+                hoverClock[1] += ((if (browseFloating) 1.0 else 0.0) - hoverClock[1]) * (1 - exp(-dt / .45))
+                if (!browseFloating && hoverClock[1] < .001) hoverClock[1] = 0.0
                 hoverClock[0] = (hoverClock[0] + dt * Math.PI * 2 / 7.5) % (Math.PI * 2)
                 hover.floatValue = (sin(hoverClock[0]) * hoverClock[1]).toFloat()
+                breathingPose.value = breathing.advance(dt, playbackBreathing,
+                    suppressed = motion.phase == CaseMotionPhase.Dragging || motion.phase == CaseMotionPhase.Airflow)
+                recordMotion(tick = true)
             }
             logMotion(4, force = true)
         }
     }
     fun turn(direction: Int): Boolean {
         motion.turn(direction); pose.value = motion.pose; wakeFrames.trySend(Unit)
+        recordMotion()
         return true
     }
 
@@ -253,7 +311,7 @@ fun ThorCdCase(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (touchSize.width <= 0 || touchSize.height <= 0) return@awaitEachGesture
                     down.consume(); touchFocused = true; focusRequester.requestFocus()
-                    motion.beginDrag(); pose.value = motion.pose; wakeFrames.trySend(Unit)
+                    motion.beginDrag(); pose.value = motion.pose; wakeFrames.trySend(Unit); recordMotion()
                     var previous = down.position
                     var lastTime = down.uptimeMillis
                     var lastMove = down.uptimeMillis
@@ -281,20 +339,23 @@ fun ThorCdCase(
                                 change.consume()
                             }
                             pose.value = motion.pose
+                            recordMotion()
                         }
                     } finally {
                         if (!released) motion.endDrag(.1)
                         pose.value = motion.pose; wakeFrames.trySend(Unit)
+                        recordMotion()
                     }
                 }
             },
     ) {
-        val current = pose.value
+        val current = breathingPose.value.applyTo(pose.value)
         val baseScale = min(size.width * .315f, size.height * .42f)
         val modelScale = baseScale * (1f + .035f * current.lift.toFloat())
         if (modelScale <= 0f) return@Canvas
         val centerX = size.width * (.5f + entrance.value)
-        val center = Offset(centerX, size.height * .5f - hover.floatValue * 3.dp.toPx() * (1 - current.lift.toFloat()) - current.lift.toFloat() * 4.dp.toPx())
+        val bobDp = (hover.floatValue * 3.0 + breathingPose.value.bobDp) * (1.0 - current.lift)
+        val center = Offset(centerX, size.height * .5f - bobDp.toFloat() * 1.dp.toPx() - current.lift.toFloat() * 4.dp.toPx())
         val shadowCenter = Offset(centerX, size.height * .86f)
         val shadowRadius = (baseScale + 11.dp.toPx()) * (1f + current.lift.toFloat() * .12f)
         val shadowInk = theme.caseShadow.copy(alpha = theme.caseShadow.alpha * (1f - .3f * current.lift.toFloat()))
