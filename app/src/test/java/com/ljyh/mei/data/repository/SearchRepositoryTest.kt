@@ -41,7 +41,7 @@ class SearchRepositoryTest {
     )
 
     @Test
-    fun onlyPodcastSearchSelectsTheDesktopSearchContract() = runBlocking {
+    fun catalogSearchUsesCloudWhilePodcastKeepsItsOriginalDesktopContract() = runBlocking {
         listOf(1, 10, 100, 1000, 1009).forEach { type ->
             assertTrue(repository.search("HOYO", type, 30) is Resource.Success)
             val request = requests.last()
@@ -49,14 +49,16 @@ class SearchRepositoryTest {
                 Buffer().also { request.body!!.writeTo(it) }.readUtf8(),
             ).asJsonObject
 
-            assertEquals("/api/search/get/", request.url.encodedPath)
+            assertEquals(if (type == 1009) "/api/search/get/" else "/api/cloudsearch/pc", request.url.encodedPath)
+            if (type != 1009) assertEquals("interfacepc.music.163.com", request.url.host)
             assertEquals("HOYO", body.get("s").asString)
             assertEquals(type, body.get("type").asInt)
             assertEquals(30, body.get("limit").asInt)
             assertEquals(0, body.get("offset").asInt)
             assertEquals(if (type == 1009) "pc" else null, request.header("X-Netease-Cookie-OS"))
             assertFalse(body.has("cookieOs"))
-            assertNull(request.header("X-Netease-Crypto"))
+            assertEquals(if (type == 1009) null else "eapi", request.header("X-Netease-Crypto"))
+            if (type == 1009) assertFalse(body.has("total")) else assertTrue(body.get("total").asBoolean)
         }
     }
 

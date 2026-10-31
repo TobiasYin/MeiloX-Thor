@@ -1,6 +1,7 @@
 package com.ljyh.mei.data.repository
 
 import com.ljyh.mei.data.model.api.GetSearch
+import com.ljyh.mei.data.model.api.GetCloudSearch
 import com.ljyh.mei.data.model.api.GetSearchSuggest
 import com.ljyh.mei.data.model.api.SearchResult
 import com.ljyh.mei.data.model.api.SearchSuggest
@@ -16,16 +17,14 @@ class SearchRepository(
     suspend fun search( keyword: String, type: Int, limit: Int): Resource<SearchResult> {
         return withContext(Dispatchers.IO) {
             safeApiCall {
-                apiService.search(
-                    GetSearch(
-                        s = keyword,
-                        type = type,
-                        limit = limit
-                    ),
-                    // The legacy radio search can return unrelated hot radios under the Android profile.
-                    // Select its desktop search contract without changing the account session.
-                    cookieOs = if (type == 1009) "pc" else null,
-                )
+                if (type == 1009) {
+                    // Keep the independently verified legacy radio contract without changing the session.
+                    apiService.search(GetSearch(s = keyword, type = type, limit = limit), cookieOs = "pc")
+                } else {
+                    // Same-session live comparison accepts cloudsearch; the old search/get
+                    // endpoint rejects current ordinary catalog requests even when encrypted.
+                    apiService.cloudSearch(GetCloudSearch(s = keyword, type = type, limit = limit))
+                }
             }
         }
     }

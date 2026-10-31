@@ -104,7 +104,17 @@ private fun playbackBodyTooLarge(httpStatus: Int) = PlaybackResponseBodyExceptio
 
 class NeteaseInterceptor internal constructor(
     private val accountPreferences: () -> Preferences,
+    private val androidConfigProvider: () -> Map<String, String>,
 ) : Interceptor {
+    internal constructor(accountPreferences: () -> Preferences) : this(accountPreferences, {
+        val metrics = AppContext.instance.resources.displayMetrics
+        NeteaseAndroidClientProfile.eapiConfig(
+            osVersion = Build.VERSION.RELEASE,
+            model = Build.MODEL,
+            buildId = Build.ID,
+            resolution = "${metrics.widthPixels}x${metrics.heightPixels}",
+        )
+    })
     constructor() : this({ runBlocking { AppContext.instance.dataStore.data.first() } })
 
     private val gson by lazy {
@@ -138,15 +148,7 @@ class NeteaseInterceptor internal constructor(
     // =========================================================================
     //  配置 B：普通 Android 模式 (用于 weapi/api - 保持手机端正常行为)
     // =========================================================================
-    private val ANDROID_CONFIG by lazy {
-        val metrics = AppContext.instance.resources.displayMetrics
-        NeteaseAndroidClientProfile.eapiConfig(
-            osVersion = Build.VERSION.RELEASE,
-            model = Build.MODEL,
-            buildId = Build.ID,
-            resolution = "${metrics.widthPixels}x${metrics.heightPixels}",
-        )
-    }
+    private val ANDROID_CONFIG by lazy(androidConfigProvider)
 
     // 公用常量
     private val CONST_NMDI = "Q1NKTQkBDAAMIEF4coQMHcb6TLA7AAAAciOiJ%2F%2FOO4VQ7m%2FLvLJ1pD9CIsJP5mfzI4SusB%2BaNScGLpThEYBcPxGzj0pL5hLdZ7LqB2UVULdYgc0%3D"

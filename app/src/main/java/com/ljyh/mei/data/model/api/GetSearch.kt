@@ -20,6 +20,15 @@ data class GetSearch(
 
 )
 
+/** The current catalog search contract; legacy radio search intentionally keeps GetSearch. */
+data class GetCloudSearch(
+    @SerializedName("s") val s: String,
+    @SerializedName("type") val type: Int = 1,
+    @SerializedName("limit") val limit: Int = 30,
+    @SerializedName("offset") val offset: Int = 0,
+    @SerializedName("total") val total: Boolean = true,
+)
+
 data class SearchResult(
     @SerializedName("result")
     val result: Result,
@@ -57,23 +66,23 @@ data class SearchResult(
             )
         }
         data class Song(
-            @SerializedName("album")
+            @SerializedName(value = "album", alternate = ["al"])
             val album: Album,
             @SerializedName("fee")
             val fee: Int,
-            @SerializedName("duration")
+            @SerializedName(value = "duration", alternate = ["dt"])
             val duration: Long,
             @SerializedName("rtype")
             val rtype: Int,
             @SerializedName("ftype")
             val ftype: Int,
-            @SerializedName("artists")
+            @SerializedName(value = "artists", alternate = ["ar"])
             val artists: List<Artist>,
             @SerializedName("copyrightId")
             val copyrightId: Int,
             @SerializedName("transNames")
             val transNames: List<String>?,
-            @SerializedName("mvid")
+            @SerializedName(value = "mvid", alternate = ["mv"])
             val mvid: Int,
             @SerializedName("name")
             val name: String,
@@ -83,8 +92,8 @@ data class SearchResult(
             val id: Long,
             @SerializedName("mark")
             val mark: Long,
-            @SerializedName("status")
-            val status: Int,
+            @SerializedName(value = "status", alternate = ["st"])
+            val status: Int?,
             @SerializedName("privilege") val privilege: com.ljyh.mei.data.model.SongPlaybackPrivilege? = null
 ) {
             data class Album(
@@ -100,14 +109,16 @@ data class SearchResult(
                 val name: String,
                 @SerializedName("id")
                 val id: Long,
-                @SerializedName("picId")
+                @SerializedName(value = "picId", alternate = ["pic"])
                 val picId: Long,
                 @SerializedName("mark")
                 val mark: Int,
                 @SerializedName("status")
                 val status: Int,
                 @SerializedName("alia")
-                val alia: List<String>
+                val alia: List<String>,
+                @SerializedName("picUrl") val picUrl: String? = null,
+                @SerializedName(value = "picId_str", alternate = ["pic_str"]) val picIdString: String? = null,
             ) {
                 data class Artist(
                     @SerializedName("img1v1Url")
@@ -134,8 +145,8 @@ data class SearchResult(
                 val img1v1: Int,
                 @SerializedName("name")
                 val name: String,
-                @SerializedName("alias")
-                val alias: List<String>,
+                @SerializedName(value = "alias", alternate = ["alia"])
+                val alias: List<String>?,
                 @SerializedName("id")
                 val id: Long,
                 @SerializedName("albumSize")
@@ -335,12 +346,12 @@ fun SearchResult.Result.Song.toMediaData(separatePrivilege: com.ljyh.mei.data.mo
     return MediaMetadata(
         id = id,
         title = name,
-        coverUrl = getResourceLink(album.picId.toString(),"jpg"),
+        coverUrl = searchArtworkUrl(album.picUrl, album.picIdString, album.picId),
         artists = artists.map {
             MediaMetadata.Artist(
                 name = it.name,
                 id = it.id,
-                picUrl = getResourceLink(it.picId.toString(),"jpg"),
+                picUrl = searchArtworkUrl(it.img1v1Url, null, it.picId).ifBlank { null },
                 alias = it.alias
             )
         },
@@ -349,8 +360,14 @@ fun SearchResult.Result.Song.toMediaData(separatePrivilege: com.ljyh.mei.data.mo
             id = album.id,
             title = album.name
         )
-    ).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, privilege, separatePrivilege))
+    ).withPlaybackPrivilege(mergedSongPlaybackPrivilege(id, privilege, separatePrivilege, status))
 }
+
+/** Prefer the server URL, then its precise string ID; a missing picture must never become 0.jpg. */
+private fun searchArtworkUrl(url: String?, stringId: String?, numericId: Long): String =
+    url?.takeIf(String::isNotBlank)
+        ?: stringId?.takeIf { it.toLongOrNull()?.let { id -> id > 0 } == true }?.let { getResourceLink(it, "jpg") }
+        ?: numericId.takeIf { it > 0 }?.let { getResourceLink(it.toString(), "jpg") }.orEmpty()
 
 
 fun SearchResult.Result.Playlist.toPlaylist(): Playlist {

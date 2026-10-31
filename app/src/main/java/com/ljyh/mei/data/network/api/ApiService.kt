@@ -31,6 +31,7 @@ import com.ljyh.mei.data.model.api.GetLyric
 import com.ljyh.mei.data.model.api.GetLyricV1
 import com.ljyh.mei.data.model.api.GetPlaylistDetail
 import com.ljyh.mei.data.model.api.GetSearch
+import com.ljyh.mei.data.model.api.GetCloudSearch
 import com.ljyh.mei.data.model.api.GetSearchSuggest
 import com.ljyh.mei.data.model.api.GetSongDetails
 import com.ljyh.mei.data.model.api.GetSongUrl
@@ -131,6 +132,10 @@ interface ApiService {
         @Body body: GetSearch,
         @Header("X-Netease-Cookie-OS") cookieOs: String? = null,
     ): SearchResult
+
+    @Headers("X-Netease-Crypto: eapi")
+    @POST("https://interfacepc.music.163.com/api/cloudsearch/pc")
+    suspend fun cloudSearch(@Body body: GetCloudSearch): SearchResult
 
 
     @POST("/api/search/suggest/web/")

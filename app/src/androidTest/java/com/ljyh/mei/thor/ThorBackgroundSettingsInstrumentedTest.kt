@@ -2,7 +2,6 @@ package com.ljyh.mei.thor
 
 import android.content.Intent
 import android.hardware.display.DisplayManager
-import android.os.Build
 import android.os.SystemClock
 import android.view.Display
 import android.view.InputDevice
@@ -24,12 +23,12 @@ import com.ljyh.mei.thor.model.ThorThemePack
 import com.ljyh.mei.thor.state.ThorOverlay
 import com.ljyh.mei.thor.state.ThorPage
 import com.ljyh.mei.thor.state.ThorTab
+import com.ljyh.mei.thor.test.ThorLiveEnvironment
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,7 +43,7 @@ class ThorBackgroundSettingsInstrumentedTest {
 
     @Test(timeout = 90_000)
     fun realAppearanceButtonsPersistBackgroundChoicesAndCleanRemovesIntensityFromControllerScope() {
-        assumeTrue("Run only on the dedicated dual-screen emulator", isEmulator())
+        ThorLiveEnvironment.requireRequestedDevice(instrumentation.targetContext)
         val context = instrumentation.targetContext
         val original = AtomicReference<ThorPreferences?>(null)
         var scenario: ActivityScenario<ThorActivity>? = null
@@ -55,7 +54,7 @@ class ThorBackgroundSettingsInstrumentedTest {
                 activity = owner
                 model = ViewModelProvider(owner)[ThorShellViewModel::class.java]
             }
-            assumeTrue("A secondary presentation display is required",
+            assertTrue("A secondary presentation display is required",
                 context.getSystemService(DisplayManager::class.java).displays.any {
                     it.displayId != activity.display?.displayId && it.flags and Display.FLAG_PRESENTATION != 0
                 })
@@ -203,10 +202,6 @@ class ThorBackgroundSettingsInstrumentedTest {
 
     private fun containsCompose(view: View): Boolean = view.javaClass.name == "androidx.compose.ui.platform.ComposeView" ||
         view is ViewGroup && (0 until view.childCount).any { containsCompose(view.getChildAt(it)) }
-
-    private fun isEmulator(): Boolean = Build.HARDWARE in setOf("ranchu", "goldfish") ||
-        Build.FINGERPRINT.startsWith("generic") || Build.MODEL.contains("sdk_gphone", ignoreCase = true) ||
-        Build.MODEL.contains("Emulator", ignoreCase = true)
 
     private companion object { const val BACKDROP_TAG = "thor-playback-backdrop" }
 }

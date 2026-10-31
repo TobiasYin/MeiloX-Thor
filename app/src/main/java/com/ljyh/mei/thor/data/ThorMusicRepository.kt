@@ -476,18 +476,55 @@ class ThorMusicRepository @Inject constructor(
             require(incoming.all { !it.isLocal && it.id > 0 }) { "本地歌曲请加入本地歌单" }
             requireAccount(signedIn)
             val detail = playlists.loadPlaylistForOrder(playlist.id, signedIn.userId.toLong(), signedIn.sessionFingerprint)
-            val previous = detail.playlist.trackIds.mapTo(hashSetOf()) { it.id }
-            val added = incoming.filter { it.id !in previous }
+            val plan = thorPlaylistAppendPlan(detail.playlist.trackIds.map { it.id }, incoming.map { it.id })
+            val byId = incoming.associateBy { it.id }
+            val added = plan.added.map(byId::getValue)
             if (added.isEmpty()) return@mutate ok("歌曲已在歌单中")
-            remoteTrackMutation(signedIn, playlist.id, "add", added)
-            val expectedAfter = previous + added.map { it.id }
-            ok("已加入歌单", rememberUndo { mutate {
-                requirePlaylistSnapshot(signedIn, playlist.id, expectedAfter)
-                remoteTrackMutation(signedIn, playlist.id, "del", added)
-                ok("已撤销")
-            } })
+            try {
+                val expectedAfter = applyThorPlaylistAppend(plan,
+                    addMissing = { remoteTrackMutation(signedIn, playlist.id, "add", added) },
+                    readCurrent = { requirePlaylistSnapshot(signedIn, playlist.id, plan.expected.toSet()) },
+                    saveOrder = { observed, expected -> saveRemotePlaylistOrder(signedIn, playlist.id, observed, expected) })
+                ok("已加入歌单", rememberRemoteAppendUndo(signedIn, playlist.id, plan, added, expectedAfter))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Add can succeed before an order request fails. Do not roll back another
+                // client's changes; offer Undo only for fresh membership whose original
+                // members still retain their pre-add relative order.
+                val actualAfter = try { requirePlaylistSnapshot(signedIn, playlist.id, plan.expected.toSet()) }
+                    catch (error: CancellationException) { throw error }
+                    catch (_: Exception) { null }
+                val undo = actualAfter?.takeIf { hasUnchangedThorPlaylistBaseline(plan, it) }
+                    ?.let { rememberRemoteAppendUndo(signedIn, playlist.id, plan, added, it) }
+                ThorOperationResult(false, "歌曲可能已加入，但顺序未能确认，请刷新歌单查看", undoToken = undo)
+            }
         }
     }
+
+    private suspend fun saveRemotePlaylistOrder(account: LibraryAccount, id: String, observed: List<Long>, expected: List<Long>) {
+        requireAccount(account)
+        val generation = accountFence.ticketForCall().generation
+        playlists.updatePlaylistTrackOrder(id, observed, expected, account.userId.toLong(), account.sessionFingerprint,
+            isCurrent = { activeAccount == account && accountFence.generation == generation })
+        checkAccount(account)
+        refresh(ThorCollection.OwnedPlaylists)
+    }
+
+    private suspend fun rememberRemoteAppendUndo(
+        account: LibraryAccount, id: String, plan: ThorPlaylistAppendPlan,
+        added: List<MediaMetadata>, after: List<Long>,
+    ): String = rememberUndo(guard = {
+        requireAccount(account)
+        check(requirePlaylistSnapshot(account, id, plan.expected.toSet()) == after) { "歌单已变化，无法撤销" }
+    }) { mutate {
+        remoteTrackMutation(account, id, "del", added)
+        val restored = requirePlaylistSnapshot(account, id, plan.before.toSet())
+        // Deleting only our additions should leave the protected original subsequence intact.
+        // If another client reordered it during deletion, report the change rather than undoing it.
+        check(restored == plan.before) { "歌单已变化，请刷新确认" }
+        ok("已撤销")
+    } }
 
     suspend fun removeFromPlaylist(playlist: ThorItemKey.Playlist, tracks: List<MediaMetadata>): ThorOperationResult = mutate { account ->
         if (playlist.local) {
@@ -548,13 +585,20 @@ class ThorMusicRepository @Inject constructor(
         check(result.code == 200 && result.id > 0) { "创建歌单失败" }
         val key = ThorItemKey.Playlist(result.id.toString())
         try {
-            if (tracks.isNotEmpty()) remoteTrackMutation(account, key.id, "add", tracks)
+            if (tracks.isNotEmpty()) {
+                val plan = thorPlaylistAppendPlan(emptyList(), tracks.map { it.id })
+                val byId = tracks.associateBy { it.id }
+                applyThorPlaylistAppend(plan,
+                    addMissing = { ids -> remoteTrackMutation(account, key.id, "add", ids.map(byId::getValue)) },
+                    readCurrent = { requirePlaylistSnapshot(account, key.id, plan.expected.toSet()) },
+                    saveOrder = { observed, expected -> saveRemotePlaylistOrder(account, key.id, observed, expected) })
+            }
         } catch (error: Exception) {
             val removed = withContext(NonCancellable) { compensateEmptyPlaylist(account, key.id, normalized) }
             refresh(ThorCollection.OwnedPlaylists)
             if (error is CancellationException) throw error
             return@mutate ThorOperationResult(false,
-                if (removed) "加入失败，新建的空歌单已撤销" else "歌单已创建，但加入失败；可进入歌单重试",
+                if (removed) "加入失败，新建的空歌单已撤销" else "歌单已创建，但加入或排序未能确认，请进入歌单查看",
                 createdPlaylist = key.takeUnless { removed })
         }
         checkAccount(account)

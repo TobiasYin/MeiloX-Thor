@@ -7,7 +7,6 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Shader
-import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -35,6 +34,7 @@ import com.ljyh.mei.thor.model.ThorItem
 import com.ljyh.mei.thor.model.ThorItemKey
 import com.ljyh.mei.thor.model.ThorPreferences
 import com.ljyh.mei.thor.model.ThorThemePack
+import com.ljyh.mei.thor.test.ThorLiveEnvironment
 import com.ljyh.mei.ui.model.LyricData
 import com.ljyh.mei.ui.model.LyricSource
 import com.mocharealm.accompanist.lyrics.core.model.SyncedLyrics
@@ -49,27 +49,26 @@ import kotlin.math.ceil
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * An emulator-only native-window measurement, not a Thor hardware FPS claim. Deliberately no
+ * A requested-device synthetic native-window measurement, not a general playback FPS claim. No
  * ComposeTestRule: its virtual clock would replace the production Choreographer frame driver.
  */
 @RunWith(AndroidJUnit4::class)
 class ThorBackdropFrameTimingInstrumentedTest {
     @Test(timeout = 45_000)
     fun recordsRealFullUpperWindowFramesWithCoverExtractionAndScrollingLyrics() {
-        assumeTrue("Run this measurement only on the dedicated Android emulator", isEmulator())
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        ThorLiveEnvironment.requireRequestedDevice(context)
+        val environment = ThorLiveEnvironment.reportName
+        val physical = environment == "AYN_Thor_physical"
         val mode = ThorBackgroundMode.valueOf(InstrumentationRegistry.getArguments()
             .getString("thorBackdropMode", ThorBackgroundMode.ArtworkFlow.name))
-        val screenshotName = "upper-frame-timing-${mode.name}-color-cover.png"
-        val reportName = "frame-timing-${mode.name}-emulator-only.json"
-        val context = instrumentation.targetContext
-        assumeTrue("The QA emulator must expose both displays",
-            context.getSystemService(DisplayManager::class.java).displays.size >= 2)
+        val screenshotName = "upper-frame-timing-${mode.name}-$environment-color-cover.png"
+        val reportName = "frame-timing-${mode.name}-$environment.json"
         val directory = File(context.cacheDir, "thor-backdrop-evidence").apply { mkdirs() }
         val cover = File(directory, "temporary-frame-timing-cover-${SystemClock.uptimeMillis()}.png")
         val collecting = AtomicBoolean(false)
@@ -169,13 +168,13 @@ class ThorBackdropFrameTimingInstrumentedTest {
                     assertTrue(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
                 }
                 if (mode == ThorBackgroundMode.ArtworkFlow) {
-                    screenshotFile.copyTo(File(directory, "upper-frame-timing-color-cover.png"), overwrite = true)
+                    screenshotFile.copyTo(File(directory, "upper-frame-timing-$environment-color-cover.png"), overwrite = true)
                 }
                 assertCoverColorsArrived(screenshot)
             } finally { screenshot.recycle() }
             val report = JSONObject()
-                .put("environment", "emulator-only")
-                .put("isPhysicalThorPerformanceResult", false)
+                .put("environment", environment)
+                .put("isPhysicalThorPerformanceResult", physical)
                 .put("recordedAtUtc", Instant.now().toString())
                 .put("deviceModel", Build.MODEL).put("sdkInt", Build.VERSION.SDK_INT)
                 .put("frameDriver", "Production AndroidUiDispatcher/Choreographer; ActivityScenario without ComposeTestRule")
@@ -194,11 +193,11 @@ class ThorBackdropFrameTimingInstrumentedTest {
                 .put("commandIssueDuration", summarize(measured.map { it.commandNs }))
                 .put("display", displayInfo)
                 .put("screenshot", screenshotName)
-                .put("scope", "Native emulator window timings only; no hardware FPS threshold or extrapolation")
+                .put("scope", "${if (physical) "AYN Thor" else "Emulator"} synthetic native-window timings only; no general playback FPS threshold or extrapolation")
             val reportFile = File(directory, reportName)
             reportFile.writeText(report.toString(2))
             if (mode == ThorBackgroundMode.ArtworkFlow) {
-                reportFile.copyTo(File(directory, "frame-timing-emulator-only.json"), overwrite = true)
+                reportFile.copyTo(File(directory, "frame-timing-$environment.json"), overwrite = true)
             }
         } finally {
             collecting.set(false)
@@ -288,10 +287,6 @@ class ThorBackdropFrameTimingInstrumentedTest {
         assertTrue("Real cover colors must reach the native scene (red=$red teal=$teal gold=$gold)",
             red > 8 && teal > 8 && gold > 8)
     }
-
-    private fun isEmulator(): Boolean = Build.HARDWARE in setOf("ranchu", "goldfish") ||
-        Build.FINGERPRINT.startsWith("generic") || Build.MODEL.contains("sdk_gphone", ignoreCase = true) ||
-        Build.MODEL.contains("Emulator", ignoreCase = true)
 
     private companion object {
         const val WARMUP_MS = 1_800L

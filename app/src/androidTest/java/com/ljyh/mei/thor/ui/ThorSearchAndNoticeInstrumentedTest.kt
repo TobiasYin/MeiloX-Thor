@@ -4,7 +4,6 @@ import android.app.Presentation
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.hardware.display.DisplayManager
-import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Display
@@ -36,11 +35,11 @@ import com.ljyh.mei.thor.ThorNotice
 import com.ljyh.mei.thor.model.ThorPreferences
 import com.ljyh.mei.thor.theme.ThorTheme
 import com.ljyh.mei.thor.input.ThorInputRouter
+import com.ljyh.mei.thor.test.ThorLiveEnvironment
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -197,7 +196,7 @@ class ThorSearchAndNoticeInstrumentedTest {
     }
 
     private fun withLowerWindow(content: @Composable () -> Unit, router: ThorInputRouter? = null, check: () -> Unit) {
-        assumeTrue("Run only on the dedicated dual-screen emulator", isEmulator())
+        ThorLiveEnvironment.requireRequestedDevice(instrumentation.targetContext)
         lateinit var owner: ComponentActivity
         compose.setContent {
             val activity = checkNotNull(LocalActivity.current) as ComponentActivity
@@ -215,7 +214,7 @@ class ThorSearchAndNoticeInstrumentedTest {
         val display = instrumentation.targetContext.getSystemService(DisplayManager::class.java).displays.firstOrNull {
             it.displayId != upperDisplayId && it.flags and Display.FLAG_PRESENTATION != 0
         }
-        assumeTrue("A real secondary presentation display is required", display != null)
+        assertNotNull("A real secondary presentation display is required", display)
         val expectedLowerDisplayId = checkNotNull(display).displayId
         var lower: Presentation? = null
         var lowerContent: ComposeView? = null
@@ -309,6 +308,4 @@ class ThorSearchAndNoticeInstrumentedTest {
         }
     }
 
-    private fun isEmulator(): Boolean = Build.HARDWARE in setOf("ranchu", "goldfish") ||
-        Build.FINGERPRINT.startsWith("generic") || Build.MODEL.contains("sdk_gphone", true) || Build.MODEL.contains("Emulator", true)
 }
