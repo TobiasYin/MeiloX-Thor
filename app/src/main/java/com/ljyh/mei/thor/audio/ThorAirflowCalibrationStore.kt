@@ -9,18 +9,20 @@ import kotlinx.coroutines.flow.first
 internal class ThorAirflowCalibrationStore(context: Context) {
     private val store = context.applicationContext.dataStore
 
-    suspend fun load(): ThorAirflowCalibration? {
+    suspend fun load(source: Int): ThorAirflowCalibration? {
         val preferences = store.data.first()
-        return storedAirflowCalibration(preferences[NOISE], preferences[GENTLE], preferences[STRONG])
+        return storedSourceAirflowCalibration(source,
+            preferences[noiseKey(source)], preferences[gentleKey(source)], preferences[strongKey(source)],
+            preferences[NOISE], preferences[GENTLE], preferences[STRONG])
     }
 
-    suspend fun save(value: ThorAirflowCalibration) {
+    suspend fun save(source: Int, value: ThorAirflowCalibration) {
         if (!value.isValid) return
         // All three values are one transaction; a partial tuple is never treated as calibrated.
         store.edit { preferences ->
-            preferences[NOISE] = value.noiseFloorRms
-            preferences[GENTLE] = value.gentleRms
-            preferences[STRONG] = value.strongRms
+            preferences[noiseKey(source)] = value.noiseFloorRms
+            preferences[gentleKey(source)] = value.gentleRms
+            preferences[strongKey(source)] = value.strongRms
         }
     }
 
@@ -28,6 +30,9 @@ internal class ThorAirflowCalibrationStore(context: Context) {
         val NOISE = floatPreferencesKey("thor.airflow.noise_rms")
         val GENTLE = floatPreferencesKey("thor.airflow.gentle_rms")
         val STRONG = floatPreferencesKey("thor.airflow.strong_rms")
+        fun noiseKey(source: Int) = floatPreferencesKey("thor.airflow.source.$source.noise_rms")
+        fun gentleKey(source: Int) = floatPreferencesKey("thor.airflow.source.$source.gentle_rms")
+        fun strongKey(source: Int) = floatPreferencesKey("thor.airflow.source.$source.strong_rms")
     }
 }
 

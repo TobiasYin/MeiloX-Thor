@@ -8,6 +8,8 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
+import android.os.SystemClock
+import android.util.Log
 import android.view.KeyEvent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -61,6 +63,7 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.ljyh.mei.BuildConfig
 import com.ljyh.mei.thor.model.ThorArtworkSpec
 import com.ljyh.mei.thor.theme.LocalThorTheme
 import com.ljyh.mei.thor.theme.ThorThemeTokens
@@ -101,12 +104,28 @@ fun ThorCdCase(
     val painter = remember { CdCasePainter() }
     val latestAmbient by rememberUpdatedState(onAmbientColor)
     val latestPalette by rememberUpdatedState(onAmbientPalette)
+    val latestAirflow by rememberUpdatedState(airflow)
+    val diagnosticTimes = remember { longArrayOf(-500L, -500L) }
     val front = remember(artwork.frontUri, context) { mutableStateOf<Bitmap?>(null) }
     val back = remember(artwork.backUri, context) { mutableStateOf<Bitmap?>(null) }
     var touchSize by remember { mutableStateOf(IntSize.Zero) }
     var focused by remember { mutableStateOf(false) }
     var touchFocused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+
+    // Event 1=input, 2=actual frame, 3=inactive/reduced, 4=idle. No artwork or user data.
+    fun logMotion(event: Int, dt: Double = 0.0, force: Boolean = false) {
+        if (!BuildConfig.DEBUG) return
+        val now = SystemClock.elapsedRealtime()
+        val slot = if (event == 2) 1 else 0
+        if (!force && now - diagnosticTimes[slot] < 500L) return
+        diagnosticTimes[slot] = now
+        Log.d("ThorCaseMotion", "event=$event strength=$latestAirflow active=${if (active) 1 else 0} " +
+            "visible=${if (visible) 1 else 0} lifecycle=${lifecycleOwner.lifecycle.currentState.ordinal} " +
+            "lifecycleVisible=${if (lifecycleVisible) 1 else 0} reduce=${if (theme.reduceMotion) 1 else 0} " +
+            "motionReduce=${if (motion.reducedMotion) 1 else 0} phase=${motion.phase.ordinal} " +
+            "yaw=${pose.value.yawDegrees} velocity=${motion.velocity} dt=$dt")
+    }
 
     DisposableEffect(lifecycleOwner, motion) {
         val observer = LifecycleEventObserver { _, _ ->
@@ -150,12 +169,14 @@ fun ThorCdCase(
     LaunchedEffect(active, airflow, theme.reduceMotion) {
         if (active) motion.setAirflow(airflow) else motion.pause()
         pose.value = motion.pose
+        logMotion(1)
         wakeFrames.trySend(Unit)
     }
     LaunchedEffect(active, theme.reduceMotion, floating) {
         if (!active || theme.reduceMotion) {
             motion.pause(); pose.value = motion.pose; hover.floatValue = 0f
             hoverClock[1] = 0.0
+            logMotion(3, force = true)
             return@LaunchedEffect
         }
         while (isActive) {
@@ -166,10 +187,12 @@ fun ThorCdCase(
                 val dt = if (previous == 0L) 0.0 else ((frame - previous) / 1_000_000_000.0).coerceIn(0.0, .05)
                 previous = frame
                 pose.value = motion.advance(dt)
+                logMotion(2, dt)
                 hoverClock[1] += ((if (floating) 1.0 else 0.0) - hoverClock[1]) * (1 - exp(-dt / .45))
                 hoverClock[0] = (hoverClock[0] + dt * Math.PI * 2 / 7.5) % (Math.PI * 2)
                 hover.floatValue = (sin(hoverClock[0]) * hoverClock[1]).toFloat()
             }
+            logMotion(4, force = true)
         }
     }
     fun turn(direction: Int): Boolean {

@@ -9,6 +9,7 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
@@ -27,6 +28,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.ljyh.mei.MainActivity
+import com.ljyh.mei.BuildConfig
 import com.ljyh.mei.di.AppDatabase
 import com.ljyh.mei.playback.MusicService
 import com.ljyh.mei.playback.PlayerConnection
@@ -38,12 +40,15 @@ import com.ljyh.mei.thor.theme.ThorTheme
 import com.ljyh.mei.thor.ui.ThorCommandDispatcher
 import com.ljyh.mei.thor.ui.ThorLowerScreen
 import com.ljyh.mei.thor.upper.ThorUpperScreen
+import com.ljyh.mei.thor.upper.thorUpperProjection
 import com.ljyh.mei.ui.screen.local.LocalLibraryViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import javax.inject.Inject
 
 /** Dedicated handheld entry. The two compositions share one state and service connection. */
@@ -101,16 +106,32 @@ class ThorActivity : ComponentActivity() {
             val strength by airflow.strength.collectAsStateWithLifecycle()
             val lyricEntryId = playback.value.currentEntryId
             val playbackScene = navigation.overlay in setOf(ThorOverlay.Player, ThorOverlay.Queue, ThorOverlay.Lyrics, ThorOverlay.Timer)
+            val upperItem = thorUpperProjection(navigation.page, playbackScene, preview, playback.value.current?.toThorItem())
+            val upperDisplayOn = displays.displays.firstOrNull { it.id == displays.upperDisplayId }?.state == android.view.Display.STATE_ON
+            if (BuildConfig.DEBUG) {
+                val diagnostic by rememberUpdatedState(
+                    "strength=$strength enabled=${preferences.airflowEnabled} reduceMotion=${preferences.reduceMotion} " +
+                        "hasItem=${upperItem != null} displayOn=$upperDisplayOn upperShown=${displays.isDualScreen || legacyActive}",
+                )
+                LaunchedEffect(Unit) {
+                    repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        while (isActive) {
+                            Log.d("ThorAirflowProjection", "$diagnostic lifecycle=${lifecycle.currentState.ordinal}")
+                            delay(500)
+                        }
+                    }
+                }
+            }
             ThorTheme(preferences) {
                 if (displays.isDualScreen || legacyActive) {
                     ThorUpperScreen(
-                        item = if (playbackScene) playback.value.current?.toThorItem() else preview,
+                        item = upperItem,
                         playing = playback.value.playing, preferences = preferences, airflow = strength,
                         lyricData = lyrics, positionProvider = { playback.value.positionMs },
                         onOpenPlayer = viewModel::togglePlayer, playbackScene = playbackScene,
                         onLyricSelected = { position -> viewModel.playFromLyric(position, lyricEntryId) },
                         playbackEntryId = lyricEntryId,
-                        visible = displays.displays.firstOrNull { it.id == displays.upperDisplayId }?.state == android.view.Display.STATE_ON,
+                        visible = upperDisplayOn,
                     )
                 } else LowerContent()
             }
