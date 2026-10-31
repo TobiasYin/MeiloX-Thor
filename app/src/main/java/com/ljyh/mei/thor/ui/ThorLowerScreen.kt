@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -51,6 +52,9 @@ fun ThorLowerScreen(
     airflowStatus: String = "",
     isScanning: Boolean = false,
     modifier: Modifier = Modifier,
+    airflowStrength: Float = 0f,
+    airflowCalibrationLabel: String = "校准",
+    airflowCalibrationProgress: Float = 0f,
 ) {
     val navigation by viewModel.navigation.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
@@ -64,6 +68,7 @@ fun ThorLowerScreen(
     val owner = remember { Any() }
     val sceneStates = rememberSaveableStateHolder()
     val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val sourcePlaylist = if (navigation.overlay == null) (navigation.page as? ThorPage.Detail)?.item?.takeIf { it.owned }?.key as? ThorItemKey.Playlist else null
     val onBack = { if (!viewModel.back()) onExit() }
 
@@ -73,7 +78,17 @@ fun ThorLowerScreen(
             if (!key.startsWith("notice:")) viewModel.rememberFocus(navigation.sceneKey, key)
             item?.let(viewModel::preview)
         }
-        dispatcher.install(owner) { command ->
+        dispatcher.install(owner) commandHandler@{ command ->
+            if (command == ThorCommand.TogglePlayer) {
+                focusManager.clearFocus(force = true)
+                keyboard?.hide()
+                viewModel.togglePlayer()
+                return@commandHandler true
+            }
+            if (command is ThorCommand.Shoulder) {
+                viewModel.handleShoulder(command.right, command.phase)
+                return@commandHandler true
+            }
             val currentMenu = viewModel.menu.value
             if (currentMenu != null) {
                 when (command) {
@@ -94,7 +109,7 @@ fun ThorLowerScreen(
                 true
             } else if (viewModel.seekPreview.value != null) {
                 when (command) {
-                    ThorCommand.Back, ThorCommand.TogglePlayer -> viewModel.cancelSeek()
+                    ThorCommand.Back -> viewModel.cancelSeek()
                     ThorCommand.Confirm -> if (registry.selectedKey == "player:progress") viewModel.applySeek()
                         else if (!registry.confirm()) viewModel.applySeek()
                     is ThorCommand.Move -> when (command.direction) {
@@ -132,6 +147,9 @@ fun ThorLowerScreen(
                 ThorCommand.TogglePlayback -> { viewModel.playback.toggle(); true }
                 ThorCommand.PreviousTrack -> { viewModel.playback.previous(); true }
                 ThorCommand.NextTrack -> { viewModel.playback.next(); true }
+                ThorCommand.ShuffleAll -> { viewModel.playPage(true); true }
+                ThorCommand.PlayAll -> { viewModel.playPage(false); true }
+                is ThorCommand.Shoulder -> true
                 is ThorCommand.Move -> registry.move(command.direction, command.repeated) ?: focusManager.moveFocus(when (command.direction) {
                     ThorDirection.Up -> FocusDirection.Up; ThorDirection.Down -> FocusDirection.Down
                     ThorDirection.Left -> FocusDirection.Left; ThorDirection.Right -> FocusDirection.Right
@@ -139,14 +157,16 @@ fun ThorLowerScreen(
             }
         }
     }
-    DisposableEffect(owner) { onDispose { dispatcher.remove(owner) } }
+    DisposableEffect(owner) { onDispose { dispatcher.remove(owner); viewModel.cancelSeek() } }
     BackHandler(onBack = onBack)
 
     val playerView = navigation.overlay == ThorOverlay.Player
     val hasBottomActions = navigation.overlay == null &&
         (navigation.page is ThorPage.Detail || navigation.page is ThorPage.Collection ||
             (navigation.page is ThorPage.Root && navigation.tab != ThorTab.My))
-    val bottomHeight = if (playerView) 28.dp else if (hasBottomActions) 56.dp else 32.dp
+    val refreshOnlyRoot = navigation.overlay == null && navigation.page is ThorPage.Root &&
+        (navigation.tab == ThorTab.Home || navigation.tab == ThorTab.Discover)
+    val bottomHeight = if (playerView) 28.dp else if (refreshOnlyRoot) 48.dp else if (hasBottomActions) 56.dp else 32.dp
     val miniVisible = navigation.overlay != ThorOverlay.Player && playback.current != null
 
     Box(modifier.fillMaxSize().background(theme.background).windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -160,7 +180,8 @@ fun ThorLowerScreen(
                             ThorOverlay.Lyrics -> ThorLyricsPage(viewModel, registry, onBack)
                             ThorOverlay.Timer -> ThorTimerPage(viewModel, registry, playback, onBack)
                             null -> ThorBrowsePage(viewModel, registry, navigation, library, onBack, onLegacyRoute,
-                                onRequestAirflow, onCalibrateAirflow, airflowStatus, isScanning)
+                                onRequestAirflow, onCalibrateAirflow, airflowStatus, isScanning,
+                                airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress)
                         }
                     }
                 }
@@ -198,8 +219,8 @@ fun ThorLowerScreen(
                     .padding(horizontal = if (playerView) 12.dp else 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = if (playerView) Arrangement.Center else Arrangement.spacedBy(12.dp)) {
-                    val hint = if (seek != null) "← → 调整    A 应用    B 取消" else when (navigation.overlay) {
-                        ThorOverlay.Player -> "B 返回    X 菜单    Y 播放 / 暂停    Select 队列"
+                    val hint = if (seek != null) "L1/R1 按住拖动·松开应用   A 应用   B 取消   Start 播放页" else when (navigation.overlay) {
+                        ThorOverlay.Player -> "L1/R1 ±15s·按住拖动   B/Start 返回   X 菜单   Y 播放   Select 队列"
                         ThorOverlay.Lyrics -> "A 跳转    B 返回"
                         else -> "A 确认    B 返回    X 菜单    Y 播放 / 暂停"
                     }

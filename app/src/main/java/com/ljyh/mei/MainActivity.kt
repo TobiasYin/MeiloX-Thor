@@ -288,6 +288,7 @@ class MainActivity : ComponentActivity() {
     private var thorLegacyRoute: String? = null
     private var thorUpperDisplayId = android.view.Display.DEFAULT_DISPLAY
     private var thorReturnSent = false
+    private var thorReturnOpenPlayer = false
 
 
     @androidx.annotation.OptIn(UnstableApi::class)
@@ -1401,6 +1402,13 @@ class MainActivity : ComponentActivity() {
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         if (thorLegacyRoute != null) {
+            if (event.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_START) {
+                if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    thorReturnOpenPlayer = true
+                    finish()
+                }
+                return true
+            }
             if (event.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_B || event.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
                 if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                     onBackPressedDispatcher.onBackPressed()
@@ -1485,6 +1493,7 @@ class MainActivity : ComponentActivity() {
         thorReturnSent = true
         val returnIntent = Intent(this, com.ljyh.mei.thor.ThorActivity::class.java)
             .setAction(com.ljyh.mei.thor.ThorActivity.RETURN_FROM_LEGACY)
+            .putExtra(com.ljyh.mei.thor.ThorActivity.OPEN_PLAYER, thorReturnOpenPlayer)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val options = android.app.ActivityOptions.makeBasic().apply { launchDisplayId = thorUpperDisplayId }
         runCatching { startActivity(returnIntent, options.toBundle()) }

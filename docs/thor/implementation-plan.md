@@ -91,7 +91,9 @@ PlayerConnection 仅由 Activity 所有者创建一次；传入独立 child Supe
 
 ## 6. 输入、菜单与 3D
 
-Activity 和 Presentation 均将事件交给同一 InputRouter。A 确认、B 最内层返回、X 更多、Y 播放暂停、Start 进出播放器并恢复来源、Select 队列、L2/R2 上一/下一首；L1/R1 仅一级切 Tab。A/B/X 等单次动作不跟随 repeat；D-pad 和摇杆统一出口，死区/连发/失焦清理；兼容 BRAKE/GAS 扳机并去重数字和轴事件。
+Activity和Presentation均将事件交给同一InputRouter。A确认、B最内层返回、X更多、Y播放暂停、Select队列。Start优先于普通菜单/seek/文本编辑：普通菜单关闭，seek取消预览，Name名称草稿挂起并在返回后恢复；兼容Main账号页复用返回握手进入Thor播放器，不提交认证或名称业务。L1/R1在一级页Press立即切Tab；播放器Tap±15秒，HoldStart进入预览、HoldStep持续推进、Release应用、Cancel/换曲/失焦丢弃；其他二级页保留。L3/R3仅在有批量按钮的集合/详情调用与按钮相同的随机/全部播放入口，使用当前逻辑歌曲快照。
+
+肩键事件合同为Press→Tap→Release或Press→HoldStart→HoldStep…→Release，长按阈值320ms、步进周期50ms；当前消费每步500ms，延迟不补积压步，另一肩接管后忽略旧肩Release。L2/R2仍为离散上一/下一首，同设备数字与BRAKE/GAS、LTRIGGER/RTRIGGER轴共用归零锁存；按下阈值0.55、归零区不高于0.05，数字释放且轴归零后才重新待发。A/B/X等单次动作不跟随repeat；D-pad/摇杆统一输出，失焦清理所有持有。相关手感与阈值仍须实体手柄验证。
 
 列表稳定 key 注册 FocusRequester/边界与选中态。手柄路由和 Compose 默认导航只选一种消费路径，避免一次移动两格。菜单背景不可交互；长按约460ms、移动超过8dp取消，不触发释放后的点击。触摸锚定按压位置，手柄锚定被选项目，边缘自动翻转/限制。父子同宽同锚点；A/Right进入，B/Left回父，返回记忆；子项A立即加入并关闭，无复选确认步骤。
 

@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import com.ljyh.mei.thor.model.ThorCommand
 import com.ljyh.mei.thor.model.ThorDirection
+import com.ljyh.mei.thor.model.ThorShoulderPhase
 import java.io.Closeable
 import kotlin.math.abs
 
@@ -16,12 +17,15 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
     private val handler = Handler(Looper.getMainLooper())
     private val state = ThorInputState(onCommand)
     private var repeatPosted = false
+    private var repeatAtMs = Long.MAX_VALUE
+    private val reportedTriggerAxes = mutableSetOf<Pair<Int, Boolean>>()
     private var closed = false
     var isTextEditing: Boolean = false
         private set
     private val repeat = object : Runnable {
         override fun run() {
             repeatPosted = false
+            repeatAtMs = Long.MAX_VALUE
             if (closed) return
             state.tick(SystemClock.uptimeMillis())
             scheduleRepeat()
@@ -36,20 +40,34 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
     fun onKeyEvent(event: KeyEvent): Boolean {
         if (closed || event.action !in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) return false
         val key = event.keyCode
-        val command = commandForKey(key) ?: return false
-        // Controller playback shortcuts are owned by text entry while a field is active.
-        // A headset media key remains an independent playback command.
-        if (isTextEditing && command in playbackCommands && key != KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) return true
-        // Physical Enter/Dpad/system Back belong to the IME; gamepad A/B keep app form actions.
-        if (isTextEditing && command !in playbackCommands && key != KeyEvent.KEYCODE_BUTTON_A && key != KeyEvent.KEYCODE_BUTTON_B) return false
+        val command = thorCommandForKey(key) ?: return false
         val down = event.action == KeyEvent.ACTION_DOWN
         val now = SystemClock.uptimeMillis()
         val token = "${event.deviceId}:$key"
+        val route = thorKeyRoute(key, isTextEditing)
+        if (route != ThorKeyRoute.Application && (key == KeyEvent.KEYCODE_BUTTON_L2 || key == KeyEvent.KEYCODE_BUTTON_R2)) {
+            state.trigger(event.deviceId, key == KeyEvent.KEYCODE_BUTTON_R2, digital = true,
+                down = down, nowMs = now, axisExpected = hasTriggerAxis(event.device, event.deviceId, key == KeyEvent.KEYCODE_BUTTON_R2),
+                repeated = event.repeatCount > 0, allowActions = false)
+        }
+        if (route != ThorKeyRoute.Application && !down) {
+            // A reset cancelled the gesture when the IME took ownership. Still observe UP,
+            // so its tombstone cannot swallow the first new gesture after text entry closes.
+            if (command is ThorCommand.Shoulder) state.shoulder(token, command.right, false, now)
+            else state.button(token, false, command)
+        }
+        when (route) {
+            ThorKeyRoute.Native -> return false
+            ThorKeyRoute.Consume -> return true
+            ThorKeyRoute.Application -> Unit
+        }
         val consumed = when {
             command is ThorCommand.Move -> state.direction(token, down, command.direction, now, event.repeatCount > 0)
+            command is ThorCommand.Shoulder -> state.shoulder(token, command.right, down, now, event.repeatCount > 0)
             key == KeyEvent.KEYCODE_BUTTON_L2 || key == KeyEvent.KEYCODE_BUTTON_R2 ->
-                if (down && event.repeatCount > 0) true else
-                    state.trigger(event.deviceId, key == KeyEvent.KEYCODE_BUTTON_R2, digital = true, down = down, nowMs = now)
+                state.trigger(event.deviceId, key == KeyEvent.KEYCODE_BUTTON_R2, digital = true, down = down,
+                    nowMs = now, axisExpected = hasTriggerAxis(event.device, event.deviceId, key == KeyEvent.KEYCODE_BUTTON_R2),
+                    repeated = event.repeatCount > 0)
             else -> state.button(token, down, command, event.repeatCount > 0)
         }
         scheduleRepeat()
@@ -57,7 +75,7 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
     }
 
     fun onMotionEvent(event: MotionEvent): Boolean {
-        if (closed || isTextEditing || event.actionMasked != MotionEvent.ACTION_MOVE ||
+        if (closed || event.actionMasked != MotionEvent.ACTION_MOVE ||
             event.source and InputDevice.SOURCE_CLASS_JOYSTICK == 0
         ) return false
         val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X).finite()
@@ -65,18 +83,18 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
         val x = if (abs(hatX) > .25f || abs(hatY) > .25f) hatX else event.getAxisValue(MotionEvent.AXIS_X).finite()
         val y = if (abs(hatX) > .25f || abs(hatY) > .25f) hatY else event.getAxisValue(MotionEvent.AXIS_Y).finite()
         val now = SystemClock.uptimeMillis()
-        state.stick(event.deviceId, x, y, now)
+        if (!isTextEditing) state.stick(event.deviceId, x, y, now)
         // Thor's Odin Controller advertises BRAKE/GAS; other supported controllers use L/RTRIGGER.
-        state.triggerAxis(event.deviceId, false, maxOf(
+        routeTriggerAxis(event, false, maxOf(
             event.getAxisValue(MotionEvent.AXIS_LTRIGGER).finite(),
             event.getAxisValue(MotionEvent.AXIS_BRAKE).finite(),
         ), now)
-        state.triggerAxis(event.deviceId, true, maxOf(
+        routeTriggerAxis(event, true, maxOf(
             event.getAxisValue(MotionEvent.AXIS_RTRIGGER).finite(),
             event.getAxisValue(MotionEvent.AXIS_GAS).finite(),
         ), now)
         scheduleRepeat()
-        return true
+        return !isTextEditing
     }
 
     /** Reset on focus loss, backgrounding, controller removal and modal ownership changes. */
@@ -84,6 +102,7 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
         state.reset(SystemClock.uptimeMillis())
         handler.removeCallbacks(repeat)
         repeatPosted = false
+        repeatAtMs = Long.MAX_VALUE
     }
 
     fun dispatch(command: ThorCommand): Boolean = !closed && onCommand(command)
@@ -94,15 +113,38 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
     }
 
     private fun scheduleRepeat() {
-        if (!closed && state.needsRepeat && !repeatPosted) {
+        val next = state.nextTickAtMs
+        if (closed || next == null) {
+            handler.removeCallbacks(repeat)
+            repeatPosted = false
+            repeatAtMs = Long.MAX_VALUE
+        } else if (!repeatPosted || next < repeatAtMs) {
+            handler.removeCallbacks(repeat)
             repeatPosted = true
-            handler.postDelayed(repeat, 16L)
+            repeatAtMs = next
+            handler.postAtTime(repeat, next)
         }
+    }
+
+    private fun routeTriggerAxis(event: MotionEvent, right: Boolean, value: Float, nowMs: Long) {
+        val key = event.deviceId to right
+        // Absent axes read as zero. Do not invent an analog capability for digital-only pads.
+        if (value > 0f || hasTriggerAxis(event.device, event.deviceId, right)) reportedTriggerAxes += key
+        if (key in reportedTriggerAxes) state.triggerAxis(event.deviceId, right, value, nowMs, allowActions = !isTextEditing)
+    }
+
+    private fun hasTriggerAxis(device: InputDevice?, deviceId: Int, right: Boolean): Boolean {
+        if (deviceId to right in reportedTriggerAxes) return true
+        val axes = if (right) intArrayOf(MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_GAS)
+            else intArrayOf(MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_BRAKE)
+        return axes.any { device?.getMotionRange(it) != null }
     }
 
     private fun Float.finite() = if (isFinite()) coerceIn(-1f, 1f) else 0f
 
-    private fun commandForKey(key: Int): ThorCommand? = when (key) {
+}
+
+internal fun thorCommandForKey(key: Int): ThorCommand? = when (key) {
         KeyEvent.KEYCODE_DPAD_UP -> ThorCommand.Move(ThorDirection.Up)
         KeyEvent.KEYCODE_DPAD_DOWN -> ThorCommand.Move(ThorDirection.Down)
         KeyEvent.KEYCODE_DPAD_LEFT -> ThorCommand.Move(ThorDirection.Left)
@@ -112,14 +154,27 @@ class ThorInputRouter(private val onCommand: (ThorCommand) -> Boolean) : Closeab
         KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> ThorCommand.Back
         KeyEvent.KEYCODE_BUTTON_X -> ThorCommand.ContextMenu
         KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> ThorCommand.TogglePlayback
-        KeyEvent.KEYCODE_BUTTON_L1 -> ThorCommand.TabPrevious
-        KeyEvent.KEYCODE_BUTTON_R1 -> ThorCommand.TabNext
+        KeyEvent.KEYCODE_BUTTON_L1 -> ThorCommand.Shoulder(false, ThorShoulderPhase.Press)
+        KeyEvent.KEYCODE_BUTTON_R1 -> ThorCommand.Shoulder(true, ThorShoulderPhase.Press)
         KeyEvent.KEYCODE_BUTTON_START -> ThorCommand.TogglePlayer
         KeyEvent.KEYCODE_BUTTON_SELECT -> ThorCommand.ToggleQueue
         KeyEvent.KEYCODE_BUTTON_L2 -> ThorCommand.PreviousTrack
         KeyEvent.KEYCODE_BUTTON_R2 -> ThorCommand.NextTrack
+        KeyEvent.KEYCODE_BUTTON_THUMBL -> ThorCommand.ShuffleAll
+        KeyEvent.KEYCODE_BUTTON_THUMBR -> ThorCommand.PlayAll
         else -> null
     }
 
-    private val playbackCommands = setOf(ThorCommand.TogglePlayback, ThorCommand.PreviousTrack, ThorCommand.NextTrack)
+internal enum class ThorKeyRoute { Application, Native, Consume }
+
+/** Keep Start available from a native IME; normal text navigation remains IME-owned. */
+internal fun thorKeyRoute(key: Int, textEditing: Boolean): ThorKeyRoute {
+    if (!textEditing) return ThorKeyRoute.Application
+    return when (key) {
+        KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B,
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> ThorKeyRoute.Application
+        KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2,
+        KeyEvent.KEYCODE_BUTTON_THUMBL, KeyEvent.KEYCODE_BUTTON_THUMBR -> ThorKeyRoute.Consume
+        else -> ThorKeyRoute.Native
+    }
 }

@@ -72,6 +72,8 @@ class ThorShellViewModel @Inject constructor(
     val detailLoading = mutableDetailLoading.asStateFlow()
     private val mutableSeek = MutableStateFlow<Long?>(null)
     val seekPreview = mutableSeek.asStateFlow()
+    private val shoulderInput = ThorPlayerShoulderState()
+    private val quickPlayerHistory = ThorQuickPlayerHistory()
     val textEditing = MutableStateFlow(false)
     private val focus = mutableMapOf<String, String>()
     private val listScroll = mutableMapOf<String, Pair<String, Int>>()
@@ -95,6 +97,8 @@ class ThorShellViewModel @Inject constructor(
         viewModelScope.launch {
             library.map { it.account.generation }.distinctUntilChanged().drop(1).collect {
                 mutableMenu.value = null
+                quickPlayerHistory.clear()
+                cancelSeek()
                 mutableNotice.value = null
                 menuGeneration++
                 mutablePreview.value = null
@@ -141,6 +145,7 @@ class ThorShellViewModel @Inject constructor(
     fun refresh(collection: ThorCollection? = null) = repository.refresh(collection)
 
     private fun navigate(value: ThorNavigation) {
+        if (value.overlay != ThorOverlay.Player) cancelSeek()
         if (value.sceneKey != mutableNavigation.value.sceneKey) mutablePreview.value = null
         mutableNavigation.value = value
         savedState["thor.tab"] = value.tab.name
@@ -149,8 +154,27 @@ class ThorShellViewModel @Inject constructor(
     fun switchTab(delta: Int) { if (menu.value == null) navigate(navigation.value.switchTab(delta)) }
     fun selectTab(tab: ThorTab) { if (navigation.value.isRoot && menu.value == null) navigate(navigation.value.copy(tab = tab)) }
     fun push(page: ThorPage) { navigate(navigation.value.push(page)) }
-    fun togglePlayer() { if (menu.value == null) { mutableSeek.value = null; navigate(navigation.value.toggle(ThorOverlay.Player)) } }
-    fun showPlayer() { if (navigation.value.overlay != ThorOverlay.Player) navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Player)) }
+    fun togglePlayer() {
+        if (menu.value != null || seekPreview.value != null || navigation.value.overlay != ThorOverlay.Player) showPlayer()
+        else if (!restoreQuickPlayer()) navigate(navigation.value.toggle(ThorOverlay.Player))
+    }
+    fun showPlayer() {
+        val target = quickPlayerHistory.enter(navigation.value, menu.value, library.value.account.generation)
+        mutableMenu.value = null
+        menuGeneration++
+        textEditing.value = false
+        cancelSeek()
+        navigate(target)
+    }
+    private fun restoreQuickPlayer(): Boolean {
+        val restored = quickPlayerHistory.leave(navigation.value, library.value.account.generation) ?: return false
+        cancelSeek()
+        navigate(restored.navigation)
+        menuGeneration++
+        mutableMenu.value = restored.menu?.let { draft -> draft.syncPlaylistTargets(playlistKeys(draft, library.value)) }
+        restored.menu?.subject?.item?.let { mutablePreview.value = it }
+        return true
+    }
     fun toggleQueue() { if (menu.value == null) navigate(navigation.value.toggle(ThorOverlay.Queue)) }
     fun showLyrics() = navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Lyrics))
     fun showTimer() = navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Timer))
@@ -163,6 +187,7 @@ class ThorShellViewModel @Inject constructor(
             return true
         }
         if (mutableSeek.value != null) { cancelSeek(); return true }
+        if (restoreQuickPlayer()) return true
         val previous = navigation.value.back() ?: return false
         navigate(previous)
         return true
@@ -217,6 +242,36 @@ class ThorShellViewModel @Inject constructor(
         if (!playback.play(tracks, index, title, shuffle)) showMessage(if (tracks.isEmpty()) "没有可播放的歌曲" else "播放器正在连接，请稍后重试", false)
     }
 
+    fun playPage(shuffle: Boolean): Boolean {
+        if (menu.value != null || seekPreview.value != null || textEditing.value) return false
+        val target = thorPagePlayback(navigation.value, library.value) ?: return false
+        play(target.tracks, if (shuffle) target.tracks.indices.random() else 0, target.title, shuffle)
+        return true
+    }
+
+    fun handleShoulder(right: Boolean, phase: ThorShoulderPhase) {
+        if (navigation.value.isRoot && menu.value == null && !textEditing.value) {
+            if (phase == ThorShoulderPhase.Press) switchTab(if (right) 1 else -1)
+            return
+        }
+        val current = playback.state.value
+        val available = navigation.value.overlay == ThorOverlay.Player && menu.value == null && !textEditing.value &&
+            current.connected && current.currentEntryId != null && current.durationMs > 0
+        when (shoulderInput.accept(right, phase, current.currentEntryId, available)) {
+            ThorShoulderSeekAction.BackwardTap, ThorShoulderSeekAction.ForwardTap -> {
+                val delta = if (right) 15_000L else -15_000L
+                if (seekPreview.value != null) adjustSeek(delta)
+                else playback.seek((playback.position() + delta).coerceIn(0, current.durationMs))
+            }
+            ThorShoulderSeekAction.Begin -> if (seekPreview.value == null) beginSeek()
+            ThorShoulderSeekAction.BackwardStep -> adjustSeek(-500)
+            ThorShoulderSeekAction.ForwardStep -> adjustSeek(500)
+            ThorShoulderSeekAction.Apply -> applySeek()
+            ThorShoulderSeekAction.Cancel -> clearSeekPreview()
+            ThorShoulderSeekAction.None -> Unit
+        }
+    }
+
     fun setSearchQuery(query: String) { mutableSearch.value = search.value.copy(query = query) }
     fun search() {
         val query = search.value.query.trim()
@@ -249,7 +304,8 @@ class ThorShellViewModel @Inject constructor(
     fun adjustSeek(deltaMs: Long) { mutableSeek.value = ((mutableSeek.value ?: playback.position()) + deltaMs).coerceIn(0, playback.state.value.durationMs) }
     fun previewSeek(positionMs: Long) { if (mutableSeek.value == null) seekEntryId = playback.state.value.currentEntryId; mutableSeek.value = positionMs.coerceIn(0, playback.state.value.durationMs) }
     fun applySeek() { if (seekEntryId == playback.state.value.currentEntryId) mutableSeek.value?.let(playback::seek); cancelSeek() }
-    fun cancelSeek() { mutableSeek.value = null; seekEntryId = null }
+    private fun clearSeekPreview() { mutableSeek.value = null; seekEntryId = null }
+    fun cancelSeek() { shoulderInput.reset(); clearSeekPreview() }
 
     fun openMenu(subject: ThorMenuSubject, anchor: ThorMenuAnchor) {
         if (subject.item.key is ThorItemKey.Destination) return

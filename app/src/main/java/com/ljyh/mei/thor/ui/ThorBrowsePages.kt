@@ -1,6 +1,7 @@
 package com.ljyh.mei.thor.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -87,8 +88,6 @@ internal fun ThorBrowseBottomActions(
             ThorTab.Home, ThorTab.Discover -> {
                 val collection = if (page.tab == ThorTab.Home) ThorCollection.Home else ThorCollection.Discover
                 Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ThorButton(registry, "root:local", "本地音乐", Modifier.width(112.dp), icon = Icons.Outlined.FolderOpen,
-                        onClick = { vm.openCollection(ThorCollection.LocalSongs) })
                     ThorButton(registry, "root:refresh", "", Modifier.size(48.dp), icon = Icons.Outlined.Refresh,
                         flat = true, contentDescription = "刷新", onClick = { vm.refresh(collection) })
                 }
@@ -116,10 +115,10 @@ internal fun ThorBrowseBottomActions(
                     contentDescription = if (isScanning) "停止扫描" else "扫描音乐", flat = true, onClick = { onLegacyRoute("local_music") })
                 ThorButton(registry, "collection:refresh", "", icon = Icons.Outlined.Refresh, contentDescription = "刷新", flat = true, onClick = { vm.refresh(page.collection) })
                 if (playable) {
-                    ThorButton(registry, "collection:shuffle", "随机播放", Modifier.widthIn(min = 96.dp), enabled = tracks.isNotEmpty(),
-                        onClick = { vm.play(tracks, tracks.indices.random(), page.collection.title, shuffle = true) })
-                    ThorButton(registry, "collection:play", "播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = tracks.isNotEmpty(),
-                        onClick = { vm.play(tracks, 0, page.collection.title, shuffle = false) })
+                    ThorButton(registry, "collection:shuffle", "L3 随机播放", Modifier.widthIn(min = 96.dp), enabled = tracks.isNotEmpty(),
+                        onClick = { vm.playPage(true) })
+                    ThorButton(registry, "collection:play", "R3 播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = tracks.isNotEmpty(),
+                        onClick = { vm.playPage(false) })
                 }
             }
         }
@@ -130,10 +129,10 @@ internal fun ThorBrowseBottomActions(
                     val bounds = registry.current?.bounds
                     vm.openMenu(ThorMenuSubject(item, "detail:more"), ThorMenuAnchor(bounds?.left ?: 30f, bounds?.bottom ?: 100f))
                 })
-                ThorButton(registry, "detail:shuffle", "随机播放", Modifier.widthIn(min = 96.dp), enabled = item.tracks.isNotEmpty(),
-                    onClick = { vm.play(item.tracks, item.tracks.indices.random(), item.title, shuffle = true) })
-                ThorButton(registry, "detail:play", "播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = item.tracks.isNotEmpty(),
-                    onClick = { vm.play(item.tracks, 0, item.title) })
+                ThorButton(registry, "detail:shuffle", "L3 随机播放", Modifier.widthIn(min = 96.dp), enabled = item.tracks.isNotEmpty(),
+                    onClick = { vm.playPage(true) })
+                ThorButton(registry, "detail:play", "R3 播放全部", Modifier.widthIn(min = 96.dp), primary = true, enabled = item.tracks.isNotEmpty(),
+                    onClick = { vm.playPage(false) })
             }
         }
         else -> Unit
@@ -242,6 +241,9 @@ internal fun ThorBrowsePage(
     onBack: () -> Unit, onLegacyRoute: (String) -> Unit,
     onRequestAirflow: (Boolean) -> Unit, onCalibrateAirflow: () -> Unit, airflowStatus: String,
     isScanning: Boolean = false,
+    airflowStrength: Float = 0f,
+    airflowCalibrationLabel: String = "校准",
+    airflowCalibrationProgress: Float = 0f,
 ) {
     val loading by vm.detailLoading.collectAsStateWithLifecycle()
     when (val page = navigation.page) {
@@ -283,7 +285,8 @@ internal fun ThorBrowsePage(
         }
         ThorPage.Search -> ThorSearchPage(vm, registry, onBack)
         ThorPage.Appearance -> ThorAppearancePage(vm, registry, onBack)
-        ThorPage.Controls -> ThorControlsPage(vm, registry, onBack, onRequestAirflow, onCalibrateAirflow, airflowStatus)
+        ThorPage.Controls -> ThorControlsPage(vm, registry, onBack, onRequestAirflow, onCalibrateAirflow, airflowStatus,
+            airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress)
     }
 }
 
@@ -399,17 +402,29 @@ private fun ThorAppearancePage(vm: ThorShellViewModel, registry: ThorFocusRegist
 
 @UnstableApi
 @Composable
-private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit, onRequestAirflow: (Boolean) -> Unit, onCalibrateAirflow: () -> Unit, airflowStatus: String) {
+private fun ThorControlsPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit, onRequestAirflow: (Boolean) -> Unit, onCalibrateAirflow: () -> Unit, airflowStatus: String,
+    airflowStrength: Float, airflowCalibrationLabel: String, airflowCalibrationProgress: Float) {
     val preferences by vm.preferences.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize()) {
         ThorPageHeader(registry, "手柄与吹气", onBack = onBack)
         LazyColumn(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 5.dp)) {
             item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThorButton(registry, "controls:airflow", "吹气 · ${if (preferences.airflowEnabled) "开启" else "关闭"}", Modifier.weight(1f), selected = preferences.airflowEnabled, onClick = { onRequestAirflow(!preferences.airflowEnabled) })
-                ThorButton(registry, "controls:calibrate", "校准", enabled = preferences.airflowEnabled, onClick = onCalibrateAirflow)
+                ThorButton(registry, "controls:calibrate", airflowCalibrationLabel, enabled = preferences.airflowEnabled, onClick = onCalibrateAirflow)
             } }
+            if (preferences.airflowEnabled) item {
+                val level = (if (airflowCalibrationProgress > 0f) airflowCalibrationProgress else airflowStrength)
+                    .takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+                Row(Modifier.fillMaxWidth().heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.weight(1f).height(4.dp).thorMaterial(ThorSurfaceRole.ProgressTrack)) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(level).background(LocalThorTheme.current.accent))
+                    }
+                    Text("${(level * 100).toInt()}%", color = LocalThorTheme.current.secondary, fontSize = 12.sp)
+                }
+            }
             if (airflowStatus.isNotEmpty()) item { Text(airflowStatus, fontSize = 12.sp, color = LocalThorTheme.current.secondary) }
-            val mappings = listOf("方向键 / 左摇杆" to "移动焦点", "A / B / X" to "确认 / 返回 / 更多", "Y" to "播放 / 暂停", "L1 / R1" to "切换一级页面", "L2 / R2" to "上一首 / 下一首", "Start / Select" to "播放页 / 队列")
+            val mappings = listOf("方向键 / 左摇杆" to "移动焦点", "A / B / X" to "确认 / 返回 / 更多", "Y" to "播放 / 暂停", "L1 / R1" to "一级切页 / 播放快进", "L2 / R2" to "上一首 / 下一首", "L3 / R3" to "随机 / 播放全部", "Start / Select" to "播放页 / 队列")
             itemsIndexed(mappings) { _, pair -> Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
                 Text(pair.first, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Text(pair.second, fontSize = 13.sp, color = LocalThorTheme.current.secondary)

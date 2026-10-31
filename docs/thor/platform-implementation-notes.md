@@ -8,8 +8,8 @@
 - `thor/display/ThorDisplayHost`：上屏 Activity 作为所有者，在下屏建立普通 Presentation；下屏 ComposeView 使用自己的 Context 与实际密度，decor 与 ComposeView 均显式设置 Lifecycle、ViewModelStore、SavedStateRegistry、OnBackPressedDispatcher owner。下屏控制内容由调用者传入，不重新绑定 MusicService。
 - `ThorDisplaySnapshot`：根据实际宿主与显示器像素形状识别 Thor（1920×1080＋1240×1080）和标准 RP Duo（1920×1080＋1280×960），保留实际 display ID、密度、旋转与状态；不写死 0/4。只有下屏窗口实际显示后 `isDualScreen` 才为 true。
 - 显示器无实质变化时不重建已显示窗口；对已被拒绝的同一显示配置不因重复 DISPLAY_INFO 通知不断重试。显式 refresh、前台恢复或真实显示变化可重试。断开/关闭/后台释放下屏，业务状态由外部 VM 保留，音乐服务不受影响。窗口失败通过 problem 暴露给单屏兼容 UI。
-- `thor/input/ThorInputRouter`：Activity 和 Presentation 共同使用一个实例。A/B/X、肩键及播放动作按单次边沿处理；方向键、HAT 与左摇杆使用统一输出、死区和连发，Move 标记 repeated。回调拒绝边界移动后停止该次持有，须松开/归中后才重新开始。
-- 同设备数字 L2/R2 与 BRAKE/GAS、LTRIGGER/RTRIGGER 轴合并成一次上一/下一首动作。失焦、后台与控制器移除清理持有；已偏转的轴在恢复后须先归中，防止自动重播。文本编辑允许 IME 接管方向/物理 Enter/系统 Back，手柄 A/B 仍交应用表单确认/返回；名称字段的 A 可重新唤起键盘。返回不取消 Presentation。
+- `thor/input/ThorInputRouter`：Activity 和 Presentation 共同使用一个实例。A/B/X、L3/R3及播放动作按单次边沿处理；L1/R1输出Press、Tap、HoldStart、HoldStep、Release、Cancel阶段，一级页仅Press立即切Tab，播放器Tap±15秒、长按预览/松开应用，其他二级页仍预留。长按320ms进入，370ms首步、后续每50ms最多一步，不补积压；失焦取消并吞掉迟到UP。方向键、HAT 与左摇杆使用统一输出、死区和连发，Move 标记 repeated。回调拒绝边界移动后停止该次持有，须松开/归中后才重新开始。
+- 同设备数字L2/R2与BRAKE/GAS、LTRIGGER/RTRIGGER轴合并为一次上一/下一首动作；归一化轴达到0.55触发，数字释放且轴回到不高于0.05后才重新待发，低/中行程抖动不会连切。失焦、后台与控制器移除清理持有；已偏转的轴在恢复后须先归中，防止自动重播。文本编辑允许 IME 接管方向/物理 Enter/系统 Back，手柄 A/B 仍交应用表单确认/返回；名称字段的A可重新唤起键盘。文字态拦截Y/媒体播放、L2/R2、Select与肩键，扳机只观察归零；Start可隐藏IME并进入播放器，Name草稿同账号返回恢复，不提交业务。L3/R3仅在当前集合/详情存在随机/全部播放按钮时与按钮共用入口。Main兼容账号页Start走现有返回握手进入Thor播放器；返回不取消Presentation。
 - `thor/ui/BindThorListFocus`：浏览列表、队列和歌词共用完整稳定 key 索引，列表内移动不依赖当前已组合行；取消旧滚动任务，等待目标行真实注册后请求焦点。尚未组合的目标也保留 item/action，快速 A/X 不作用于旧行。父层恢复识别 pending 请求，不抢到 Header。按住到边界返回 false；松开重按允许跨区。VM 保留各 scene 的稳定焦点与首项 key/像素偏移，空态清除旧预览并请求可用 CTA。
 - 列表行局部配置长按 460ms、移动阈值 8dp，不影响上屏拖动；菜单开启时原有行手势取消并禁用。通用按钮有显式控制器焦点环，禁用/blocked 焦点不能确认；纯图标返回键有可读描述，封面空位使用 Album 图标。
 - `thor/audio/ThorAirflowSource`：默认停止；Activity 明确开启且已获 RECORD_AUDIO 时才采集，模块不发起权限 UI，不请求音频焦点、不改变播放。16000Hz 单声道 PCM 只进入一个可复用内存缓冲，不落盘、不上传。安静/轻吹/强吹校准、噪声门控和持续输入门槛输出 0..1 强度；强度不产生选择、确认或播放命令。平滑与盒体动力学由渲染模块承担。

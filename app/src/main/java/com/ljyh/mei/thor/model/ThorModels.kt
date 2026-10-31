@@ -103,8 +103,12 @@ data class ThorPreferences(
 
 enum class ThorDirection { Up, Down, Left, Right }
 
+/** One physical shoulder gesture. Press is immediate; only a short gesture emits Tap. */
+enum class ThorShoulderPhase { Press, Tap, HoldStart, HoldStep, Release, Cancel }
+
 sealed interface ThorCommand {
     data class Move(val direction: ThorDirection, val repeated: Boolean = false) : ThorCommand
+    data class Shoulder(val right: Boolean, val phase: ThorShoulderPhase) : ThorCommand
     data object Confirm : ThorCommand
     data object Back : ThorCommand
     data object ContextMenu : ThorCommand
@@ -115,6 +119,8 @@ sealed interface ThorCommand {
     data object TogglePlayback : ThorCommand
     data object PreviousTrack : ThorCommand
     data object NextTrack : ThorCommand
+    data object ShuffleAll : ThorCommand
+    data object PlayAll : ThorCommand
 }
 
 /** Frozen when the menu opens, so changing focus cannot retarget a pending mutation. */
