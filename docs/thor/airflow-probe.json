@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-31",
+  "device": "AYN Thor",
+  "androidApi": 33,
+  "sampleRate": 16000,
+  "phaseMs": 8000,
+  "builtInCount": 2,
+  "supportsUnprocessed": true,
+  "captures": [
+    {
+      "source": 9,
+      "routeType": 15,
+      "preferredMatchesActual": true,
+      "errorStage": 0,
+      "phases": [
+        {
+          "phase": "quiet",
+          "frames": 400,
+          "samples": 128320,
+          "rmsMedian": 0.0006338653504649037,
+          "rmsP95": 0.0008021534670655135,
+          "rmsMax": 0.0009671944644114584,
+          "peakMax": 0.003014373779296875,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        },
+        {
+          "phase": "gentle",
+          "frames": 402,
+          "samples": 129280,
+          "rmsMedian": 0.0006295484653044104,
+          "rmsP95": 0.0008027628602848888,
+          "rmsMax": 0.0010558072795416782,
+          "peakMax": 0.002823162078857422,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        },
+        {
+          "phase": "strong",
+          "frames": 401,
+          "samples": 129280,
+          "rmsMedian": 0.0006440221336297406,
+          "rmsP95": 0.0008285556214880293,
+          "rmsMax": 0.0009802007284423443,
+          "peakMax": 0.0031347274780273438,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        }
+      ]
+    },
+    {
+      "source": 6,
+      "routeType": 15,
+      "preferredMatchesActual": true,
+      "errorStage": 0,
+      "phases": [
+        {
+          "phase": "quiet",
+          "frames": 401,
+          "samples": 128320,
+          "rmsMedian": 0.0006006228352155438,
+          "rmsP95": 0.0014032705943719493,
+          "rmsMax": 0.002409618833972375,
+          "peakMax": 0.004128360748291015,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        },
+        {
+          "phase": "gentle",
+          "frames": 402,
+          "samples": 128960,
+          "rmsMedian": 0.000612186742551905,
+          "rmsP95": 0.0012075204075982404,
+          "rmsMax": 0.0017789833413015548,
+          "peakMax": 0.003343486785888672,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        },
+        {
+          "phase": "strong",
+          "frames": 401,
+          "samples": 128960,
+          "rmsMedian": 0.015673744768506612,
+          "rmsP95": 0.05831409277085762,
+          "rmsMax": 0.11632077574275368,
+          "peakMax": 0.30577659606933594,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        }
+      ]
+    },
+    {
+      "source": 1,
+      "routeType": 15,
+      "preferredMatchesActual": true,
+      "errorStage": 0,
+      "phases": [
+        {
+          "phase": "quiet",
+          "frames": 399,
+          "samples": 127680,
+          "rmsMedian": 6.0728914165241124e-05,
+          "rmsP95": 8.082275896197685e-05,
+          "rmsMax": 0.0003437913107966111,
+          "peakMax": 0.0014555931091308593,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        },
+        {
+          "phase": "gentle",
+          "frames": 402,
+          "samples": 128960,
+          "rmsMedian": 6.071176387506919e-05,
+          "rmsP95": 0.00021930992839733896,
+          "rmsMax": 0.0008717513712964864,
+          "peakMax": 0.002570915222167969,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        },
+        {
+          "phase": "strong",
+          "frames": 402,
+          "samples": 129280,
+          "rmsMedian": 7.35504893671373e-05,
+          "rmsP95": 0.05211410564895443,
+          "rmsMax": 0.10779549697754066,
+          "peakMax": 0.45362653732299807,
+          "silencedFrames": 0,
+          "mutedFrames": 0
+        }
+      ]
+    }
+  ]
+}

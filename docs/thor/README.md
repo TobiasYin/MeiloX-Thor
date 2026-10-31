@@ -1,6 +1,6 @@
-> 控制器输入与焦点回归已有 417 项选定 JVM、29 项真机仪器通过记录；源码范围、最终布局收口后的复验与结论统一见 [控制器验证](controller-validation.md)。账号迁移与播放样本另见 [真机记录](hardware-validation.md)。
+> 最新歌词稳定滚动、上下渐隐与可视范围修复已通过 441 项相关 JVM、19 项双屏专用模拟器 Android 回归，见 [歌词与整体验证](lyrics-smoothing-validation.md)。吹气输入来源调查见 [吹气验证](airflow-validation.md)；历史控制器与账号轮次分别保留在 [控制器验证](controller-validation.md) 和 [真机记录](hardware-validation.md)。后续设备测试按用户要求仅使用专用双屏模拟器。
 
-> 原型本轮未同步修改；Thor 专用壳的当前输入规则见下文，实际回归范围以 [控制器验证](controller-validation.md) 为准。
+> 原型已同步共享主题 token；原生歌词排版与设备回归以最新验证记录为准，原型旧交互不代替当前输入契约。Thor 专用壳的输入规则见下文与 [控制器验证](controller-validation.md)。
 
 # Thor Music 设计与原生实施
 
