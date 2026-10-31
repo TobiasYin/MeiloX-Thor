@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "environment": "AYN_Thor_physical",
+  "androidSdk": 33,
+  "upperPixels": [
+    1920,
+    1080
+  ],
+  "lowerPixels": [
+    1240,
+    1080
+  ],
+  "jvm": {
+    "tests": 1276,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native": {
+    "uniqueMethods": 15,
+    "passed": 15,
+    "failures": 0,
+    "skipped": 0,
+    "durationSeconds": 37.32,
+    "methods": [
+      {
+        "class": "com.ljyh.mei.thor.ThorDiscoveryLiveInstrumentedTest",
+        "test": "actualArtistAreaTypeOffsetAndArtistSearchUseTheCurrentSession",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ThorDiscoveryLiveInstrumentedTest",
+        "test": "actualCatalogsArtistDiscographyAndDailyPlaybackKeepTheHomeListPosition",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorDiscoveryUiInstrumentedTest",
+        "test": "artistSectionsChangeByTouchWithoutRetargetingTheSongListCursor",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorDiscoveryUiInstrumentedTest",
+        "test": "theActualFilterPickerNavigatesUnrealizedRowsAndCannotFocusItsHeader",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorDiscoveryUiInstrumentedTest",
+        "test": "homeTabsAndBothFiltersFitThorAndDuoAndDoNotJoinControllerFocus",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorDiscoveryUiInstrumentedTest",
+        "test": "paginationRetainsItsBoundsAndIgnoresRepeatedActivationWhileLoading",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "returningToAListRestoresItsOwnKeyAndScrollInsteadOfTheOtherScene",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "aValidSavedFocusWithoutScrollWaitsForScopeBeforeItsNativeRequest",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "listBoundariesCannotReachChromeAndTouchingChromeDoesNotRetargetConfirm",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "invalidSavedFocusAndScrollResetAPartiallyVisibleFirstRow",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "explicitlyAllowedSpatialControlsUseNativeFocusAndSkipDisabledAndChromeTargets",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "rapidOffscreenMovementConfirmsThePreparedRowAndThenObtainsItsNativeFocus",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "aFreshEntryResetsEvenAStillVisiblePartiallyScrolledFirstRow",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "anInitiallyEmptyAsyncListWaitsForItsFirstRowWithoutFocusingChrome",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorFocusScopeInstrumentedTest",
+        "test": "aRemovedSavedKeyReturnsToTheFirstRowAndNeverToARegisteredHeader",
+        "status": "passed"
+      }
+    ]
+  },
+  "scope": "Related homepage/discovery regressions only; counts do not include or sum prior visual 33 or comprehensive acceptance 91 methods.",
+  "functionalSourceCommit": "353a8998cc56068680f70f3ed03c068ace14c1ad"
+}

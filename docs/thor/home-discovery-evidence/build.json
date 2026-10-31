@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "functionalSourceCommit": "353a8998cc56068680f70f3ed03c068ace14c1ad",
+  "environment": "AYN_Thor_physical",
+  "androidSdk": 33,
+  "preservedDataInstall": true,
+  "finalProfileSmoke": "passed",
+  "finalProfileSmokeMethod": "com.ljyh.mei.thor.data.ThorLiveCatalogInstrumentedTest#liveSessionProfileIsValid",
+  "relatedNativeValidation": "15 methods passed on identical functional source before commit metadata rebuild; no subsequent production changes.",
+  "artifacts": [
+    {
+      "package": "com.neoruaa.meilox",
+      "path": "app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 74062061,
+      "sha256": "b6d5f63af14c9afb5312454b60fc27c8daeaa6c142cd19bc0786ebebef339e0b",
+      "installedSha256Matches": true
+    },
+    {
+      "package": "com.neoruaa.meilox.test",
+      "path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+      "bytes": 3260628,
+      "sha256": "b51074b6258d69f2b9905ac0e99dab2771bdbc65ef4462119c760d61bb95029e",
+      "installedSha256Matches": true
+    }
+  ]
+}
