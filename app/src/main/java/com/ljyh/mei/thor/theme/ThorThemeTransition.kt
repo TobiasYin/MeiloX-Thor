@@ -56,8 +56,10 @@ internal fun animatedThorTheme(target: ThorThemeTokens): ThorThemeTokens {
         var frame = SharedThorThemeClock.sample(System.nanoTime())
         current.value = frame.tokens
         while (!frame.complete) {
-            withFrameNanos { now ->
-                frame = SharedThorThemeClock.sample(now)
+            withFrameNanos {
+                // Frames pace rendering; all windows sample the same monotonic clock.
+                // A provided FrameClock may use a different origin (e.g. virtual test time).
+                frame = SharedThorThemeClock.sample(System.nanoTime())
                 current.value = frame.tokens
             }
         }
