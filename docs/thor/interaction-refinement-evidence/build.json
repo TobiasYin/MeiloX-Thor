@@ -1,0 +1,37 @@
+{
+  "sourceCommit": "e87ed08720481b792fc12b7dfc74f3f66cfe7fc4",
+  "appId": "com.neoruaa.meilox",
+  "apk": "app/build/outputs/apk/debug/app-debug.apk",
+  "apkBytes": 74451927,
+  "apkSha256": "4716c1fbfcbd57e1889e8c1a057812ce26d43dbd45385cd3e435274cd624f20d",
+  "installedApkSha256": "4716c1fbfcbd57e1889e8c1a057812ce26d43dbd45385cd3e435274cd624f20d",
+  "avd": "thor_agent_dual_api36",
+  "adbSerial": "emulator-5560",
+  "adbServerPort": 5038,
+  "physicalDeviceTested": false,
+  "unitTests": {
+    "tests": 534,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "nativeTests": {
+    "uniqueTests": 54,
+    "failures": 0,
+    "runs": [
+      {
+        "log": "new-interactions.txt",
+        "tests": 10,
+        "failures": 0,
+        "durationSeconds": 38.41
+      },
+      {
+        "log": "existing-regressions.txt",
+        "tests": 44,
+        "failures": 0,
+        "durationSeconds": 154.241
+      }
+    ]
+  },
+  "scope": "Synthetic local fixtures; native Presentation on the dedicated dual-screen emulator; no login or cloud writes"
+}
