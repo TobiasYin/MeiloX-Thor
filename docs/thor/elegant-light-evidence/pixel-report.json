@@ -1,0 +1,231 @@
+{
+  "scope": "Real Host CanvasKit CPU SkSL pixels. NOT Android, physical device, GPU, app screenshot or frame-rate evidence.",
+  "input": "Same existing synthetic three-color palette, mapped forAmbient, Glass/Medium uniforms for each before/after pair.",
+  "metricsMeaning": "RGB differences describe shader-only sampled pixels; no perceptual quality/performance pass is inferred.",
+  "appearances": {
+    "day": {
+      "before": {
+        "samples": [
+          {
+            "seconds": 0,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.766342482866526,
+              "p01": 4.781429824407353,
+              "median": 4.9644179937459825
+            }
+          },
+          {
+            "seconds": 2.8,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.7686782852356275,
+              "p01": 4.779970346932531,
+              "median": 4.955862609286638
+            }
+          },
+          {
+            "seconds": 5.6,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.767129600853808,
+              "p01": 4.781441483828511,
+              "median": 4.94323298029896
+            }
+          }
+        ],
+        "changes": [
+          {
+            "fromSeconds": 0,
+            "toSeconds": 2.8,
+            "rgbMeanAbsoluteDifference255": 2.876400462962963,
+            "leftFieldRgbMeanAbsoluteDifference255": 3.5929215307522187,
+            "readingZoneRgbMeanAbsoluteDifference255": 2.0841862831739912,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.7936168981481482
+          },
+          {
+            "fromSeconds": 2.8,
+            "toSeconds": 5.6,
+            "rgbMeanAbsoluteDifference255": 2.8024054783950616,
+            "leftFieldRgbMeanAbsoluteDifference255": 3.883483105176227,
+            "readingZoneRgbMeanAbsoluteDifference255": 1.7021276880640583,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.7623707561728396
+          }
+        ]
+      },
+      "after": {
+        "samples": [
+          {
+            "seconds": 0,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.766986581890045,
+              "p01": 4.782268342594806,
+              "median": 5.060372909058197
+            }
+          },
+          {
+            "seconds": 2.8,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.765600468425402,
+              "p01": 4.781148710918497,
+              "median": 4.9937716602499895
+            }
+          },
+          {
+            "seconds": 5.6,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.765799648496487,
+              "p01": 4.7800650532765765,
+              "median": 4.890099817509824
+            }
+          }
+        ],
+        "changes": [
+          {
+            "fromSeconds": 0,
+            "toSeconds": 2.8,
+            "rgbMeanAbsoluteDifference255": 4.985724022633745,
+            "leftFieldRgbMeanAbsoluteDifference255": 5.668909045099522,
+            "readingZoneRgbMeanAbsoluteDifference255": 4.052985993947671,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.8685609567901235
+          },
+          {
+            "fromSeconds": 2.8,
+            "toSeconds": 5.6,
+            "rgbMeanAbsoluteDifference255": 6.62836741255144,
+            "leftFieldRgbMeanAbsoluteDifference255": 7.631583662271493,
+            "readingZoneRgbMeanAbsoluteDifference255": 5.944796604268766,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.8928260030864198
+          }
+        ]
+      },
+      "animation": {
+        "file": "day-after-host-10fps.mp4",
+        "fps": 10,
+        "frames": 57,
+        "phaseSecondsLast": 5.6
+      }
+    },
+    "night": {
+      "before": {
+        "samples": [
+          {
+            "seconds": 0,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.744532489950563,
+              "p01": 4.766700976320158,
+              "median": 5.671398721635921
+            }
+          },
+          {
+            "seconds": 2.8,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.745822981144925,
+              "p01": 4.804580505611699,
+              "median": 5.830746606379983
+            }
+          },
+          {
+            "seconds": 5.6,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.957971840449012,
+              "p01": 5.029174314898725,
+              "median": 6.048227298150876
+            }
+          }
+        ],
+        "changes": [
+          {
+            "fromSeconds": 0,
+            "toSeconds": 2.8,
+            "rgbMeanAbsoluteDifference255": 5.091284722222222,
+            "leftFieldRgbMeanAbsoluteDifference255": 6.027923350410123,
+            "readingZoneRgbMeanAbsoluteDifference255": 3.900891781152085,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.8497164351851851
+          },
+          {
+            "fromSeconds": 2.8,
+            "toSeconds": 5.6,
+            "rgbMeanAbsoluteDifference255": 5.215792181069959,
+            "leftFieldRgbMeanAbsoluteDifference255": 6.6731390498586265,
+            "readingZoneRgbMeanAbsoluteDifference255": 3.491777135052623,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.8260667438271605
+          }
+        ]
+      },
+      "after": {
+        "samples": [
+          {
+            "seconds": 0,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.745548709486742,
+              "p01": 4.780118365713205,
+              "median": 6.105484633348498
+            }
+          },
+          {
+            "seconds": 2.8,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.744639195161926,
+              "p01": 4.7739053517280485,
+              "median": 5.970316293930939
+            }
+          },
+          {
+            "seconds": 5.6,
+            "alphaMin": 255,
+            "alphaMax": 255,
+            "readingZoneVsGlassSecondary": {
+              "minimum": 4.74684508035032,
+              "p01": 4.779506308681708,
+              "median": 5.886132567532615
+            }
+          }
+        ],
+        "changes": [
+          {
+            "fromSeconds": 0,
+            "toSeconds": 2.8,
+            "rgbMeanAbsoluteDifference255": 10.428337191358025,
+            "leftFieldRgbMeanAbsoluteDifference255": 11.638046247305507,
+            "readingZoneRgbMeanAbsoluteDifference255": 8.401242601965668,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.9415412808641975
+          },
+          {
+            "fromSeconds": 2.8,
+            "toSeconds": 5.6,
+            "rgbMeanAbsoluteDifference255": 11.77135095164609,
+            "leftFieldRgbMeanAbsoluteDifference255": 13.589510372050055,
+            "readingZoneRgbMeanAbsoluteDifference255": 10.266436356819582,
+            "fractionPixelsChangingAtLeastTwoCodes": 0.9338753858024691
+          }
+        ]
+      },
+      "animation": {
+        "file": "night-after-host-10fps.mp4",
+        "fps": 10,
+        "frames": 57,
+        "phaseSecondsLast": 5.6
+      }
+    }
+  }
+}

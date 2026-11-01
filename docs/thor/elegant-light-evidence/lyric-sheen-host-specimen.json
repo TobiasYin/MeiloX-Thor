@@ -1,0 +1,16 @@
+{
+  "scope": "Host style specimen / NOT Android UI, device, Compose or GPU evidence",
+  "renderer": "CanvasKit CPU MakeSurface + glyph text + 17 Oklab color stops",
+  "font": "Arial Unicode",
+  "theme": "Glass",
+  "logicalScale": 2,
+  "sampleMediaMs": 1200,
+  "wordStartMs": 0,
+  "wordEndMs": 2200,
+  "sourceSha256": "38d09ed7ad846cfe235425b30f87f8326d25b3ae476302d6886f3ebe39d16f99",
+  "outputs": [
+    "lyric-sheen-day-host-specimen.png",
+    "lyric-sheen-night-host-specimen.png",
+    "lyric-sheen-day-night-host-specimen.png"
+  ]
+}

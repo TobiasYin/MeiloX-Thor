@@ -1,0 +1,27 @@
+{
+  "sourceCommit": "3c1e65c81660b7876f2893cc9f435142a5274250",
+  "jvm": {
+    "tests": 1332,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "build": {
+    "application": "passed",
+    "instrumentation": "passed"
+  },
+  "hostSkSL": {
+    "status": "compiled_and_rastered",
+    "scope": "CanvasKit CPU; not Android AGSL, physical-device, GPU or performance evidence"
+  },
+  "newNativeTests": {
+    "lyricSheen": 2,
+    "backdropMultiFrame": 1,
+    "status": "compiled_not_executed"
+  },
+  "physicalValidation": {
+    "status": "pending",
+    "target": "192.168.31.183:41323",
+    "reason": "Authorized physical device unavailable; no emulator substituted."
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "sourceCommit": "3c1e65c81660b7876f2893cc9f435142a5274250",
+  "artifacts": {
+    "application": {
+      "path": "app/build/outputs/apk/debug/app-debug.apk",
+      "sha256": "564bd97a01adc28d322d1589019525186628da96ab57b83526b3e35984d26a74"
+    },
+    "instrumentation": {
+      "path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+      "sha256": "0eb2856d3795a597d1a907b0265c4330b2668add4ef41710c479fc6fb40c6120"
+    }
+  },
+  "physicalInstallation": {
+    "status": "pending",
+    "target": "192.168.31.183:41323",
+    "deviceApkHash": null
+  }
+}
