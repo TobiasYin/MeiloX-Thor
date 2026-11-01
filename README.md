@@ -96,7 +96,9 @@ MeiloX 的上游 Android 基础来自 Mei，产品与部分界面参考 [MeloX](
 
 应用最低 Android 13，当前构建仅包含 `arm64-v8a`。其他非常规屏幕组合不在当前适配范围。
 
-最新修复：歌手作品页检查完整音源，提前标记当前会话明确仅可试听的歌曲；首页推荐歌单与发现分类歌单分工独立。**1,315 项完整应用 JVM 测试通过、零跳过，应用与测试 APK 构建成功；修复后的真机验收因设备离线待完成**，根因、范围与当前状态见[歌手音源与首页／发现记录](docs/thor/artist-source-discovery-validation.md)。
+最新播放更新：播放页可触摸或长 Select 选择音质，显示全局默认与当前实际音质。目标档位不可用时使用本曲最高可用完整音源，保留默认并在下一首重新尝试。**1,321 项 JVM 测试通过，应用／测试 APK 构建成功；指定真机离线，新增原生验收待执行**。见[播放音质记录](docs/thor/quality-selection-validation.md)。
+
+前一轮修复：歌手作品页检查完整音源，提前标记当前会话明确仅可试听的歌曲；首页推荐歌单与发现分类歌单分工独立。**1,315 项完整应用 JVM 测试通过、零跳过，应用与测试 APK 构建成功；修复后的真机验收因设备离线待完成**，根因、范围与当前状态见[歌手音源与首页／发现记录](docs/thor/artist-source-discovery-validation.md)。
 
 上一轮搜索更新：**1,291 项完整应用 JVM 测试通过，相关 8 项原生方法在实体 AYN Thor 上通过，零跳过**。综合结果交错展示类型、精确歌手前置、五类筛选、歌手作品与单曲播放返回见[搜索歌手验证](docs/thor/search-artists-validation.md)。[首页发现](docs/thor/home-discovery-validation.md)的 15 项和[流光与取色](docs/thor/lyric-flow-atmosphere-validation.md)的 33 项验证分别保留，不与本轮相加。
 

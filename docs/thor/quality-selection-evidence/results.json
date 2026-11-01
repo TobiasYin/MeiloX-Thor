@@ -1,0 +1,24 @@
+{
+  "sourceCommit": "04c00bf7351f93694e1d2cced7ad36073202661e",
+  "jvm": {
+    "tests": 1321,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "build": {
+    "application": "passed",
+    "instrumentation": "passed"
+  },
+  "newNativeTests": {
+    "provider": 8,
+    "qualityUI": 3,
+    "serviceAndConnection": 1,
+    "status": "compiled_not_executed"
+  },
+  "physicalValidation": {
+    "status": "pending",
+    "target": "192.168.31.183:41323",
+    "reason": "Authorized physical device remains unavailable. No emulator was substituted."
+  }
+}
