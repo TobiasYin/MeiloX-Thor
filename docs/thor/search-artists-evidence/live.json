@@ -1,0 +1,15 @@
+{
+  "environment": "AYN_Thor_physical",
+  "status": "passed",
+  "mixedResultCount": 158,
+  "artistPositionInMixedResults": 0,
+  "artistSongCount": 50,
+  "mixedArtistReturnRestored": true,
+  "artistTypeCount": 38,
+  "artistTypeReturnRestored": true,
+  "newQueryRetainedType": true,
+  "singleSongQueueCount": 1,
+  "selectedSongActuallyProgressed": true,
+  "filteredSongReturnRestored": true,
+  "queueRestored": true
+}

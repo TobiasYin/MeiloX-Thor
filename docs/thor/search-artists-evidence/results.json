@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "functionalSourceCommit": "92fc811b027234b4f4b6f7beb15249eb6601834e",
+  "environment": "AYN_Thor_physical",
+  "androidSdk": 33,
+  "upperPixels": [
+    1920,
+    1080
+  ],
+  "lowerPixels": [
+    1240,
+    1080
+  ],
+  "jvm": {
+    "tests": 1291,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native": {
+    "uniqueMethods": 8,
+    "passed": 8,
+    "failures": 0,
+    "skipped": 0,
+    "durationSeconds": 36.694,
+    "methods": [
+      {
+        "class": "com.ljyh.mei.thor.data.ThorLiveCatalogInstrumentedTest",
+        "test": "realCatalogPermissionsAndRepositoryMappingsMatchCurrentSession",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ThorSearchArtistsLiveInstrumentedTest",
+        "test": "actualMixedSearchOpensArtistSongsAndTypeFiltersKeepSingleSongPlaybackAndReturnPosition",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorSearchCategoryInstrumentedTest",
+        "test": "fiveSearchTypesFitTheExistingHeaderOnBothLowerWidthsWithoutTakingListFocus",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorSearchCategoryInstrumentedTest",
+        "test": "aPartialFailureOffersARealRetryTargetWithoutMovingTheResultCursor",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorSearchCategoryInstrumentedTest",
+        "test": "switchingTypeClosesTheActualEditorAndKeepsItsDraftWithoutSubmittingIt",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorSearchAndNoticeInstrumentedTest",
+        "test": "imeAndControllerBindingsUseTheSameLatestQueryAndClosingEditingDoesNotSubmit",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ui.ThorSearchAndNoticeInstrumentedTest",
+        "test": "theFirstTouchOnSearchSubmitsTheVisibleEditorEvenBeforeItsProjectionCatchesUp",
+        "status": "passed"
+      },
+      {
+        "class": "com.ljyh.mei.thor.ThorLiveUiAcceptanceInstrumentedTest",
+        "test": "liveSearchButtonSubmitsTheVisibleQueryAndActualSongAPlayerBRestoresListFocusAndScroll",
+        "status": "passed"
+      }
+    ]
+  },
+  "scope": "Search-related physical validation only; not summed with prior home 15/visual 33/general 91 methods."
+}
