@@ -1,0 +1,18 @@
+{
+  "sourceCommit": "cddd2932c428dcf3dadb8b37a865d83dc40c2639",
+  "artifacts": {
+    "application": {
+      "path": "app/build/outputs/apk/debug/app-debug.apk",
+      "sha256": "abe2842cfc46c4e63051d6951eeebde83abd49d2ed401f39bcfea191780622e6"
+    },
+    "instrumentation": {
+      "path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+      "sha256": "aac94ce1702634811288363658e293b5d576520ef9f39a480d9e3b05804cc2fa"
+    }
+  },
+  "physicalInstallation": {
+    "status": "pending",
+    "target": "192.168.31.183:41323",
+    "reason": "Device disconnected before installation; no device APK hash or after-fix native result claimed."
+  }
+}

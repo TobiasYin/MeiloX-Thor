@@ -1,0 +1,466 @@
+{
+  "environment": "AYN_Thor_physical",
+  "status": "diagnostic_complete",
+  "artists": [
+    {
+      "artistId": 2116,
+      "hotCount": 50,
+      "allCount": 40,
+      "tracks": [
+        {
+          "raw": {
+            "id": 65800,
+            "duration": 233560,
+            "albumId": 6452,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 65800,
+            "duration": 233560,
+            "albumId": 6452,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": true,
+            "level": "standard",
+            "bitrate": 128012
+          },
+          "fullSourceResolved": false,
+          "sourceFailure": "SourceNotFoundException"
+        },
+        {
+          "raw": {
+            "id": 65766,
+            "duration": 258902,
+            "albumId": 6451,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 65766,
+            "duration": 258902,
+            "albumId": 6451,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": true,
+            "level": "standard",
+            "bitrate": 128012
+          },
+          "fullSourceResolved": false,
+          "sourceFailure": "SourceNotFoundException"
+        },
+        {
+          "raw": {
+            "id": 64093,
+            "duration": 271226,
+            "albumId": 6341,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 64093,
+            "duration": 271226,
+            "albumId": 6341,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": true,
+            "level": "standard",
+            "bitrate": 128012
+          },
+          "fullSourceResolved": false,
+          "sourceFailure": "SourceNotFoundException"
+        },
+        {
+          "raw": {
+            "id": 35403523,
+            "duration": 242400,
+            "albumId": 3319407,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 35403523,
+            "duration": 242400,
+            "albumId": 3319407,
+            "artistIds": [
+              2116
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": false,
+            "level": "exhigh",
+            "bitrate": 320000
+          },
+          "fullSourceResolved": true,
+          "httpSource": true,
+          "contentLength": 9698787
+        }
+      ],
+      "bridgeAccepted": true,
+      "actualNewEntryProgressed": true,
+      "playerErrorCode": 0
+    },
+    {
+      "artistId": 121808446,
+      "hotCount": 3,
+      "allCount": 3,
+      "tracks": [
+        {
+          "raw": {
+            "id": 2113781936,
+            "duration": 209052,
+            "albumId": 182260318,
+            "artistIds": [
+              94319301,
+              36562313,
+              99556359,
+              98590364,
+              121337461,
+              123179548,
+              123179301,
+              121808446,
+              123178823,
+              99534952,
+              123163455,
+              123179284,
+              94904410,
+              123177918,
+              52975301,
+              99619426
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 2113781936,
+            "duration": 209052,
+            "albumId": 182260318,
+            "artistIds": [
+              94319301,
+              36562313,
+              99556359,
+              98590364,
+              121337461,
+              123179548,
+              123179301,
+              121808446,
+              123178823,
+              99534952,
+              123163455,
+              123179284,
+              94904410,
+              123177918,
+              52975301,
+              99619426
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": false,
+            "level": "exhigh",
+            "bitrate": 320002
+          },
+          "fullSourceResolved": true,
+          "httpSource": true,
+          "contentLength": 8364452
+        },
+        {
+          "raw": {
+            "id": 3323827648,
+            "duration": 87614,
+            "albumId": 352691588,
+            "artistIds": [
+              121808446
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 3323827648,
+            "duration": 87614,
+            "albumId": 352691588,
+            "artistIds": [
+              121808446
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": false,
+            "level": "exhigh",
+            "bitrate": 320000
+          },
+          "fullSourceResolved": true,
+          "httpSource": true,
+          "contentLength": 3506721
+        },
+        {
+          "raw": {
+            "id": 3325135834,
+            "duration": 81606,
+            "albumId": 353299197,
+            "artistIds": [
+              121808446
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 3325135834,
+            "duration": 81606,
+            "albumId": 353299197,
+            "artistIds": [
+              121808446
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Playable",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": false,
+            "level": "exhigh",
+            "bitrate": 320000
+          },
+          "fullSourceResolved": true,
+          "httpSource": true,
+          "contentLength": 3266395
+        }
+      ],
+      "bridgeAccepted": true,
+      "actualNewEntryProgressed": true,
+      "playerErrorCode": 0
+    },
+    {
+      "artistId": 3684,
+      "hotCount": 50,
+      "allCount": 40,
+      "tracks": [
+        {
+          "raw": {
+            "id": 108485,
+            "duration": 225013,
+            "albumId": 10770,
+            "artistIds": [
+              3684
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 108485,
+            "duration": 225013,
+            "albumId": 10770,
+            "artistIds": [
+              3684
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": true,
+            "level": "standard",
+            "bitrate": 128012
+          },
+          "fullSourceResolved": false,
+          "sourceFailure": "SourceNotFoundException"
+        },
+        {
+          "raw": {
+            "id": 2041026502,
+            "duration": 231586,
+            "albumId": 164109253,
+            "artistIds": [
+              3684
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 2041026502,
+            "duration": 231586,
+            "albumId": 164109253,
+            "artistIds": [
+              3684
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": true,
+            "level": "standard",
+            "bitrate": 128012
+          },
+          "fullSourceResolved": false,
+          "sourceFailure": "SourceNotFoundException"
+        },
+        {
+          "raw": {
+            "id": 108914,
+            "duration": 267946,
+            "albumId": 10804,
+            "artistIds": [
+              3684
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "canonical": {
+            "id": 108914,
+            "duration": 267946,
+            "albumId": 10804,
+            "artistIds": [
+              3684
+            ],
+            "isLocal": false,
+            "isPodcast": false,
+            "availability": "Unknown",
+            "coverPresent": true,
+            "reason": ""
+          },
+          "urlResponse": {
+            "code": 200,
+            "dataCode": 200,
+            "urlPresent": true,
+            "trial": true,
+            "level": "standard",
+            "bitrate": 128012
+          },
+          "fullSourceResolved": false,
+          "sourceFailure": "SourceNotFoundException"
+        }
+      ],
+      "bridgeAccepted": true,
+      "actualNewEntryProgressed": false,
+      "playerErrorCode": 2000
+    }
+  ],
+  "knownCanonical": {
+    "id": 35403523,
+    "duration": 242400,
+    "albumId": 3319407,
+    "artistIds": [
+      2116
+    ],
+    "isLocal": false,
+    "isPodcast": false,
+    "availability": "Playable",
+    "coverPresent": true,
+    "reason": ""
+  },
+  "queueRestored": true,
+  "phase": "before_fix_diagnosis",
+  "scope": "Current physical device session; three sampled JJ Lin songs, not the whole discography or an inference about membership."
+}

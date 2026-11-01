@@ -1,0 +1,18 @@
+{
+  "jvm": {
+    "tests": 1315,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "build": "assembleDebug and assembleDebugAndroidTest passed",
+  "nativeAfterFix": {
+    "status": "pending",
+    "reason": "Authorized physical device 192.168.31.183:41323 became offline; TCP Host is down. No emulator substituted."
+  },
+  "diagnosisBeforeFix": {
+    "status": "diagnostic_complete",
+    "environment": "AYN_Thor_physical",
+    "queueRestored": true
+  }
+}
