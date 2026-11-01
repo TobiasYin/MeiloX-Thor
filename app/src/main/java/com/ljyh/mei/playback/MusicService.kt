@@ -14,7 +14,6 @@ import android.os.Binder
 import android.os.Bundle
 import android.os.SystemClock
 import android.widget.Toast
-import androidx.compose.ui.text.toLowerCase
 import androidx.core.net.toUri
 import androidx.datastore.preferences.core.edit
 import androidx.media3.common.AudioAttributes
@@ -139,7 +138,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import timber.log.Timber
 import java.lang.ref.WeakReference
-import java.util.Locale.getDefault
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
@@ -195,6 +193,7 @@ class MusicService : MediaLibraryService(),
     private lateinit var connectivityManager: ConnectivityManager
     val currentMediaMetadata = MutableStateFlow<MediaMetadata?>(null)
     val availableMusicQualities = MutableStateFlow<List<MusicQuality>>(emptyList())
+    /** Actual current source only. The global requested target lives in MusicQualityKey. */
     val currentMusicQuality = MutableStateFlow<MusicQuality?>(null)
     val localPlaybackInfo = MutableStateFlow<LocalPlaybackInfo?>(null)
     val isPlayingLocalSource = MutableStateFlow(false)
@@ -424,7 +423,7 @@ class MusicService : MediaLibraryService(),
             scope = scope,
             sourceResolver = { item ->
                 val quality = context.dataStore[MusicQualityKey]
-                    ?.lowercase(getDefault())
+                    ?.let(::normalizePlaybackQuality)
                     ?: MusicQuality.EXHIGH.text
                 mediaUriProvider.resolveMediaSource(item.mediaId, quality)
             },

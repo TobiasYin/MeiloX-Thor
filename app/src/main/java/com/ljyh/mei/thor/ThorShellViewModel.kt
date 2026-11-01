@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.ljyh.mei.constants.AppAppearance
 import com.ljyh.mei.constants.AppAppearanceKey
+import com.ljyh.mei.constants.MusicQuality
 import com.ljyh.mei.constants.ReduceTransparencyKey
 import com.ljyh.mei.data.model.MediaMetadata
 import com.ljyh.mei.playback.PlayerConnection
@@ -340,6 +341,17 @@ class ThorShellViewModel @Inject constructor(
     fun showTimer() {
         freshScene("overlay:Timer")
         navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Timer))
+    }
+    fun showQuality() {
+        if (!playback.state.value.connected ||
+            navigation.value.overlay == ThorOverlay.Quality) return
+        freshScene("overlay:Quality")
+        navigate(navigation.value.copy(overlays = navigation.value.overlays + ThorOverlay.Quality))
+    }
+    fun selectQuality(quality: MusicQuality) {
+        if (navigation.value.overlay != ThorOverlay.Quality) return
+        if (playback.changeQuality(quality)) back()
+        else showMessage("正在连接播放器", false)
     }
 
     fun back(): Boolean {

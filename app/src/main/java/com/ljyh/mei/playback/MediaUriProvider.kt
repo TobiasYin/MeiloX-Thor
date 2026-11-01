@@ -21,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -71,6 +73,8 @@ class MediaUriProvider @Inject constructor(
     )
 
     private val urlCache = ConcurrentHashMap<String, CachedUrl>()
+    /** A completed search for a requested tier; URL keys themselves always name the actual tier. */
+    private val qualitySelections = ConcurrentHashMap<String, CachedUrl>()
     private val availableQualityCache = ConcurrentHashMap<String, AvailableQualities>()
     private val resolvedSources = ConcurrentHashMap<String, ResolvedMediaSource>()
     private val rejectedSources = ConcurrentHashMap<String, MutableSet<String>>()
@@ -149,6 +153,8 @@ class MediaUriProvider @Inject constructor(
     }
 
     internal suspend fun resolveMediaSource(mediaId: String, quality: String): ResolvedMediaSource {
+        val callContext = currentCoroutineContext()
+        callContext.ensureActive()
         val stateVersion = synchronized(qualityStateLock) { qualityStateVersion.get() }
         val requestedQuality = normalizePlaybackQuality(quality)
         resolveLocalSource(mediaId)?.let { return it }
@@ -156,20 +162,48 @@ class MediaUriProvider @Inject constructor(
             throw SourceNotFoundException("No local source for $mediaId")
         }
 
+        val selectionKey = "$mediaId:$requestedQuality"
+        fun usable(entry: CachedUrl, now: Long) = entry.expiresAtMs > now &&
+            entry.hasSupportedQuality(mediaId) && !sourceIsRejected(mediaId, entry.sourceIdentity)
+        fun publish(entry: CachedUrl): ResolvedMediaSource = synchronized(qualityStateLock) {
+            callContext.ensureActive()
+            ensureCurrentState(stateVersion)
+            if (!usable(entry, System.currentTimeMillis())) {
+                throw IOException("Playback source changed while selecting quality for $mediaId")
+            }
+            qualitySelections[selectionKey] = entry
+            rememberResolvedSource(mediaId, entry.toResolvedSource())
+        }
+        qualitySelections[selectionKey]?.let { selected ->
+            if (usable(selected, System.currentTimeMillis())) {
+                // A later availability probe may have verified a better actual source.
+                for (higher in playbackQualityFallbacks(requestedQuality).takeWhile {
+                    playbackQualityPriority(it) > playbackQualityPriority(selected.actualQuality)
+                }) {
+                    val verified = urlCache["$mediaId:$higher"]
+                    if (verified != null && verified.actualQuality == higher && usable(verified, System.currentTimeMillis())) {
+                        return publish(verified)
+                    }
+                }
+                return publish(selected)
+            }
+            qualitySelections.remove(selectionKey, selected)
+        }
+
+        var best: CachedUrl? = null
         val attemptedQualities = mutableListOf<String>()
         for (attemptedQuality in playbackQualityFallbacks(requestedQuality)) {
+            callContext.ensureActive()
+            ensureCurrentState(stateVersion)
+            // A lower URL returned by a higher request is provisional until every tier
+            // above its real level has been tried. The returned level need not be queried twice.
+            best?.takeIf { playbackQualityPriority(it.actualQuality) >= playbackQualityPriority(attemptedQuality) }
+                ?.let { return publish(it) }
             val cacheKey = "$mediaId:$attemptedQuality"
             val now = System.currentTimeMillis()
             val cached = urlCache[cacheKey]
             if (cached != null) {
-                if (cached.expiresAtMs > now && cached.hasSupportedQuality(mediaId) &&
-                    !sourceIsRejected(mediaId, cached.sourceIdentity)
-                ) {
-                    return synchronized(qualityStateLock) {
-                        ensureCurrentState(stateVersion)
-                        rememberResolvedSource(mediaId, cached.toResolvedSource())
-                    }
-                }
+                if (cached.actualQuality == attemptedQuality && usable(cached, now)) return publish(cached)
                 urlCache.remove(cacheKey, cached)
             }
 
@@ -183,11 +217,12 @@ class MediaUriProvider @Inject constructor(
             } catch (e: Exception) {
                 throw IOException("Network error resolving URL for $mediaId", e)
             }
+            callContext.ensureActive()
+            ensureCurrentState(stateVersion)
             if (response.code != 200) {
                 throw IOException("Song URL API returned code ${response.code} for $mediaId")
             }
             val source = response.data.firstOrNull { it.id.toString() == mediaId }
-            val fullSource = response.fullSourceFor(mediaId)
             logSourceAttempt(
                 mediaId = mediaId,
                 requestedQuality = requestedQuality,
@@ -196,23 +231,24 @@ class MediaUriProvider @Inject constructor(
                 responseCode = response.code,
             )
 
-            if (fullSource != null) {
-                val cacheEntry = fullSource.toCachedUrl(mediaId, attemptedQuality, now) ?: continue
-                if (sourceIsRejected(mediaId, cacheEntry.sourceIdentity)) continue
-                // Cache the requested, attempted, and effective levels while retaining the
-                // effective level so disk bytes are never mislabeled as a higher quality.
-                return synchronized(qualityStateLock) {
-                    ensureCurrentState(stateVersion)
-                    if (sourceIsRejected(mediaId, cacheEntry.sourceIdentity)) {
-                        throw IOException("Playback source was rejected while resolving $mediaId")
+            val completeSources = response.fullSourcesFor(setOf(mediaId))
+                .mapNotNull { it.toCachedUrl(mediaId, attemptedQuality, now) }
+            synchronized(qualityStateLock) {
+                callContext.ensureActive()
+                ensureCurrentState(stateVersion)
+                for (entry in completeSources) {
+                    if (sourceIsRejected(mediaId, entry.sourceIdentity)) continue
+                    cacheEffectiveSource(mediaId, entry)
+                    if (best == null || playbackQualityPriority(entry.actualQuality) > playbackQualityPriority(best!!.actualQuality)) {
+                        best = entry
                     }
-                    urlCache["$mediaId:$requestedQuality"] = cacheEntry
-                    urlCache[cacheKey] = cacheEntry
-                    cacheEffectiveSource(mediaId, cacheEntry)
-                    rememberResolvedSource(mediaId, cacheEntry.toResolvedSource())
                 }
             }
+            best?.takeIf { playbackQualityPriority(it.actualQuality) >= playbackQualityPriority(attemptedQuality) }
+                ?.let { return publish(it) }
         }
+
+        best?.let { return publish(it) }
 
         val message = "No playable full source for $mediaId at quality $requestedQuality"
         throw SourceNotFoundException(message)
@@ -304,6 +340,7 @@ class MediaUriProvider @Inject constructor(
         qualityStateVersion.incrementAndGet()
         accountStateVersion.incrementAndGet()
         urlCache.clear()
+        qualitySelections.clear()
         availableQualityCache.clear()
         rejectedSources.clear()
         resolvedSources.clear()
@@ -316,6 +353,9 @@ class MediaUriProvider @Inject constructor(
         urlCache.keys
             .filter { it.startsWith(prefix) }
             .forEach(urlCache::remove)
+        qualitySelections.keys
+            .filter { it.startsWith(prefix) }
+            .forEach(qualitySelections::remove)
     }
 
     private suspend fun verifyAvailableQuality(

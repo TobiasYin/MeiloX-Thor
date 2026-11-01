@@ -21,7 +21,7 @@ sealed interface ThorPage {
     data object Equalizer : ThorPage { override val key = "equalizer" }
 }
 
-enum class ThorOverlay { Player, Queue, Lyrics, Timer }
+enum class ThorOverlay { Player, Queue, Lyrics, Timer, Quality }
 
 data class ThorNavigation(
     val tab: ThorTab = ThorTab.Home,

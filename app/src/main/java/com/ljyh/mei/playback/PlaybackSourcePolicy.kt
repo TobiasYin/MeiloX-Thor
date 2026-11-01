@@ -24,62 +24,19 @@ internal fun effectivePlaybackQuality(sourceQuality: String?, attemptedQuality: 
         ?: normalizePlaybackQuality(attemptedQuality)
 
 /**
- * Returns the requested quality followed by the progressively lower qualities
- * supported by the NetEase player endpoint.
+ * Follows the player's quality-menu order, from the selected tier down to standard.
+ * Enhanced/spatial tiers are alternative encodings, but none may hide an available
+ * intermediate tier (for example master or Hi-Res) during automatic fallback.
  */
-internal fun playbackQualityFallbacks(requestedQuality: String): List<String> = when (
-    normalizePlaybackQuality(requestedQuality)
-) {
-    MusicQuality.STANDARD.text -> listOf(MusicQuality.STANDARD.text)
-    MusicQuality.EXHIGH.text -> listOf(
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
-    MusicQuality.LOSSLESS.text -> listOf(
-        MusicQuality.LOSSLESS.text,
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
-    MusicQuality.HIRES.text -> listOf(
-        MusicQuality.HIRES.text,
-        MusicQuality.LOSSLESS.text,
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
-    MusicQuality.JYEFFECT.text -> listOf(
-        MusicQuality.JYEFFECT.text,
-        MusicQuality.LOSSLESS.text,
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
-    MusicQuality.SKY.text -> listOf(
-        MusicQuality.SKY.text,
-        MusicQuality.JYEFFECT.text,
-        MusicQuality.LOSSLESS.text,
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
-    MusicQuality.JYMASTER.text -> listOf(
-        MusicQuality.JYMASTER.text,
-        MusicQuality.HIRES.text,
-        MusicQuality.LOSSLESS.text,
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
-    MusicQuality.DOLBY.text -> listOf(
-        MusicQuality.DOLBY.text,
-        MusicQuality.SKY.text,
-        MusicQuality.JYEFFECT.text,
-        MusicQuality.HIRES.text,
-        MusicQuality.LOSSLESS.text,
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
-    else -> listOf(
-        MusicQuality.EXHIGH.text,
-        MusicQuality.STANDARD.text,
-    )
+internal fun playbackQualityFallbacks(requestedQuality: String): List<String> {
+    val selected = MusicQuality.entries.firstOrNull { it.text == normalizePlaybackQuality(requestedQuality) }
+        ?: MusicQuality.EXHIGH
+    return MusicQuality.entries.take(selected.ordinal + 1).asReversed().map { it.text }
 }
+
+/** Priority matches the preference menu; a larger value denotes a preferred supported tier. */
+internal fun playbackQualityPriority(quality: String): Int =
+    MusicQuality.entries.indexOfFirst { it.text == normalizePlaybackQuality(quality) }
 
 /** Identifies the exact media bytes returned for a logical quality. */
 internal fun playbackSourceIdentity(sourceMd5: String?, sourceSize: Long?): String =

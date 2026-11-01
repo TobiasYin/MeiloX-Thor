@@ -272,7 +272,7 @@ fun ThorLowerScreen(
     val refreshOnlyRoot = navigation.overlay == null && navigation.page is ThorPage.Root &&
         (navigation.tab == ThorTab.Home || navigation.tab == ThorTab.Discover)
     val bottomHeight = if (playerView) 28.dp else if (refreshOnlyRoot) 48.dp else if (hasBottomActions) 56.dp else 32.dp
-    val miniVisible = navigation.overlay != ThorOverlay.Player && playback.current != null
+    val miniVisible = navigation.overlay !in setOf(ThorOverlay.Player, ThorOverlay.Quality) && playback.current != null
 
     Box(modifier.fillMaxSize().background(theme.background).windowInsetsPadding(WindowInsets.safeDrawing)
         .pointerInput(viewModel) {
@@ -291,6 +291,7 @@ fun ThorLowerScreen(
                             ThorOverlay.Queue -> ThorQueuePage(viewModel, registry, playback, onBack, pageActionBindings)
                             ThorOverlay.Lyrics -> ThorLyricsPage(viewModel, registry, onBack, pageActionBindings)
                             ThorOverlay.Timer -> ThorTimerPage(viewModel, registry, playback, onBack)
+                            ThorOverlay.Quality -> ThorQualityPage(viewModel, registry, playback, onBack)
                             null -> ThorBrowsePage(viewModel, registry, navigation, library, onBack, onLegacyRoute,
                                 onRequestAirflow, onCalibrateAirflow, airflowStatus, isScanning,
                                 airflowStrength, airflowCalibrationLabel, airflowCalibrationProgress, pageActionBindings,
@@ -335,6 +336,7 @@ fun ThorLowerScreen(
                     val hint = if (seek != null) "L1/R1 按住拖动·松开应用   A 应用   B 取消   Start 播放页" else when (navigation.overlay) {
                         ThorOverlay.Player -> "A/Y 播放   L1/R1 ±15s   L2/R2 切歌   Select 队列·长按操作   B/Start 返回"
                         ThorOverlay.Lyrics -> "A 跳转    B 返回"
+                        ThorOverlay.Quality -> "↑↓ 选择音质   A 应用   B 返回   Start 播放页"
                         else -> if (navigation.page is ThorPage.Account || navigation.page == ThorPage.AudioSettings || navigation.page == ThorPage.Equalizer)
                             "↑↓ 选择   A 确认   B 返回   Start 播放   Select 长按操作"
                         else if (navigation.page == ThorPage.Search)

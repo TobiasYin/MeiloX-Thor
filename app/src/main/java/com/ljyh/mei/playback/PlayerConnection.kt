@@ -41,6 +41,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
@@ -100,6 +101,12 @@ class PlayerConnection(
 
     val error = MutableStateFlow<PlaybackException?>(null)
     val availableMusicQualities = service.availableMusicQualities
+    /** Global user target. A song's resolved fallback never writes into this preference. */
+    val requestedMusicQuality: StateFlow<MusicQuality> = service.dataStore.data
+        .map { requestedMusicQualityPreference(it[MusicQualityKey]) }
+        .distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, requestedMusicQualityPreference(service.dataStore[MusicQualityKey]))
+    /** Effective source quality for this song; null while unresolved or playing a local file. */
     val currentMusicQuality = service.currentMusicQuality
     val localPlaybackInfo = service.localPlaybackInfo
     val isPlayingLocalSource = service.isPlayingLocalSource
@@ -232,6 +239,7 @@ class PlayerConnection(
 
     fun refreshAvailableMusicQualities() = service.refreshAvailableMusicQualities()
 
+    /** Explicit user selection only; automatic per-song fallback must not call this method. */
     fun changeQuality(quality: MusicQuality, preferOnlineSource: Boolean = true) {
         qualityChangeJob?.cancel()
         val selectedItem = player.currentMediaItem
@@ -252,6 +260,8 @@ class PlayerConnection(
             // Keep the playlist intact, but force every source that may have been
             // prepared at the previous quality to be discarded.
             if (preferOnlineSource) service.mediaUriProvider.preferOnlineSource(mediaId)
+            // Reselecting a target must revalidate its previous requested-to-fallback result.
+            service.mediaUriProvider.invalidate(mediaId)
             service.resetRejectedPlaybackSources()
             service.refreshPlaybackSource(index, position, shouldPlay, refreshQueuedSources = true)
         }
@@ -393,6 +403,12 @@ class PlayerConnection(
         qualityChangeJob = null
         player.removeListener(this)
     }
+}
+
+/** Reads both legacy API text and enum-name preferences without rewriting the saved target. */
+internal fun requestedMusicQualityPreference(raw: String?): MusicQuality {
+    val normalized = raw?.let(::normalizePlaybackQuality) ?: MusicQuality.EXHIGH.text
+    return MusicQuality.entries.firstOrNull { it.text == normalized } ?: MusicQuality.EXHIGH
 }
 
 // 保持你的 Enum 不变

@@ -61,4 +61,28 @@ class ThorPlaybackReturnNavigationTest {
         assertNotEquals(first.id, second.id)
         assertEquals(first.id, first.copy(message = "已撤销").id)
     }
+
+    @Test fun qualitySelectionReturnsThroughPlayerToTheOriginalMusicList() {
+        val source = ThorNavigation(tab = ThorTab.Library)
+            .push(ThorPage.Detail(ThorItem(ThorItemKey.Album(41), "Album")))
+        val history = ThorQuickPlayerHistory()
+        val player = history.enter(source, null, 5)
+        val quality = player.toggle(ThorOverlay.Quality)
+        assertEquals("overlay:Quality", quality.sceneKey)
+        assertFalse(quality.isRoot)
+        assertEquals(quality, quality.switchTab(1))
+        assertNull("B in quality must pop its own child before leaving playback", history.leave(quality, 5))
+        assertEquals(player, quality.back())
+        assertEquals(source, history.leave(quality.back()!!, 5)!!.navigation)
+    }
+
+    @Test fun globalPlayerShortcutFromQualityKeepsTheOriginalBrowsingReturn() {
+        val source = ThorNavigation().push(ThorPage.Search)
+        val history = ThorQuickPlayerHistory()
+        val player = history.enter(source, null, 7)
+        val shortcut = history.enter(player.toggle(ThorOverlay.Quality), null, 7)
+        assertEquals(listOf(ThorOverlay.Player), shortcut.overlays)
+        assertEquals(source, history.leave(shortcut, 7)!!.navigation)
+        assertNull(history.leave(shortcut, 7))
+    }
 }

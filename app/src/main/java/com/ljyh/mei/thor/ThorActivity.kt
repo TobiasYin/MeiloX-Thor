@@ -110,7 +110,7 @@ class ThorActivity : ComponentActivity() {
             val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
             val strength by airflow.strength.collectAsStateWithLifecycle()
             val lyricEntryId = playback.value.currentEntryId
-            val playbackScene = navigation.overlay in setOf(ThorOverlay.Player, ThorOverlay.Queue, ThorOverlay.Lyrics, ThorOverlay.Timer)
+            val playbackScene = navigation.overlay != null
             val upperItem = thorUpperProjection(navigation.page, playbackScene, preview, playback.value.current?.toThorItem())
             val upperDisplayOn = displays.displays.firstOrNull { it.id == displays.upperDisplayId }?.state == android.view.Display.STATE_ON
             if (BuildConfig.DEBUG) {

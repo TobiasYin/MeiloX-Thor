@@ -110,7 +110,7 @@ class MediaUriProviderQualityTest {
             val provider = provider(catalog = "{}") { request ->
                 calls += request.level
                 when (request.level) {
-                    "dolby", "sky" -> source(unsupportedLevel, "unsupported-source")
+                    "dolby", "jymaster", "sky", "hires" -> source(unsupportedLevel, "unsupported-source")
                     "jyeffect" -> source(actualFallback, "supported-source")
                     else -> error("The supported fallback must retain the song")
                 }
@@ -120,16 +120,18 @@ class MediaUriProviderQualityTest {
 
             val resolved = provider.resolveMediaSource("1", "dolby")
 
-            assertEquals(listOf("dolby", "sky", "jyeffect"), calls)
+            val expected = if (actualFallback == "jyeffect") listOf("dolby", "jymaster", "sky", "jyeffect")
+                else listOf("dolby", "jymaster", "sky", "jyeffect", "hires")
+            assertEquals(expected, calls)
             assertEquals(actualFallback, resolved.actualQuality)
             assertEquals("supported-source", resolved.sourceIdentity)
             assertEquals(playbackCacheKey("1", actualFallback, "supported-source", 12345), resolved.cacheKey)
             assertEquals(listOf(resolved), observed)
             assertEquals(resolved, provider.resolveMediaSource("1", "dolby"))
-            assertEquals(listOf("dolby", "sky", "jyeffect"), calls)
+            assertEquals(expected, calls)
 
             assertEquals(resolved, provider.resolveMediaSource("1", "sky"))
-            assertEquals(listOf("dolby", "sky", "jyeffect", "sky"), calls)
+            assertEquals(expected + if (actualFallback == "jyeffect") listOf("sky") else listOf("sky", "jyeffect", "hires"), calls)
             assertTrue(observed.all { it.actualQuality == actualFallback })
         }
     }
@@ -166,6 +168,187 @@ class MediaUriProviderQualityTest {
         assertEquals("dolby", resolved.actualQuality)
         assertEquals("dolby-source", resolved.sourceIdentity)
         assertEquals(listOf(resolved), observed)
+    }
+
+    @Test
+    fun aDowngradedTopResponseDoesNotHideAnAvailableIntermediateQuality() = runBlocking {
+        val calls = mutableListOf<String>()
+        val provider = provider(catalog = "{}") { request ->
+            calls += request.level
+            if (request.level == "lossless") source("lossless", "best-complete-source")
+            else source("standard", "premature-low-source")
+        }
+        val observed = mutableListOf<ResolvedMediaSource>()
+        provider.onSourceResolved = { _, source -> observed += source }
+
+        val resolved = provider.resolveMediaSource("1", "dolby")
+
+        assertEquals(listOf("dolby", "jymaster", "sky", "jyeffect", "hires", "lossless"), calls)
+        assertEquals("lossless", resolved.actualQuality)
+        assertEquals("best-complete-source", resolved.sourceIdentity)
+        assertEquals(playbackCacheKey("1", "lossless", "best-complete-source", 12345), resolved.cacheKey)
+        assertEquals(listOf(resolved), observed)
+        val count = calls.size
+        assertEquals(resolved, provider.resolveMediaSource("1", "dolby"))
+        assertEquals(count, calls.size)
+        assertEquals(listOf(resolved, resolved), observed)
+    }
+
+    @Test
+    fun dolbyFallbackIncludesMasterAndEnhancedFallbackIncludesHiRes() = runBlocking {
+        for ((requested, expected) in listOf("dolby" to "jymaster", "jyeffect" to "hires")) {
+            val calls = mutableListOf<String>()
+            val provider = provider(catalog = "{}") { request ->
+                calls += request.level
+                if (request.level == expected) source(expected, "highest-fallback")
+                else source("standard", "low-source")
+            }
+
+            val resolved = provider.resolveMediaSource("1", requested)
+
+            assertEquals(listOf(requested, expected), calls)
+            assertEquals(expected, resolved.actualQuality)
+            assertEquals("highest-fallback", resolved.sourceIdentity)
+        }
+    }
+
+    @Test
+    fun aCompletedLowSelectionCannotBecomeAFalseHighAliasOrHideALaterVerifiedSource() = runBlocking {
+        var topAvailable = false
+        val calls = mutableListOf<String>()
+        val provider = provider(catalog = """{"dl":{"size":12345}}""") { request ->
+            calls += request.level
+            if (topAvailable && request.level == "dolby") source("dolby", "verified-dolby-source")
+            else source("standard", "low-source")
+        }
+        val low = provider.resolveMediaSource("1", "dolby")
+        assertEquals("standard", low.actualQuality)
+        assertEquals(playbackQualityFallbacks("dolby").dropLast(1), calls)
+        val count = calls.size
+        assertEquals(low, provider.resolveMediaSource("1", "dolby"))
+        assertEquals(count, calls.size)
+
+        topAvailable = true
+        assertEquals(listOf(MusicQuality.STANDARD, MusicQuality.DOLBY), provider.getAvailableMusicQualities("1", true))
+        assertEquals("dolby", calls.last())
+        val high = provider.resolveMediaSource("1", "dolby")
+        assertEquals("dolby", high.actualQuality)
+        assertEquals("verified-dolby-source", high.sourceIdentity)
+        assertEquals(low.actualQuality, "standard")
+    }
+
+    @Test
+    fun aTrialAtAnIntermediateTierCannotBeatACompleteLowerSource() = runBlocking {
+        val provider = provider(catalog = "{}") { request ->
+            when (request.level) {
+                "lossless" -> source("lossless", "trial-source", trial = true)
+                "exhigh" -> source("exhigh", "complete-source")
+                else -> source("standard", "lower-source")
+            }
+        }
+        val resolved = provider.resolveMediaSource("1", "dolby")
+        assertEquals("exhigh", resolved.actualQuality)
+        assertEquals("complete-source", resolved.sourceIdentity)
+    }
+
+    @Test
+    fun anInterruptedHighestQualitySearchDoesNotCommitItsProvisionalLowerSource() = runBlocking {
+        for (outerBusinessError in listOf(false, true)) {
+            var healthy = false
+            val observed = mutableListOf<ResolvedMediaSource>()
+            val provider = provider(catalog = "{}") { request ->
+                if (healthy) source(request.level, "restored-high-source")
+                else if (request.level == "dolby") source("standard", "provisional-source")
+                else if (outerBusinessError) SongUrl(503, emptyList())
+                else throw IOException("Transient middle-tier request failure")
+            }
+            provider.onSourceResolved = { _, source -> observed += source }
+            val failed = runCatching { provider.resolveMediaSource("1", "dolby") }
+            assertTrue(failed.exceptionOrNull() is IOException)
+            assertEquals(null, provider.resolvedMediaSource("1"))
+            assertTrue(observed.isEmpty())
+            healthy = true
+            val recovered = provider.resolveMediaSource("1", "dolby")
+            assertEquals("dolby", recovered.actualQuality)
+            assertEquals(listOf(recovered), observed)
+        }
+    }
+
+    @Test
+    fun lowerQualitySelectionForOneSongDoesNotLimitTheNextSong() = runBlocking {
+        val provider = provider(catalog = "{}") { request ->
+            if (request.ids == "[1]") source("standard", "first-song-low")
+            else source(request.level, "next-song-high", id = 2)
+        }
+        assertEquals("standard", provider.resolveMediaSource("1", "dolby").actualQuality)
+        val next = provider.resolveMediaSource("2", "dolby")
+        assertEquals("dolby", next.actualQuality)
+        assertEquals("next-song-high", next.sourceIdentity)
+    }
+
+    @Test
+    fun cancellingAnIntermediateProbeDoesNotPublishOrCommitTheEarlierLowCandidate() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var healthy = false
+        val observed = mutableListOf<ResolvedMediaSource>()
+        val provider = provider(catalog = "{}") { request ->
+            if (healthy) source(request.level, "retried-high-source")
+            else if (request.level == "dolby") source("standard", "uncommitted-low-source")
+            else {
+                started.complete(Unit)
+                release.await()
+                source(request.level, "cancelled-high-source")
+            }
+        }
+        provider.onSourceResolved = { _, source -> observed += source }
+        supervisorScope {
+            val pending = async { provider.resolveMediaSource("1", "dolby") }
+            started.await()
+            pending.cancel()
+            try {
+                pending.await()
+                fail("Cancelled source selection must propagate cancellation")
+            } catch (_: CancellationException) {
+                assertTrue(pending.isCancelled)
+            }
+            assertTrue(observed.isEmpty())
+            assertEquals(null, provider.resolvedMediaSource("1"))
+            healthy = true
+            val retried = provider.resolveMediaSource("1", "dolby")
+            assertEquals("dolby", retried.actualQuality)
+            assertEquals(listOf(retried), observed)
+        }
+    }
+
+    @Test
+    fun accountChangesDiscardAProvisionalFallbackBeforeItCanBePublished() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var fresh = false
+        val observed = mutableListOf<ResolvedMediaSource>()
+        val provider = provider(catalog = "{}") { request ->
+            if (fresh) source(request.level, "new-account-source")
+            else if (request.level == "dolby") source("standard", "old-account-low-source")
+            else {
+                started.complete(Unit)
+                release.await()
+                source(request.level, "old-account-high-source")
+            }
+        }
+        provider.onSourceResolved = { _, source -> observed += source }
+        val pending = async { runCatching { provider.resolveMediaSource("1", "dolby") } }
+        started.await()
+        provider.clearQualityState()
+        fresh = true
+        release.complete(Unit)
+        assertTrue(pending.await().exceptionOrNull() is IOException)
+        assertTrue(observed.isEmpty())
+        assertEquals(null, provider.resolvedMediaSource("1"))
+        val current = provider.resolveMediaSource("1", "dolby")
+        assertEquals("dolby", current.actualQuality)
+        assertEquals("new-account-source", current.sourceIdentity)
+        assertEquals(listOf(current), observed)
     }
 
     @Test
@@ -211,7 +394,7 @@ class MediaUriProviderQualityTest {
         val provider = provider(catalog = "{}") { request ->
             calls += request.level
             when (request.level) {
-                "jymaster", "hires" -> source(request.level, "failed-source")
+                "jymaster", "sky", "jyeffect", "hires" -> source(request.level, "failed-source")
                 "lossless" -> source("lossless", "working-source")
                 else -> error("A working fallback must retain the song")
             }
@@ -229,7 +412,7 @@ class MediaUriProviderQualityTest {
 
         assertEquals("lossless", fallback.actualQuality)
         assertEquals("working-source", fallback.sourceIdentity)
-        assertEquals(listOf("jymaster", "jymaster", "hires", "lossless"), calls)
+        assertEquals(listOf("jymaster", "jymaster", "sky", "jyeffect", "hires", "lossless"), calls)
         assertEquals(listOf(MusicQuality.LOSSLESS), provider.getAvailableMusicQualities("1", true))
 
         provider.resetRejectedSources()
@@ -581,8 +764,9 @@ class MediaUriProviderQualityTest {
         md5: String,
         code: Int = 200,
         trial: Boolean = false,
+        id: Long = 1,
     ): SongUrl = gson.fromJson(
-        """{"code":200,"data":[{"id":1,"code":$code,"url":"https://example.test/$md5","level":"$level","md5":"$md5","size":12345,"expi":300,"freeTrialInfo":${if (trial) "{\"start\":0,\"end\":30}" else "null"}}]}""",
+        """{"code":200,"data":[{"id":$id,"code":$code,"url":"https://example.test/$md5","level":"$level","md5":"$md5","size":12345,"expi":300,"freeTrialInfo":${if (trial) "{\"start\":0,\"end\":30}" else "null"}}]}""",
         SongUrl::class.java,
     )
 }

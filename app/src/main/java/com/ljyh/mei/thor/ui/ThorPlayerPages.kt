@@ -81,6 +81,8 @@ internal fun ThorPlayerPage(
                     fontSize = theme.typography.control, lineHeight = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ThorPlayerQualityButton(registry, playback.requestedQuality, playback.actualQuality, playback.localQualitySource,
+                    enabled = playback.connected && seek == null, onClick = vm::showQuality)
                 ThorButton(registry, "player:like", "", icon = if (liked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                     flat = true, contentDescription = if (liked) "取消喜欢当前歌曲" else "喜欢当前歌曲",
                     selected = liked, enabled = song != null && seek == null, onClick = vm::likeCurrent)

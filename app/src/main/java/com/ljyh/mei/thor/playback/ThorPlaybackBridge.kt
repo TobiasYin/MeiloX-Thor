@@ -20,6 +20,7 @@ import com.ljyh.mei.thor.model.ThorItemKey
 import com.ljyh.mei.thor.model.ThorOperationResult
 import com.ljyh.mei.thor.model.toThorItem
 import com.ljyh.mei.constants.PreviousPlaybackKey
+import com.ljyh.mei.constants.MusicQuality
 import com.ljyh.mei.utils.dataStore
 import com.ljyh.mei.utils.get
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,9 @@ data class ThorPlaybackState(
     val timerActive: Boolean = false,
     val timerRemainingMs: Long = 0,
     val error: String? = null,
+    val requestedQuality: MusicQuality = MusicQuality.EXHIGH,
+    val actualQuality: MusicQuality? = null,
+    val localQualitySource: Boolean = false,
 )
 
 /** Observes one existing connection. It never owns or replaces the playback service. */
@@ -208,10 +212,20 @@ class ThorPlaybackBridge(private val scope: CoroutineScope,
             timerActive = connection.service.sleepTimer.isActive,
             timerRemainingMs = connection.service.sleepTimer.remainingMillis,
             error = player.playerError?.localizedMessage,
+            requestedQuality = connection.requestedMusicQuality.value,
+            actualQuality = connection.currentMusicQuality.value,
+            localQualitySource = connection.isPlayingLocalSource.value,
         )
     }
 
     fun position(): Long = connection?.player?.currentPosition?.coerceAtLeast(0) ?: 0
+    /** Only an explicit choice changes the saved preference; resolved sources report separately. */
+    fun changeQuality(quality: MusicQuality): Boolean {
+        val connection = connection ?: return false
+        takePlaybackControl()
+        connection.changeQuality(quality)
+        return true
+    }
     fun toggle() {
         takePlaybackControl()
         val player = connection?.player ?: return

@@ -81,18 +81,31 @@ class PlaybackSourcePolicyTest {
     @Test
     fun qualityFallbacksFollowTheRequestedQuality() {
         assertEquals(
-            listOf("jymaster", "hires", "lossless", "exhigh", "standard"),
+            listOf("jymaster", "sky", "jyeffect", "hires", "lossless", "exhigh", "standard"),
             playbackQualityFallbacks("JYMASTER"),
         )
         assertEquals(
-            listOf("jyeffect", "lossless", "exhigh", "standard"),
+            listOf("jyeffect", "hires", "lossless", "exhigh", "standard"),
             playbackQualityFallbacks("jyeffect"),
         )
         assertEquals(listOf("standard"), playbackQualityFallbacks(" standard "))
         assertEquals(
-            listOf("dolby", "sky", "jyeffect", "hires", "lossless", "exhigh", "standard"),
+            listOf("dolby", "jymaster", "sky", "jyeffect", "hires", "lossless", "exhigh", "standard"),
             playbackQualityFallbacks("dolby"),
         )
+    }
+
+    @Test
+    fun everyRequestedTierIncludesAllLowerMenuTiersWithoutUpgradingThePreference() {
+        for (requested in MusicQuality.entries) {
+            val fallbacks = playbackQualityFallbacks(requested.text)
+            assertEquals(MusicQuality.entries.take(requested.ordinal + 1).asReversed().map { it.text }, fallbacks)
+            assertEquals(fallbacks.size, fallbacks.distinct().size)
+            assertTrue(fallbacks.zipWithNext().all { (higher, lower) ->
+                playbackQualityPriority(higher) > playbackQualityPriority(lower)
+            })
+        }
+        assertEquals(listOf("exhigh", "standard"), playbackQualityFallbacks("future-format"))
     }
 
     @Test

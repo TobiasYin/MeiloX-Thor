@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.media3.common.util.UnstableApi
 import com.ljyh.mei.playback.SleepTimer
+import com.ljyh.mei.constants.MusicQuality
 import com.ljyh.mei.thor.ThorShellViewModel
 import com.ljyh.mei.thor.menu.ThorMenuAnchor
 import com.ljyh.mei.thor.model.*
@@ -146,9 +147,13 @@ internal fun thorPageActions(
             action("player:progress", "编辑进度", hasSong && playback.durationMs > 0 && !editing) {
                 if (vm.playback.state.value.currentEntryId == entry) vm.beginSeek()
             }
+            action("player:quality", "播放音质", playback.connected && !editing, vm::showQuality)
             action("player:mode", "播放模式 · ${playback.mode}", hasSong && !editing, vm.playback::switchMode)
             action("player:lyrics", "歌词定位", hasSong && !editing, vm::showLyrics)
             action("player:timer", "定时停止", hasSong && !editing, vm::showTimer)
+        }
+        ThorOverlay.Quality -> MusicQuality.entries.forEach { quality ->
+            action("quality:${quality.name}", quality.explanation) { vm.selectQuality(quality) }
         }
         ThorOverlay.Queue -> callback("queue:current", "定位当前", playback.queue.any { it.entryId == playback.currentEntryId })
         ThorOverlay.Lyrics -> callback("lyrics:current", "定位当前歌词", playback.current != null)
