@@ -168,7 +168,7 @@ internal fun thorPageActions(
                     }
                     when (category) {
                         ThorHomeCategory.Recommended -> action("home:daily", "每日推荐") { vm.openCollection(ThorCollection.DailySongs) }
-                        ThorHomeCategory.Playlists -> callback("catalog:playlist-filter", "歌单分类 · ${vm.catalogFilters.value.playlistCategory}")
+                        ThorHomeCategory.Playlists -> Unit
                         ThorHomeCategory.Artists -> {
                             callback("catalog:artist-area", "歌手地区")
                             callback("catalog:artist-type", "歌手类型")
@@ -179,6 +179,9 @@ internal fun thorPageActions(
                     action("root:refresh", "刷新") { vm.refresh(category.collection) }
                 }
                 ThorTab.Discover -> {
+                    callback("catalog:playlist-filter", "歌单分类 · ${vm.catalogFilters.value.playlistCategory}")
+                    if (ThorCollection.Discover in library.hasMore)
+                        callback("catalog:load-more", "加载更多", ThorCollection.Discover !in library.loading && ThorCollection.Discover !in library.loadingMore)
                     searchAndMy()
                     action("root:refresh", "刷新") { vm.refresh(ThorCollection.Discover) }
                 }

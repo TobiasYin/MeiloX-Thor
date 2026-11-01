@@ -220,6 +220,7 @@ internal fun ThorBrowseList(
     vm: ThorShellViewModel, registry: ThorFocusRegistry, scene: String, items: List<ThorItem>,
     modifier: Modifier = Modifier, sourcePlaylist: ThorItemKey.Playlist? = null,
     continuation: ThorListContinuation? = null,
+    pageActions: ThorPageActionBindings? = null,
     trailingLabel: ((ThorItem) -> String?)? = null,
     onItem: ((ThorItem, Int) -> Unit)? = null,
 ) {
@@ -258,12 +259,16 @@ internal fun ThorBrowseList(
         override fun saveScroll(scene: String, key: String, offset: Int) = vm.rememberListScroll(scene, key, offset)
         override fun preview(item: ThorItem?) { if (item != null) vm.preview(item) }
     } }
+    val requestMore: () -> Unit = {
+        continuation?.takeUnless { it.loading }?.let {
+            appendFrom = items.size.takeIf { _ -> it.append && registry.selectedKey == tailKey }
+            it.onLoad()
+        }
+    }
+    if (continuation != null) BindThorPageAction(pageActions, "catalog:load-more", requestMore)
     val focus = BindThorListFocus(registry, scene, keys, items + if (continuation != null) listOf(null) else emptyList(), listState, memory) { index ->
         if (index == items.size) {
-            continuation?.takeUnless { it.loading }?.let {
-                appendFrom = items.size.takeIf { _ -> it.append }
-                it.onLoad()
-            }
+            requestMore()
         } else {
             val item = items[index]
             when {
@@ -315,20 +320,7 @@ internal fun ThorBrowsePage(
             ThorTab.My -> ThorMyPage(vm, registry, library, onLegacyRoute)
             ThorTab.Library -> ThorLibraryPage(vm, registry, library)
             ThorTab.Home -> ThorHomeDiscoveryPage(vm, registry, library, pageActions)
-            ThorTab.Discover -> {
-                val collection = if (page.tab == ThorTab.Home) vm.homeCategory.value.collection else ThorCollection.Discover
-                Column(Modifier.fillMaxSize()) {
-                    ThorPageHeader(registry, page.tab.title, onSearch = { vm.push(ThorPage.Search) }, onMy = { vm.selectTab(ThorTab.My) })
-                    val items = library[collection]
-                    if (items.isEmpty()) ThorEmptyState(vm, registry, library.errors[collection] ?: if (collection in library.loading) "正在加载" else "还没有内容",
-                        if (collection in library.loading) null else "刷新", { vm.refresh(collection) }, Modifier.weight(1f), collection in library.loading)
-                    else ThorBrowseList(vm, registry, page.key, items, Modifier.weight(1f),
-                        continuation = if (collection in library.hasMore || collection in library.loadingMore || library.errors[collection] != null)
-                            ThorListContinuation(collection in library.loadingMore || collection in library.loading, library.errors[collection], append = collection in library.hasMore) {
-                                if (collection in library.hasMore) vm.loadMore(collection) else vm.refresh(collection)
-                            } else null)
-                }
-            }
+            ThorTab.Discover -> ThorDiscoverPage(vm, registry, library, pageActions)
         }
         is ThorPage.Collection -> Column(Modifier.fillMaxSize()) {
             val items = library[page.collection]

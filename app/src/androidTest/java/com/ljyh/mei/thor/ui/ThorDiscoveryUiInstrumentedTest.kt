@@ -31,7 +31,7 @@ class ThorDiscoveryUiInstrumentedTest {
         }
     }
 
-    @Test fun homeTabsAndBothFiltersFitThorAndDuoAndDoNotJoinControllerFocus() {
+    @Test fun homeTabsAndArtistFiltersFitThorAndDuoAndDoNotJoinControllerFocus() {
         val width = mutableStateOf(465.dp) // lower width minus the existing 72dp root rail
         val category = mutableStateOf(ThorHomeCategory.Recommended)
         val registry = scopedRegistry(listOf("retained"))
@@ -66,6 +66,13 @@ class ThorDiscoveryUiInstrumentedTest {
                 assertTrue(bounds.width >= 48f * density - 1f && bounds.height >= 48f * density - 1f)
                 node.performTouchInput { click(center) }
             }
+            // Only the Home artist category owns these two filters. Recommended playlists
+            // must not retain an artist picker or expose Discovery's playlist classifier.
+            compose.onNodeWithTag("home-category:Playlists").performTouchInput { click(center) }
+            compose.onNodeWithTag("home-category:Playlists").assertIsSelected().assertIsNotFocused()
+            compose.onNodeWithContentDescription("歌单分类").assertDoesNotExist()
+            compose.onNodeWithContentDescription("歌手地区").assertDoesNotExist()
+            compose.onNodeWithContentDescription("歌手类型").assertDoesNotExist()
         }
         compose.runOnIdle {
             assertEquals(2, areaClicks); assertEquals(2, typeClicks); assertEquals(2, searches)

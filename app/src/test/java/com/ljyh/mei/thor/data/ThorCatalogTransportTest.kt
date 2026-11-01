@@ -35,13 +35,13 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 /** Actual catalog request construction and Retrofit/interceptor envelopes, entirely offline. */
 class ThorCatalogTransportTest {
-    @Test fun playlistPagingSendsTheAcceptedCategoryAndLongCursorAsWeapiWithoutAnIdentityOverride() = runBlocking {
+    @Test fun discoveryPagingSendsTheAcceptedCategoryAndLongCursorAsWeapiWithoutAnIdentityOverride() = runBlocking {
         val requests = mutableListOf<ThorCatalogRequest>()
         val repository = ThorCatalogRepository { request ->
             requests += request
             json("""{"code":200,"more":false,"playlists":[]}""")
         }
-        repository.page(ThorCollection.RecommendedPlaylists, ThorCatalogFilters(playlistCategory = "日语"),
+        repository.page(ThorCollection.Discover, ThorCatalogFilters(playlistCategory = "日语"),
             cursor = 1_730_426_400_999, expectedSession = "opaque-ticket")
         val request = requests.single()
         assertEquals("https://music.163.com/weapi/playlist/highquality/list", request.url)
@@ -52,6 +52,26 @@ class ThorCatalogTransportTest {
         assertEquals("opaque-ticket", request.expectedSession)
         assertFalse(request.body.keys.any { it.contains("cookie", true) || it.contains("session", true) })
         assertEquals("ThorCatalogRequest", request.toString())
+    }
+
+    @Test fun homeRecommendationsUseAnIndependentEapiBatchWithoutCategoryOrPaginationParameters() = runBlocking {
+        val requests = mutableListOf<ThorCatalogRequest>()
+        val repository = ThorCatalogRepository { request ->
+            requests += request
+            json("""{"code":200,"more":true,"lasttime":1730426400123,"result":[{"id":19,"name":"QA recommendation","picUrl":"https://example.invalid/cover"}]}""")
+        }
+        val page = repository.page(ThorCollection.RecommendedPlaylists,
+            ThorCatalogFilters(playlistCategory = "日语"), offset = 80, cursor = 1_730_426_400_999,
+            expectedSession = "opaque-ticket")
+        val request = requests.single()
+        assertEquals("https://interfacepc.music.163.com/api/personalized/playlist", request.url)
+        assertEquals("eapi", request.crypto)
+        assertEquals(mapOf("limit" to 40, "total" to true, "n" to 1_000), request.body)
+        assertEquals("opaque-ticket", request.expectedSession)
+        assertEquals(ThorItemKey.Playlist("19"), page.items.single().key)
+        assertFalse(page.hasMore)
+        assertNull(page.nextOffset)
+        assertNull(page.nextCursor)
     }
 
     @Test fun hotAndFilteredArtistDirectoriesUseTheirRealDistinctContracts() = runBlocking {
@@ -77,11 +97,13 @@ class ThorCatalogTransportTest {
         assertEquals(0, requests)
         assertTrue(repository.page(ThorCollection.DailySongs, ThorCatalogFilters(), expectedSession = "accepted").items.isEmpty())
         assertEquals(1, requests)
-        for (response in listOf("""{"code":405,"list":[]}""", """{"list":[]}""")) {
-            var attempts = 0
-            val rejected = ThorCatalogRepository { attempts++; json(response) }
-            assertTrue(runCatching { rejected.page(ThorCollection.Toplists, ThorCatalogFilters()) }.isFailure)
-            assertEquals(1, attempts)
+        for (collection in listOf(ThorCollection.Toplists, ThorCollection.RecommendedPlaylists)) {
+            for (response in listOf("""{"code":405,"list":[],"result":[]}""", """{"list":[],"result":[]}""")) {
+                var attempts = 0
+                val rejected = ThorCatalogRepository { attempts++; json(response) }
+                assertTrue(runCatching { rejected.page(collection, ThorCatalogFilters()) }.isFailure)
+                assertEquals(1, attempts)
+            }
         }
     }
 
@@ -162,6 +184,29 @@ class ThorCatalogTransportTest {
         assertEquals(original, fixture.preferences.asMap())
     }
 
+    @Test fun actualRecommendationTransportSignsTheNewPathAndNeverFallsBackToTheDiscoveryEndpoint() = runBlocking {
+        val fixture = WireFixture("""{"code":200,"result":[{"id":19,"name":"QA recommendation"}]}""")
+        val page = fixture.repository.page(ThorCollection.RecommendedPlaylists, ThorCatalogFilters(playlistCategory = "日语"),
+            expectedSession = neteaseSessionFingerprint("synthetic-session"))
+        assertEquals(ThorItemKey.Playlist("19"), page.items.single().key)
+        assertFalse(page.hasMore)
+        val wire = fixture.requests.single()
+        assertEquals("interfacepc.music.163.com", wire.url.host)
+        assertEquals("/eapi/personalized/playlist", wire.url.encodedPath)
+        val form = wire.body as FormBody
+        val params = (0 until form.size).first { form.name(it) == "params" }.let(form::value)
+        val decoded = decryptEApi(params.unhex).split("-36cd479b6b5-", limit = 3)
+        assertEquals("/api/personalized/playlist", decoded[0])
+        val payload = json(decoded[1])
+        assertEquals(40, payload["limit"].asInt)
+        assertEquals(1_000, payload["n"].asInt)
+        assertTrue(payload["total"].asBoolean)
+        assertFalse(payload.has("cat"))
+        assertFalse(payload.has("lasttime"))
+        assertFalse(payload.has("offset"))
+        assertNull(wire.header("X-Netease-Expected-Session"))
+    }
+
     @Test fun aSessionChangeBeforeActualSendRejectsWithoutSendingOrRecapturingAnotherAccount() = runBlocking {
         val fixture = WireFixture()
         val accepted = neteaseSessionFingerprint("synthetic-session")
@@ -173,7 +218,7 @@ class ThorCatalogTransportTest {
         assertTrue(fixture.requests.isEmpty())
     }
 
-    private class WireFixture {
+    private class WireFixture(private val response: String = """{"code":200,"list":[{"id":19,"name":"QA Chart"}]}""") {
         val preferences = mutablePreferencesOf(CookieKey to "synthetic-session", DeviceIdKey to "fixture-device",
             NeteaseSessionTypeKey to "Mobile", NeteaseMusicAKey to "synthetic-mobile-a")
         val requests = mutableListOf<Request>()
@@ -183,7 +228,7 @@ class ThorCatalogTransportTest {
         )).addInterceptor { chain ->
             requests += chain.request()
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("synthetic")
-                .body("""{"code":200,"list":[{"id":19,"name":"QA Chart"}]}""".toResponseBody("application/json".toMediaType())).build()
+                .body(response.toResponseBody("application/json".toMediaType())).build()
         }.build()
         private val service = Retrofit.Builder().baseUrl("https://interface.music.163.com/").client(client)
             .addConverterFactory(GsonConverterFactory.create()).build().create(MeloXDirectService::class.java)

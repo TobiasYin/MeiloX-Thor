@@ -4,6 +4,8 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.ljyh.mei.data.model.SongPlaybackAvailability
 import com.ljyh.mei.data.model.isExplicitlyUnavailable
+import com.ljyh.mei.thor.model.ThorCatalogFilters
+import com.ljyh.mei.thor.model.ThorCollection
 import com.ljyh.mei.thor.model.ThorItemKey
 import org.junit.Assert.*
 import org.junit.Test
@@ -49,7 +51,7 @@ class ThorCatalogMappingTest {
         assertTrue(page.items.all { it.tracks.isEmpty() })
     }
 
-    @Test fun recommendedPlaylistsPreserveLongIdentityMetadataAndTimestampContinuation() {
+    @Test fun discoveryPlaylistsPreserveLongIdentityMetadataAndTimestampContinuation() {
         val page = parseThorCatalogPlaylists(json("""{"more":true,"lasttime":1730426400123,"playlists":[
             {"id":2147483789,"name":"Public playlist","creator":{"nickname":"Public curator"},"coverImgUrl":"https://example.invalid/playlist","description":"Public description","trackCount":4},
             {"id":0,"name":"Invalid identity"}
@@ -63,6 +65,35 @@ class ThorCatalogMappingTest {
         assertNull(page.nextOffset)
         assertTrue(item.tracks.isEmpty())
         assertFalse(item.owned)
+    }
+
+    @Test fun recommendationBatchesKeepTheirArtworkAndCopywriterWithoutInventingContinuation() {
+        val page = parseThorRecommendedPlaylists(json("""{"more":true,"lasttime":1730426400123,"result":[
+            {"id":2147483789,"name":"Recommended playlist","picUrl":"https://example.invalid/recommendation","copywriter":"QA recommendation","trackCount":6},
+            {"id":9,"name":"Another recommendation","creator":{"nickname":"QA Curator"},"coverImgUrl":"https://example.invalid/other","description":"QA description"},
+            {"id":0,"name":"Invalid identity"}
+        ]}"""))
+        assertEquals(listOf(ThorItemKey.Playlist("2147483789"), ThorItemKey.Playlist("9")), page.items.map { it.key })
+        assertEquals("https://example.invalid/recommendation", page.items[0].artworkUri)
+        assertEquals("QA recommendation", page.items[0].subtitle)
+        assertEquals("QA recommendation", page.items[0].description)
+        assertEquals(6, page.items[0].trackCount)
+        assertEquals("QA Curator", page.items[1].subtitle)
+        assertEquals("https://example.invalid/other", page.items[1].artworkUri)
+        assertFalse(page.hasMore)
+        assertNull(page.nextOffset)
+        assertNull(page.nextCursor)
+        assertTrue(parseThorRecommendedPlaylists(json("""{"result":[]}""")).items.isEmpty())
+        assertThrows(IllegalStateException::class.java) { parseThorRecommendedPlaylists(json("""{"playlists":[]}""")) }
+    }
+
+    @Test fun genreChangesInvalidateDiscoveryOnlyAndLeaveTheHomeRecommendationBatchUsable() {
+        val original = ThorCatalogFilters()
+        val genre = original.copy(playlistCategory = "日语")
+        assertFalse(sameCatalogFilters(ThorCollection.Discover, original, genre))
+        assertTrue(sameCatalogFilters(ThorCollection.RecommendedPlaylists, original, genre))
+        assertTrue(sameCatalogFilters(ThorCollection.Artists, original, genre))
+        assertFalse(sameCatalogFilters(ThorCollection.Artists, original, original.copy(artistArea = 7)))
     }
 
     @Test fun anIncompletePlaylistContinuationFailsRatherThanRepeatingTheFirstPage() {

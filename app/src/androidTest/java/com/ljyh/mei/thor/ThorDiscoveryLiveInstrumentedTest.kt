@@ -114,7 +114,7 @@ class ThorDiscoveryLiveInstrumentedTest {
                         vm.selectTab(ThorTab.Home)
                     }
                     fun category(target: ThorHomeCategory): List<ThorItem> {
-                        main { vm.selectHomeCategory(target); vm.refresh(target.collection) }
+                        main { vm.selectTab(ThorTab.Home); vm.selectHomeCategory(target); vm.refresh(target.collection) }
                         await("category_${target.name}") {
                             target.collection !in vm.library.value.loading &&
                                 (vm.library.value[target.collection].isNotEmpty() || vm.library.value.errors[target.collection] != null)
@@ -131,37 +131,71 @@ class ThorDiscoveryLiveInstrumentedTest {
                     for (tab in ThorHomeCategory.entries) compose.onNode(hasText(tab.title) and hasClickAction())
                         .assertExists().assertIsNotFocused()
 
-                    stage = "playlist_cursor"
-                    val playlists = category(ThorHomeCategory.Playlists)
+                    stage = "home_recommendations"
+                    val recommendations = category(ThorHomeCategory.Playlists)
+                    assertTrue(recommendations.all { it.key is ThorItemKey.Playlist })
+                    assertFalse("Recommendation endpoint has no cursor", ThorCollection.RecommendedPlaylists in vm.library.value.hasMore)
+                    val recommendationKeys = recommendations.map { it.key }
+                    await("recommended_first_focus") { vm.preview.value?.key == recommendations.first().key }
+                    val homeFocus = vm.rememberedFocus("root:Home:Playlists")
+                    snapshot(lowerWindow(fixture.ownerActivity), "home-recommended-playlists.png")
+                    compose.onAllNodesWithContentDescription("歌单分类").assertCountEquals(0)
+                    main { vm.selectTab(ThorTab.Discover) }
+                    await("first_discover_load") { ThorCollection.Discover !in vm.library.value.loading &&
+                        (vm.library.value[ThorCollection.Discover].isNotEmpty() || vm.library.value.errors[ThorCollection.Discover] != null) }
+                    assertNull("First discovery entry must load its catalog", vm.library.value.errors[ThorCollection.Discover])
+                    val playlists = vm.library.value[ThorCollection.Discover]
                     assertTrue(playlists.all { it.key is ThorItemKey.Playlist })
-                    if (ThorCollection.RecommendedPlaylists in vm.library.value.hasMore) {
+                    report.put("discoveryCount", playlists.size).put("recommendationHasNoCursor", true)
+                    compose.onNodeWithContentDescription("歌单分类").assertExists().assertIsNotFocused()
+                    snapshot(lowerWindow(fixture.ownerActivity), "discover-categories.png")
+                    if (ThorCollection.Discover in vm.library.value.hasMore) {
                         await("playlist_first_focus") { vm.preview.value?.key == playlists.first().key }
                         repeat(playlists.size) { fixture.press(KeyEvent.KEYCODE_DPAD_DOWN) }
                         await("playlist_pagination_focus") {
-                            vm.rememberedFocus("root:Home:Playlists")?.endsWith(":more:${playlists.size}") == true
+                            vm.rememberedFocus("root:Discover")?.endsWith(":more:${playlists.size}") == true
                         }
                         fixture.press(KeyEvent.KEYCODE_BUTTON_A)
                         await("playlist_cursor") {
-                            ThorCollection.RecommendedPlaylists !in vm.library.value.loadingMore &&
-                                (vm.library.value[ThorCollection.RecommendedPlaylists].size > playlists.size ||
-                                    vm.library.value.errors[ThorCollection.RecommendedPlaylists] != null)
+                            ThorCollection.Discover !in vm.library.value.loadingMore &&
+                                (vm.library.value[ThorCollection.Discover].size > playlists.size ||
+                                    vm.library.value.errors[ThorCollection.Discover] != null)
                         }
-                        val appended = vm.library.value[ThorCollection.RecommendedPlaylists]
-                        assertTrue("playlist_pagination_failed", vm.library.value.errors[ThorCollection.RecommendedPlaylists] == null)
+                        val appended = vm.library.value[ThorCollection.Discover]
+                        assertNull(vm.library.value.errors[ThorCollection.Discover])
                         assertEquals(playlists.map { it.key }, appended.take(playlists.size).map { it.key })
-                        assertTrue("playlist_cursor_must_add_distinct_rows", appended.size > playlists.size)
+                        assertTrue(appended.size > playlists.size)
                         await("pagination_hands_focus_to_first_new_row") { vm.preview.value?.key == appended[playlists.size].key }
                         report.put("playlistCursorAppended", appended.size - playlists.size)
                         report.put("paginationControllerFocusHandedToFirstNewRow", true)
                     }
-                    main { vm.setPlaylistCategory("华语") }
-                    await("playlist_filter_started") { ThorCollection.RecommendedPlaylists in vm.library.value.loading }
-                    await("playlist_filter") {
-                        ThorCollection.RecommendedPlaylists !in vm.library.value.loading &&
-                            vm.library.value[ThorCollection.RecommendedPlaylists].isNotEmpty()
+                    compose.waitForIdle()
+                    val discoverFocus = vm.rememberedFocus("root:Discover:playlists")
+                    val discoverScroll = vm.rememberedListScroll("root:Discover:playlists")
+                    val discoverPreview = vm.preview.value?.key
+                    assertNotNull(discoverFocus)
+                    compose.onNodeWithContentDescription("歌单分类").performClick()
+                    compose.onNodeWithText("歌单分类").assertExists()
+                    fixture.press(KeyEvent.KEYCODE_DPAD_DOWN)
+                    fixture.press(KeyEvent.KEYCODE_BUTTON_B)
+                    compose.onNodeWithTag("discover-catalog-header").assertExists()
+                    await("cancel_category_restores_discovery_row") {
+                        vm.preview.value?.key == discoverPreview &&
+                            vm.rememberedFocus("root:Discover:playlists") == discoverFocus
                     }
-                    assertTrue(vm.library.value.errors[ThorCollection.RecommendedPlaylists] == null)
-                    report.put("playlistFilterLoaded", true)
+                    assertEquals(discoverScroll, vm.rememberedListScroll("root:Discover:playlists"))
+                    report.put("cancelDiscoveryCategoryRestoredFocusAndScroll", true)
+                    main { vm.setPlaylistCategory("华语") }
+                    await("playlist_filter") {
+                        ThorCollection.Discover !in vm.library.value.loading && vm.library.value[ThorCollection.Discover].isNotEmpty()
+                    }
+                    assertNull(vm.library.value.errors[ThorCollection.Discover])
+                    assertEquals("Discover filter must not mutate home recommendations", recommendationKeys,
+                        vm.library.value[ThorCollection.RecommendedPlaylists].map { it.key })
+                    assertEquals(homeFocus, vm.rememberedFocus("root:Home:Playlists"))
+                    main { vm.selectTab(ThorTab.Home) }
+                    await("home_recommendations_return") { vm.preview.value?.key == recommendations.first().key }
+                    report.put("playlistFilterLoaded", true).put("discoveryFilterKeptHomeRecommendations", true)
 
                     stage = "official_charts"
                     val charts = category(ThorHomeCategory.Charts)
@@ -310,6 +344,12 @@ class ThorDiscoveryLiveInstrumentedTest {
         val result = AtomicReference<T>()
         instrumentation.runOnMainSync { result.set(block()) }
         return result.get()
+    }
+
+    private fun lowerWindow(activity: ThorActivity): Window = main {
+        val host = activity.javaClass.getDeclaredField("displayHost").apply { isAccessible = true }.get(activity)
+        val lower = host.javaClass.getDeclaredField("presentation").apply { isAccessible = true }.get(host) as Presentation
+        checkNotNull(lower.window)
     }
 
     private fun snapshot(window: Window, name: String): Int {

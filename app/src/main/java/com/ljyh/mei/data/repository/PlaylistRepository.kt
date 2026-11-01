@@ -50,6 +50,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
+import java.io.IOException
+
+internal class SongSourceSessionChangedException :
+    IOException("NetEase account changed during the song source request")
 
 class PlaylistRepository(
     private val apiService: ApiService,
@@ -337,6 +341,46 @@ class PlaylistRepository(
                 )
             )
         }
+    }
+
+    /** Retains trial and denied rows so a catalog can distinguish them from missing data. */
+    suspend fun getRawSongUrlV1(
+        ids: List<String>,
+        quality: String,
+        expectedSession: String?,
+    ): SongUrl = withContext(ioDispatcher) {
+        fun checkSession() {
+            val credential = subscriptionAccount()
+            val activeSession = credential.takeIf(String::isNotBlank)?.let(::neteaseSessionFingerprint)
+            if (activeSession != expectedSession) {
+                throw SongSourceSessionChangedException()
+            }
+        }
+
+        currentCoroutineContext().ensureActive()
+        checkSession()
+        val requestedIds = ids.mapNotNull { it.trim().toLongOrNull()?.takeIf { id -> id > 0L } }
+            .distinct()
+        require(requestedIds.size <= 50) { "A song source request accepts at most 50 song ids" }
+        require(quality.isNotBlank()) { "A song source request requires a quality" }
+        if (requestedIds.isEmpty()) return@withContext SongUrl(code = 200, data = emptyList())
+
+        val response = try {
+            apiService.getSongUrlV1(
+                GetSongUrlV1(ids = "[${requestedIds.joinToString(",")}]", level = quality),
+                expectedSession,
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            currentCoroutineContext().ensureActive()
+            checkSession()
+            throw error
+        }
+        currentCoroutineContext().ensureActive()
+        checkSession()
+        if (response.code != 200) throw IOException("Song URL API returned code ${response.code}")
+        response
     }
 
 

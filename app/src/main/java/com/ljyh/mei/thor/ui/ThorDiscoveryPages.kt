@@ -34,7 +34,11 @@ import com.ljyh.mei.thor.state.ThorPage
 import com.ljyh.mei.thor.theme.LocalThorTheme
 
 internal data class ThorCatalogChoice(val value: String, val title: String)
-private enum class CatalogPicker(val title: String) { Playlist("歌单分类"), ArtistArea("歌手地区"), ArtistType("歌手类型") }
+
+// The shell writes its generic focus under root:Discover. A temporary picker may replace that
+// generic cursor, so the content list owns a distinct child scene for exact return restoration.
+internal const val THOR_DISCOVER_LIST_SCENE = "root:Discover:playlists"
+private enum class CatalogPicker(val title: String) { ArtistArea("歌手地区"), ArtistType("歌手类型") }
 
 // These are the same request values already supported by the client's FindMusic catalog.
 private val playlistChoices = ("全部,华语,欧美,日语,韩语,粤语,小语种,流行,摇滚,民谣,电子,舞曲,说唱,轻音乐,爵士,乡村,R&B/Soul,古典,民族,英伦,金属,朋克,蓝调,雷鬼,世界音乐,拉丁,另类/独立,New Age,古风,后摇,Bossa Nova,清晨,夜晚,学习,工作,午休,下午茶,地铁,驾车,运动,旅行,散步,酒吧,怀旧,清新,浪漫,性感,伤感,治愈,放松,孤独,感动,兴奋,快乐,安静,思念,影视原声,ACG,儿童,校园,游戏,70后,80后,90后,网络歌曲,KTV,经典,翻唱,吉他,钢琴,器乐,榜单,00后")
@@ -79,7 +83,6 @@ internal fun ThorHomeCatalogHeader(
         }
         Spacer(Modifier.weight(1f))
         when (category) {
-            ThorHomeCategory.Playlists -> ThorFilterChip(filters.playlistCategory, "歌单分类", Modifier.widthIn(max = 100.dp), onPlaylistFilter)
             ThorHomeCategory.Artists -> {
                 ThorFilterChip(artistAreaChoices.firstOrNull { it.value == filters.artistArea.toString() }?.title ?: "全部地区",
                     "歌手地区", Modifier.widthIn(max = 78.dp), onArtistArea)
@@ -88,6 +91,22 @@ internal fun ThorHomeCatalogHeader(
             }
             else -> Unit
         }
+        ThorActionButton(onSearch, Modifier.size(48.dp).focusProperties { canFocus = false }
+            .semantics { contentDescription = "搜索" }, role = ThorSurfaceRole.Flat, focused = false,
+            contentPadding = PaddingValues(0.dp)) { Icon(thorLineIcon(Icons.Outlined.Search), null, Modifier.size(18.dp)) }
+    }
+}
+
+/** Discovery is category exploration; the Home playlist category remains recommendations. */
+@Composable
+internal fun ThorDiscoverCatalogHeader(category: String, onCategory: () -> Unit, onSearch: () -> Unit) {
+    val theme = LocalThorTheme.current
+    Row(Modifier.fillMaxWidth().height(56.dp).testTag("discover-catalog-header")
+        .thorMaterial(ThorSurfaceRole.Header).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("发现", Modifier.weight(1f), color = theme.text, fontSize = theme.typography.pageTitle,
+            fontWeight = FontWeight.Medium, maxLines = 1)
+        ThorFilterChip(category, "歌单分类", Modifier.widthIn(max = 160.dp).testTag("discover-playlist-category"), onCategory)
         ThorActionButton(onSearch, Modifier.size(48.dp).focusProperties { canFocus = false }
             .semantics { contentDescription = "搜索" }, role = ThorSurfaceRole.Flat, focused = false,
             contentPadding = PaddingValues(0.dp)) { Icon(thorLineIcon(Icons.Outlined.Search), null, Modifier.size(18.dp)) }
@@ -135,7 +154,6 @@ internal fun ThorHomeDiscoveryPage(vm: ThorShellViewModel, registry: ThorFocusRe
     val filters by vm.catalogFilters.collectAsStateWithLifecycle()
     var picker by remember(category) { mutableStateOf<CatalogPicker?>(null) }
     val scene = "root:Home:${category.name}"
-    BindThorPageAction(pageActions, "catalog:playlist-filter") { picker = CatalogPicker.Playlist }
     BindThorPageAction(pageActions, "catalog:artist-area") { picker = CatalogPicker.ArtistArea }
     BindThorPageAction(pageActions, "catalog:artist-type") { picker = CatalogPicker.ArtistType }
     val activePicker = picker
@@ -143,12 +161,10 @@ internal fun ThorHomeDiscoveryPage(vm: ThorShellViewModel, registry: ThorFocusRe
         BindThorPageAction(pageActions, "catalog:picker-active") {}
         BindThorPageAction(pageActions, "page:back") { picker = null }
         val choices = when (activePicker) {
-            CatalogPicker.Playlist -> playlistChoices
             CatalogPicker.ArtistArea -> artistAreaChoices
             CatalogPicker.ArtistType -> artistTypeChoices
         }
         val value = when (activePicker) {
-            CatalogPicker.Playlist -> filters.playlistCategory
             CatalogPicker.ArtistArea -> filters.artistArea.toString()
             CatalogPicker.ArtistType -> filters.artistType.toString()
         }
@@ -164,7 +180,6 @@ internal fun ThorHomeDiscoveryPage(vm: ThorShellViewModel, registry: ThorFocusRe
             onSelect = { selected ->
                 picker = null
                 when (activePicker) {
-                    CatalogPicker.Playlist -> vm.setPlaylistCategory(selected)
                     CatalogPicker.ArtistArea -> vm.setArtistArea(selected.toInt())
                     CatalogPicker.ArtistType -> vm.setArtistType(selected.toInt())
                 }
@@ -178,18 +193,58 @@ internal fun ThorHomeDiscoveryPage(vm: ThorShellViewModel, registry: ThorFocusRe
     else entries
     val error = library.errors[collection]
     val busy = collection in library.loading || collection in library.loadingMore
-    val continuation = if (collection in library.hasMore || (items.isNotEmpty() && (error != null || busy)))
-        ThorListContinuation(busy, error, append = collection in library.hasMore) {
-            if (collection in library.hasMore) vm.loadMore(collection) else vm.refresh(collection)
+    val hasMore = category != ThorHomeCategory.Playlists && collection in library.hasMore
+    val continuation = if (hasMore || (items.isNotEmpty() && (error != null || busy)))
+        ThorListContinuation(busy, error, append = hasMore) {
+            if (hasMore) vm.loadMore(collection) else vm.refresh(collection)
         }
     else null
     Column(Modifier.fillMaxSize()) {
         ThorHomeCatalogHeader(category, filters, vm::selectHomeCategory, { vm.push(ThorPage.Search) },
-            { picker = CatalogPicker.Playlist }, { picker = CatalogPicker.ArtistArea }, { picker = CatalogPicker.ArtistType })
+            {}, { picker = CatalogPicker.ArtistArea }, { picker = CatalogPicker.ArtistType })
         if (items.isEmpty()) ThorEmptyState(vm, registry, error ?: if (busy) "正在加载" else "暂无内容",
             if (busy) null else "刷新", { vm.refresh(collection) }, Modifier.weight(1f), busy)
         else ThorBrowseList(vm, registry, scene, items, Modifier.weight(1f), continuation = continuation,
             onItem = { item, _ -> if (item.key == ThorItemKey.Destination("DailySongs")) vm.openCollection(ThorCollection.DailySongs) else vm.open(item) })
+    }
+}
+
+@Composable
+@UnstableApi
+internal fun ThorDiscoverPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, library: ThorLibraryState, pageActions: ThorPageActionBindings?) {
+    val filters by vm.catalogFilters.collectAsStateWithLifecycle()
+    var picker by remember { mutableStateOf(false) }
+    val scene = THOR_DISCOVER_LIST_SCENE
+    BindThorPageAction(pageActions, "catalog:playlist-filter") { picker = true }
+    if (picker) {
+        BindThorPageAction(pageActions, "catalog:picker-active") {}
+        BindThorPageAction(pageActions, "page:back") { picker = false }
+        val pickerScene = "$scene:filter:Playlist"
+        val selectedValue = filters.playlistCategory
+        val memory = remember(vm, pickerScene, selectedValue) { object : ThorListFocusMemory {
+            override fun readFocus(scene: String) = vm.rememberedFocus(scene) ?: "$scene:$selectedValue"
+            override fun readScroll(scene: String) = vm.rememberedListScroll(scene)
+            override fun saveFocus(scene: String, key: String) = vm.rememberFocus(scene, key)
+            override fun saveScroll(scene: String, key: String, offset: Int) = vm.rememberListScroll(scene, key, offset)
+            override fun preview(item: ThorItem?) = Unit
+        } }
+        ThorCatalogPicker(registry, memory, pickerScene, "歌单分类", playlistChoices, selectedValue,
+            onSelect = { selected -> picker = false; vm.setPlaylistCategory(selected) }, onBack = { picker = false })
+        return
+    }
+    val collection = ThorCollection.Discover
+    val items = library[collection]
+    val busy = collection in library.loading || collection in library.loadingMore
+    val error = library.errors[collection]
+    val hasMore = collection in library.hasMore
+    val continuation = if (hasMore || (items.isNotEmpty() && (busy || error != null)))
+        ThorListContinuation(busy, error, append = hasMore) { if (hasMore) vm.loadMore(collection) else vm.refresh(collection) }
+    else null
+    Column(Modifier.fillMaxSize()) {
+        ThorDiscoverCatalogHeader(filters.playlistCategory, { picker = true }, { vm.push(ThorPage.Search) })
+        if (items.isEmpty()) ThorEmptyState(vm, registry, error ?: if (busy) "正在加载" else "暂无歌单",
+            if (busy) null else "刷新", { vm.refresh(collection) }, Modifier.weight(1f), busy)
+        else ThorBrowseList(vm, registry, scene, items, Modifier.weight(1f), continuation = continuation, pageActions = pageActions)
     }
 }
 

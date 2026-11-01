@@ -146,7 +146,10 @@ interface ApiService {
 
     @Headers("X-Netease-Crypto: eapi")
     @POST("/api/song/enhance/player/url/v1")
-    suspend fun getSongUrlV1(@Body body: GetSongUrlV1): SongUrl
+    suspend fun getSongUrlV1(
+        @Body body: GetSongUrlV1,
+        @Header(NETEASE_EXPECTED_SESSION_HEADER) expectedSession: String? = null,
+    ): SongUrl
 
     @POST("/api/song/enhance/player/url")
     suspend fun getSongUrl(@Body body: GetSongUrl): SongUrl

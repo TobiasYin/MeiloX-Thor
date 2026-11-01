@@ -93,7 +93,6 @@ class ThorShellViewModel @Inject constructor(
     fun setPlaylistCategory(category: String) {
         clearExitGuard()
         mutablePreview.value = null
-        freshScene("root:Home:Playlists")
         freshScene("root:Discover")
         repository.setCatalogFilters(catalogFilters.value.copy(playlistCategory = category))
     }
@@ -255,6 +254,8 @@ class ThorShellViewModel @Inject constructor(
         savedState["thor.tab"] = value.tab.name
         (value.page as? ThorPage.Artist)?.let { artistBrowser.open(it.item) }
         if (value.page == ThorPage.Root(ThorTab.Home)) ensureHomeCategory()
+        if (value.page == ThorPage.Root(ThorTab.Discover) && ThorCollection.Discover !in library.value.collections &&
+            ThorCollection.Discover !in library.value.loading) repository.refresh(ThorCollection.Discover)
     }
 
     fun switchTab(delta: Int) { if (menu.value == null) navigate(navigation.value.switchTab(delta)) }

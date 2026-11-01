@@ -34,7 +34,10 @@ class ThorCatalogRepository internal constructor(
 
     suspend fun page(collection: ThorCollection, filters: ThorCatalogFilters, offset: Int = 0,
         cursor: Long = 0, expectedSession: String? = null): ThorCatalogPage = when (collection) {
-        ThorCollection.RecommendedPlaylists -> parseThorCatalogPlaylists(request(
+        ThorCollection.RecommendedPlaylists -> parseThorRecommendedPlaylists(request(
+            "/api/personalized/playlist", mapOf("limit" to PAGE_SIZE, "total" to true, "n" to 1_000),
+            "eapi", expectedSession))
+        ThorCollection.Discover -> parseThorCatalogPlaylists(request(
             "/api/playlist/highquality/list", mapOf("cat" to filters.playlistCategory, "limit" to PAGE_SIZE,
                 "lasttime" to cursor, "total" to true), "weapi", expectedSession), cursor)
         ThorCollection.Toplists -> parseThorCatalogToplists(request("/api/toplist", emptyMap(), "eapi", expectedSession))
@@ -129,6 +132,23 @@ internal fun parseThorCatalogPlaylists(response: JsonObject, previousCursor: Lon
     } }
     return ThorCatalogPage(items, nextCursor = thorCatalogNextCursor(previousCursor,
         response.catalogLong("lasttime") ?: 0L, raw.size, response.catalogBoolean("more")))
+}
+
+/** Recommendation batches can refresh, but the endpoint does not define a continuation token. */
+internal fun parseThorRecommendedPlaylists(response: JsonObject): ThorCatalogPage {
+    val raw = response.get("result")?.takeIf { it.isJsonArray }?.asJsonArray
+        ?: error("推荐歌单读取失败，请重试")
+    val items = raw.mapNotNull { element -> element.catalogObject()?.let { playlist ->
+        val id = playlist.catalogLong("id")?.takeIf { it > 0 } ?: return@let null
+        val title = playlist.catalogString("name") ?: return@let null
+        ThorItem(ThorItemKey.Playlist(id.toString()), title,
+            playlist.get("creator")?.catalogObject()?.catalogString("nickname")
+                ?: playlist.catalogString("copywriter").orEmpty(),
+            playlist.catalogString("picUrl") ?: playlist.catalogString("coverImgUrl"),
+            playlist.catalogString("copywriter") ?: playlist.catalogString("description").orEmpty(),
+            playlist.catalogLong("trackCount")?.toInt())
+    } }
+    return ThorCatalogPage(items)
 }
 
 internal fun parseThorCatalogToplists(response: JsonObject): ThorCatalogPage = ThorCatalogPage(

@@ -6,6 +6,8 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.ljyh.mei.constants.CookieKey
+import com.ljyh.mei.constants.MusicQuality
+import com.ljyh.mei.constants.MusicQualityKey
 import com.ljyh.mei.constants.UserAvatarUrlKey
 import com.ljyh.mei.constants.UserIdKey
 import com.ljyh.mei.constants.UserNicknameKey
@@ -211,17 +213,6 @@ class ThorMusicRepository @Inject constructor(
                 mapOf(ThorCollection.CollectedAlbums to items)
             }
         }
-        if (collection == null || collection == ThorCollection.Discover) {
-            fetch("discover", setOf(ThorCollection.Discover)) {
-                val result = playlists.getHighQualityPlaylist("全部", 60).valueOrThrow()
-                check(result.code == 200) { "发现内容读取失败 (${result.code})" }
-                mapOf(ThorCollection.Discover to result.playlists.map { item -> ThorItem(
-                    ThorItemKey.Playlist(item.id.toString()), item.name, item.creator.nickname,
-                    item.coverImgUrl, item.description.orEmpty(), item.trackCount,
-                    collected = item.subscribed,
-                ) })
-            }
-        }
         if (collection == null || collection == ThorCollection.Home) {
             fetch("home", setOf(ThorCollection.Home)) {
                 val blocks = home.getHomePageResourceShow(refresh = true).valueOrThrow()
@@ -316,12 +307,22 @@ class ThorMusicRepository @Inject constructor(
     }
 
     suspend fun artistProfile(item: ThorItem): ThorArtistProfile = withCatalogRead { ticket ->
-        catalog.artistProfile(item, ticket.account?.sessionFingerprint)
+        val profile = catalog.artistProfile(item, ticket.account?.sessionFingerprint)
+        profile.copy(hotSongs = artistSourceHints(profile.hotSongs, ticket))
     }
 
     suspend fun artistSongs(id: Long, offset: Int): ThorCatalogPage = withCatalogRead { ticket ->
-        catalog.artistSongs(id, offset, ticket.account?.sessionFingerprint)
+        val page = catalog.artistSongs(id, offset, ticket.account?.sessionFingerprint)
+        page.copy(items = artistSourceHints(page.items, ticket))
     }
+
+    private suspend fun artistSourceHints(items: List<ThorItem>, ticket: ThorAccountTicket): List<ThorItem> =
+        resolveThorArtistSourceAvailability(
+            items,
+            context.dataStore.data.first()[MusicQualityKey] ?: MusicQuality.EXHIGH.text,
+            checkCurrent = { accountFence.checkCurrent(ticket) },
+            fetch = { ids, quality -> playlists.getRawSongUrlV1(ids, quality, ticket.account?.sessionFingerprint) },
+        )
 
     suspend fun artistAlbums(id: Long, offset: Int): ThorCatalogPage = withCatalogRead { ticket ->
         catalog.artistAlbums(id, offset, ticket.account?.sessionFingerprint)
@@ -943,7 +944,7 @@ class ThorMusicRepository @Inject constructor(
         private const val DEVICE_SCOPE = "device"
         private val TRACKS_TYPE = object : TypeToken<List<MediaMetadata>>() {}.type
         private val ACCOUNT_PLAYLIST_COLLECTIONS = setOf(ThorCollection.OwnedPlaylists, ThorCollection.SavedPlaylists, ThorCollection.LikedSongs)
-        private val CATALOG_COLLECTIONS = setOf(ThorCollection.RecommendedPlaylists, ThorCollection.Toplists,
+        private val CATALOG_COLLECTIONS = setOf(ThorCollection.RecommendedPlaylists, ThorCollection.Discover, ThorCollection.Toplists,
             ThorCollection.Artists, ThorCollection.DailySongs)
         private val ACCOUNT_COLLECTIONS = ACCOUNT_PLAYLIST_COLLECTIONS + ThorCollection.CollectedAlbums
         private val DEVICE_READ_COLLECTIONS = setOf(ThorCollection.LocalSongs, ThorCollection.LocalAlbums, ThorCollection.Downloads, ThorCollection.History)
@@ -1041,7 +1042,7 @@ internal suspend fun awaitThorDeviceIdentity(
 }
 
 internal fun sameCatalogFilters(collection: ThorCollection, first: ThorCatalogFilters, second: ThorCatalogFilters): Boolean = when (collection) {
-    ThorCollection.RecommendedPlaylists -> first.playlistCategory == second.playlistCategory
+    ThorCollection.Discover -> first.playlistCategory == second.playlistCategory
     ThorCollection.Artists -> first.artistArea == second.artistArea && first.artistType == second.artistType
     else -> true
 }
