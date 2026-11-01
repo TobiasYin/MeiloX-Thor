@@ -76,6 +76,7 @@ data class ThorThemeTokens(
     val typography: ThorTypographyTokens = ThorTypographyTokens(),
     val lyricLayout: ThorLyricLayoutTokens = ThorLyricLayoutTokens(),
 ) {
+    val lyricSheen: ThorLyricSheenTokens get() = thorLyricSheenTokens(pack, text, reduceTransparency)
     val success: Color get() = accent
     val warning: Color get() = if (isDark) Color(0xFFF4C36B) else Color(0xFF815000)
     val error: Color get() = if (isDark) Color(0xFFFFB4AB) else Color(0xFFA82C25)

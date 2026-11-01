@@ -8,6 +8,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ThorBackdropProfileTest {
+    @Test fun strongerOpticalMotionDoesNotRetuneTheExistingPaletteWeightsFieldsOrQuietMask() {
+        for (dark in listOf(false, true)) {
+            val profile = thorBackdropProfile(ThorBackgroundMode.ArtworkFlow, ThorBackgroundIntensity.Medium, dark)
+            assertEquals(if (dark) 1.08f else .94f, profile.colorStrength, 0f)
+            assertEquals(1f, profile.artworkColorWeight, 0f)
+            assertEquals(.30f, profile.deformationStrength, 0f)
+            assertEquals(.20f, profile.speed, 0f)
+            assertEquals(ThorBackdropField(.24f, .58f, .96f, 1.08f), profile.primaryField)
+            assertEquals(ThorBackdropField(.72f, .22f, .86f, .94f), profile.secondaryField)
+            assertEquals(.46f, profile.quietStartX, 0f)
+            assertEquals(.88f, profile.quietEndX, 0f)
+            assertEquals(if (dark) .62f else .56f, profile.quietRetention, 0f)
+        }
+    }
+
     @Test fun serializedSelectionsAndIntensityScaleStayStable() {
         assertEquals(listOf("ArtworkFlow", "SoftGradient", "Clean"), ThorBackgroundMode.entries.map { it.name })
         assertEquals(listOf("Low", "Medium", "High"), ThorBackgroundIntensity.entries.map { it.name })

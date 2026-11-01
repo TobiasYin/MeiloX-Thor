@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.drawscope.withTransform
 import com.ljyh.mei.thor.artwork.CaseAmbientPalette
 import com.ljyh.mei.thor.artwork.forAmbient
 import com.ljyh.mei.thor.model.ThorBackgroundMode
@@ -46,7 +47,7 @@ internal fun createThorBackdropShader(): RuntimeShader = RuntimeShader(ThorBackd
 
 /**
  * A soft optical field rather than a blurred full-resolution cover. Gaussian color pools and
- * a defocused light ribbon fuse the real cover colors without a large offscreen blur pass.
+ * defocused flowing folds fuse the real cover colors without a large offscreen blur pass.
  */
 @Composable
 internal fun ThorPlaybackBackdrop(
@@ -158,10 +159,29 @@ internal fun ThorPlaybackBackdrop(
                 drawRect(base)
                 listOf(first, second, third).forEachIndexed { index, color ->
                     val safe = Color(readableThorBackdropColor(color.toArgb(), readingContrast))
-                    val center = Offset(size.width * (.16f + .33f * index + sin(time + index) * .10f),
-                        size.height * (if (index == 1) .22f else .72f))
+                    val x = .16f + .33f * index
+                    val y = if (index == 1) .22f else .72f
+                    val flow = thorBackdropAdvection(x, y, time)
+                    val center = Offset(size.width * (x + sin(time + index) * .10f + flow.x * deformation.value * .48f),
+                        size.height * (y + flow.y * deformation.value * .48f))
                     drawCircle(Brush.radialGradient(listOf(safe.copy(alpha = (.85f * strength.value).coerceIn(0f, .95f)),
                         Color.Transparent), center, size.width * .70f), size.width * .70f, center)
+                }
+                if (profile.highlights && deformation.value > .001f) {
+                    val flow = thorBackdropAdvection(.42f, .5f, time)
+                    val foldY = thorBackdropFoldY(.42f, time, flow.y)
+                    val opticalWeight = (deformation.value / .30f).coerceIn(0f, 1.25f) * strength.value.coerceAtMost(1f)
+                    // Soft elliptical light/shadow, with no hard stroked line or CPU blur pass.
+                    listOf(first to .09f, second to .12f).forEachIndexed { index, (color, opacity) ->
+                        val center = Offset(size.width * (.42f + flow.x * .035f),
+                            size.height * (foldY + if (index == 0) .15f else 0f))
+                        val safe = Color(readableThorBackdropColor(color.toArgb(), readingContrast))
+                        val radius = size.width * .52f
+                        withTransform({ scale(1.12f, .34f, center) }) {
+                            drawCircle(Brush.radialGradient(listOf(safe.copy(alpha = opacity * opticalWeight),
+                                safe.copy(alpha = opacity * opticalWeight * .4f), Color.Transparent), center, radius), radius, center)
+                        }
+                    }
                 }
                 drawRect(Brush.horizontalGradient(0f to Color.Transparent,
                     profile.quietStartX to Color.Transparent, profile.quietEndX to base.copy(alpha = 1f - profile.quietRetention),
@@ -196,7 +216,12 @@ half4 main(float2 p) {
     float2 uv = p / max(resolution, float2(1.0));
     float t = clock;
     float2 warp = float2(sin(uv.y * 4.0 + t * 1.3), cos(uv.x * 3.6 - t * .9));
-    float2 q = uv + warp * deformation * .38;
+    // Two nested, low-frequency advection fields deform the existing color partitions.
+    // Faster local folds remain subordinate to the slow broad drift; no new palette is mixed in.
+    float2 flow = float2(
+        sin(uv.y * 6.0 + sin(uv.x * 3.0 - t * $ThorBackdropInnerXTime) * .60 + t * $ThorBackdropAdvectXTime),
+        cos(uv.x * 5.0 + cos(uv.y * 3.6 + t * $ThorBackdropInnerYTime) * .55 - t * $ThorBackdropAdvectYTime));
+    float2 q = uv + warp * deformation * .38 + flow * deformation * .48;
     float2 drift1 = float2(sin(t * .83), cos(t * .61) - 1.0) * deformation * .55;
     float2 drift2 = float2(cos(t * .67) - 1.0, sin(t * .79)) * deformation * .65;
     float2 drift3 = float2(sin(t * .57), cos(t * .43) - 1.0) * deformation * .45;
@@ -212,9 +237,21 @@ half4 main(float2 p) {
 
     // A wide, defocused caustic adds depth; no sharp ribbons, particles or flashing noise.
     float curve = .72 - uv.x * .57 + sin(uv.x * 3.5 + t * .62) * .10;
-    float ribbon = exp(-pow((uv.y - curve) / .17, 2.0));
+    float ribbonDistance = (uv.y - curve) / .17;
+    float ribbon = exp(-ribbonDistance * ribbonDistance);
     float halo = pool(uv, float2(.30, .52), float2(.57, .62));
     color = mix(color, accentColor.rgb, ribbon * halo * highlights * min(strength, 1.0) * .19);
+    // A second soft fold and its displaced shadow describe volume using only the cover colors.
+    // Both disappear in reduced-transparency mode; the opaque advected color field remains.
+    float foldCurve = .24 + uv.x * .42 + sin(uv.x * 4.5 - t * $ThorBackdropFoldTime + flow.y * .35) * .16;
+    float foldLightDistance = (uv.y - foldCurve) / .16;
+    float foldShadeDistance = (uv.y - foldCurve - .15) / .24;
+    float foldLight = exp(-foldLightDistance * foldLightDistance);
+    float foldShade = exp(-foldShadeDistance * foldShadeDistance);
+    float foldEnvelope = pool(uv, float2(.42, .50), float2(.98, .92));
+    float opticalWeight = highlights * min(strength, 1.0) * clamp(deformation / .30, 0.0, 1.25);
+    color = mix(color, bodyColor.rgb, foldShade * foldEnvelope * opticalWeight * .09);
+    color = mix(color, glowColor.rgb, foldLight * foldEnvelope * opticalWeight * .12);
     float edge = smoothstep(.28, .90, length((uv - float2(.43, .50)) * float2(.86, 1.0)));
     color = mix(color, baseColor.rgb, edge * .32);
     float quiet = smoothstep(quietRange.x, quietRange.y, uv.x);

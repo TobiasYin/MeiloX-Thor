@@ -270,8 +270,8 @@ internal fun ThorUpperLyrics(
                     Box(Modifier.fillMaxWidth().height(with(density) { primaryHeightPx.toDp() })) {
                         if (focused) ThorLyricFlowText(
                             timeline = timeline, style = primaryStyle, positionProvider = timeProvider,
-                            frameTick = drawFrame, textColor = theme.text, secondaryColor = theme.secondary,
-                            accentColor = theme.accent, decorate = active && playing && !theme.reduceMotion,
+                            frameTick = drawFrame, textColor = theme.lyricSheen.ink, secondaryColor = theme.secondary,
+                            sheen = theme.lyricSheen, decorate = active && playing && !theme.reduceMotion && !theme.reduceTransparency,
                             modifier = Modifier.fillMaxWidth(),
                         ) else Text(words, Modifier.fillMaxWidth(), style = primaryStyle, color = theme.secondary)
                     }

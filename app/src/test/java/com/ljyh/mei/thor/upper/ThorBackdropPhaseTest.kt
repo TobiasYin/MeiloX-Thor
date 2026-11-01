@@ -19,8 +19,9 @@ class ThorBackdropPhaseTest {
         assertTrue(after > 2 * PI)
         assertTrue(shaderFrequencies.any { it != it.toInt().toDouble() })
         for (frequency in shaderFrequencies) {
-            assertTrue(abs(sin(before * frequency) - sin(after * frequency)) < .0003)
-            assertTrue(abs(cos(before * frequency) - cos(after * frequency)) < .0003)
+            val bound = .0002 * frequency + .00000001 // |sin/cos derivative| <= 1.
+            assertTrue(abs(sin(before * frequency) - sin(after * frequency)) < bound)
+            assertTrue(abs(cos(before * frequency) - cos(after * frequency)) < bound)
         }
     }
 
@@ -30,8 +31,11 @@ class ThorBackdropPhaseTest {
         assertEquals(.0001, after, .0000001)
         assertTrue(shaderFrequencies.isNotEmpty())
         for (frequency in shaderFrequencies) {
-            assertTrue("sine seam at $frequency", abs(sin(before * frequency) - sin(after * frequency)) < .0003)
-            assertTrue("cosine seam at $frequency", abs(cos(before * frequency) - cos(after * frequency)) < .0003)
+            assertEquals("Every real shader harmonic must close at 200π", frequency * 100,
+                kotlin.math.round(frequency * 100), .0000001)
+            val bound = .0002 * frequency + .00000001
+            assertTrue("sine seam at $frequency", abs(sin(before * frequency) - sin(after * frequency)) < bound)
+            assertTrue("cosine seam at $frequency", abs(cos(before * frequency) - cos(after * frequency)) < bound)
         }
     }
 

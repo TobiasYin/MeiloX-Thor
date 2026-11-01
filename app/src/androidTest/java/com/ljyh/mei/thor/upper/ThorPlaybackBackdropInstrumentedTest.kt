@@ -142,6 +142,51 @@ class ThorPlaybackBackdropInstrumentedTest {
     }
 
     @Test(timeout = 90_000)
+    fun defaultFlowKeepsChangingAcrossSeveralRealShaderFramesWithinThreeSecondsInDayAndNight() {
+        preferences.value = preferences.value.copy(backgroundIntensity = ThorBackgroundIntensity.Medium,
+            backgroundMode = ThorBackgroundMode.ArtworkFlow, reduceMotion = true)
+        artworkPalette.value = MUTED_WARM_PALETTE
+        showBackdrop()
+        compose.mainClock.autoAdvance = false
+        try {
+            for (appearance in listOf(ThorAppearance.Day, ThorAppearance.Night)) {
+                mutate {
+                    playing.value = false
+                    preferences.value = preferences.value.copy(appearance = appearance, reduceMotion = true)
+                }
+                advance(1_200)
+                copyWindowPixels().recycle()
+                mutate { preferences.value = preferences.value.copy(reduceMotion = false); playing.value = true }
+                advance(1_000)
+                val frames = mutableListOf<Bitmap>()
+                try {
+                    frames += copyWindowPixels()
+                    repeat(4) {
+                        advance(650)
+                        frames += copyWindowPixels()
+                    }
+                    assertEquals("The real runtime shader, rather than the Canvas fallback, must run", "agsl", diagnostics.backend)
+                    frames.zipWithNext().forEachIndexed { index, (before, after) ->
+                        assertTrue("$appearance flow must continue across sample $index, not only differ at two endpoints",
+                            imageDifference(before, after, .04f, .49f) > .0025)
+                        assertLyricZoneContrast(after, "continuous-$appearance-$index")
+                    }
+                    assertTrue("$appearance needs visibly displaced color over 2.6 seconds at normal intensity",
+                        imageDifference(frames.first(), frames.last(), .04f, .49f) > .006)
+                    save(frames.first(), "flow-continuous-$appearance-a")
+                    save(frames.last(), "flow-continuous-$appearance-b")
+                } finally { frames.forEach(Bitmap::recycle) }
+            }
+        } finally {
+            mutate { active.value = false; playing.value = false
+                preferences.value = preferences.value.copy(reduceMotion = true) }
+            compose.mainClock.advanceTimeByFrame()
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+        }
+    }
+
+    @Test(timeout = 90_000)
     fun flowChangesRealPixelsThenPauseVisibilityAndReducedMotionStopDecorativeFrames() {
         preferences.value = preferences.value.copy(theme = ThorThemePack.Glass,
             appearance = ThorAppearance.Night)
