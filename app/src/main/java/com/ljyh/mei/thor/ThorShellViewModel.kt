@@ -41,7 +41,11 @@ import java.util.concurrent.atomic.AtomicLong
 private val thorNoticeIds = AtomicLong()
 data class ThorNotice(val message: String, val undoToken: String? = null, val success: Boolean = true,
     val id: Long = thorNoticeIds.incrementAndGet())
-data class ThorSearchState(val query: String = "", val items: List<ThorItem> = emptyList(), val loading: Boolean = false, val error: String? = null, val searched: Boolean = false)
+data class ThorSearchState(val query: String = "", val items: List<ThorItem> = emptyList(), val loading: Boolean = false,
+    val error: String? = null, val searched: Boolean = false, val category: ThorSearchCategory = ThorSearchCategory.All,
+    val failedCategories: Set<ThorSearchCategory> = emptySet()) {
+    val visibleItems get() = thorVisibleSearchResults(items, category)
+}
 
 /** Screen-independent navigation and management. Neither composition owns business state. */
 @UnstableApi
@@ -127,6 +131,10 @@ class ThorShellViewModel @Inject constructor(
                 val sections = ThorArtistSection.entries
                 val section = artistBrowse.value?.section ?: return false
                 selectArtistSection(sections[(section.ordinal + delta).mod(sections.size)])
+            }
+            ThorPage.Search -> {
+                val categories = ThorSearchCategory.entries
+                selectSearchCategory(categories[(search.value.category.ordinal + delta).mod(categories.size)])
             }
             else -> return false
         }
@@ -491,6 +499,14 @@ class ThorShellViewModel @Inject constructor(
         searchJob?.cancel()
         mutableSearch.value = search.value.copy(query = query, loading = false, error = null)
     }
+    fun selectSearchCategory(category: ThorSearchCategory) {
+        if (navigation.value.page != ThorPage.Search || navigation.value.overlay != null || menu.value != null) return
+        if (category == search.value.category) return
+        clearExitGuard()
+        freshScene(thorSearchResultsScene(searchEntry.value, category))
+        mutablePreview.value = null
+        mutableSearch.value = search.value.copy(category = category)
+    }
     fun search(query: String = search.value.query) {
         val submitted = query.trim()
         if (submitted.isEmpty()) return
@@ -499,16 +515,18 @@ class ThorShellViewModel @Inject constructor(
         val generation = ++searchRequestGeneration
         val accountGeneration = library.value.account.generation
         searchJob?.cancel()
-        mutableSearch.value = ThorSearchState(query = submitted, loading = true, searched = true)
+        mutableSearch.value = ThorSearchState(query = submitted, loading = true, searched = true, category = search.value.category)
         searchJob = viewModelScope.launch {
             try {
-                val items = repository.search(submitted)
+                val response = repository.searchResults(submitted)
+                val items = thorMixedSearchResults(response.items, submitted)
                 if (generation == searchRequestGeneration && accountGeneration == library.value.account.generation)
-                    mutableSearch.value = ThorSearchState(submitted, items, searched = true)
+                    mutableSearch.value = ThorSearchState(submitted, items, searched = true, category = search.value.category,
+                        failedCategories = response.failedCategories)
             } catch (cancellation: CancellationException) { throw cancellation }
             catch (error: Exception) {
                 if (generation == searchRequestGeneration && accountGeneration == library.value.account.generation)
-                    mutableSearch.value = ThorSearchState(submitted, error = error.message ?: "搜索失败", searched = true)
+                    mutableSearch.value = ThorSearchState(submitted, error = error.message ?: "搜索失败", searched = true, category = search.value.category)
             }
         }
     }

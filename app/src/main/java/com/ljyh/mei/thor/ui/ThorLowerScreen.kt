@@ -77,6 +77,7 @@ fun ThorLowerScreen(
     val homeCategory by viewModel.homeCategory.collectAsStateWithLifecycle()
     val artistBrowse by viewModel.artistBrowse.collectAsStateWithLifecycle()
     val searchEntry by viewModel.searchEntry.collectAsStateWithLifecycle()
+    val search by viewModel.search.collectAsStateWithLifecycle()
     val latestScopeChange by rememberUpdatedState(onControllerScopeChanged)
     val seek by viewModel.seekPreview.collectAsStateWithLifecycle()
     val menu by viewModel.menu.collectAsStateWithLifecycle()
@@ -336,6 +337,8 @@ fun ThorLowerScreen(
                         ThorOverlay.Lyrics -> "A 跳转    B 返回"
                         else -> if (navigation.page is ThorPage.Account || navigation.page == ThorPage.AudioSettings || navigation.page == ThorPage.Equalizer)
                             "↑↓ 选择   A 确认   B 返回   Start 播放   Select 长按操作"
+                        else if (navigation.page == ThorPage.Search)
+                            "↑↓ 列表   ←→ 类型   A 确认   B 返回   Select 长按操作"
                         else if (!catalogPickerActive && (navigation.page is ThorPage.Artist || navigation.page == ThorPage.Root(ThorTab.Home)))
                             "↑↓ 列表   ←→ 分类   A 确认   B 返回   Select 长按操作"
                         else "↑↓ 列表   A 确认   B 返回   X 菜单   Select 长按操作"
@@ -382,7 +385,7 @@ fun ThorLowerScreen(
                 session.playbackEntry != null && session.playbackEntry != playback.currentEntryId) closePageActions()
         }
     }
-    LaunchedEffect(navigation.sceneKey, menu?.level, menu?.subject?.item?.key, pageActionSession != null, libraryCategory, homeCategory, artistBrowse?.section, catalogPickerActive, searchEntry) {
+    LaunchedEffect(navigation.sceneKey, menu?.level, menu?.subject?.item?.key, pageActionSession != null, libraryCategory, homeCategory, artistBrowse?.section, catalogPickerActive, searchEntry, search.category) {
         latestScopeChange()
     }
 }

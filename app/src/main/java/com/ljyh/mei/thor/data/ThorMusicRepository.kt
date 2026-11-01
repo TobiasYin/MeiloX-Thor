@@ -15,7 +15,6 @@ import com.ljyh.mei.data.model.withPlaybackPrivilege
 import com.ljyh.mei.data.model.mergedSongPlaybackPrivilege
 import com.ljyh.mei.data.model.withoutPlaybackAvailability
 import com.ljyh.mei.data.model.MediaMetadata
-import com.ljyh.mei.data.model.api.toSongMediaMetadata
 import com.ljyh.mei.data.model.room.SourceType
 import com.ljyh.mei.data.model.toMediaMetadata
 import com.ljyh.mei.data.network.NeteaseSessionType
@@ -51,7 +50,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -464,9 +465,11 @@ class ThorMusicRepository @Inject constructor(
         }
     }
 
-    suspend fun search(query: String): List<ThorItem> = withContext(Dispatchers.IO) {
+    suspend fun search(query: String): List<ThorItem> = searchResults(query).items
+
+    suspend fun searchResults(query: String): ThorSearchResponse = withContext(Dispatchers.IO) {
         val term = query.trim()
-        if (term.isBlank()) return@withContext emptyList()
+        if (term.isBlank()) return@withContext ThorSearchResponse(emptyList())
         val ticket = accountFence.ticketForCall()
         val account = ticket.account
         val generation = ticket.generation
@@ -475,29 +478,19 @@ class ThorMusicRepository @Inject constructor(
             device[ThorCollection.OwnedPlaylists].filter { (it.key as? ThorItemKey.Playlist)?.local == true })
             .filter { "${it.title} ${it.subtitle} ${it.description}".contains(term, true) }
         ensureRemoteReady(ticket)
-        val responses = coroutineScope { listOf(1, 10, 100, 1000).map { type ->
-            async { searchRepository.search(term, type, 40) }
+        val responses = coroutineScope { thorSearchRequests.map { (type, category) ->
+            async { category to searchRepository.search(term, type, 40) }
         }.awaitAll() }
+        currentCoroutineContext().ensureActive()
         accountFence.checkCurrent(ticket)
         checkAccount(account)
         check(remote.value.account.generation == generation) { "账号已变化，请重试" }
-        val online = responses.filterIsInstance<Resource.Success<com.ljyh.mei.data.model.api.SearchResult>>()
-            .filter { it.data.code == 200 }.flatMap { response ->
-                val result = response.data.result
-                result.toSongMediaMetadata().map { it.toThorItem() } +
-                    result.albums.orEmpty().map { album -> ThorItem(ThorItemKey.Album(album.id), album.name,
-                        album.artists.joinToString(" / ") { it.name }, album.picUrl, album.description.orEmpty(), album.size) } +
-                    result.artists.orEmpty().mapNotNull { artist ->
-                        thorCatalogArtistItem(gson.toJsonTree(artist).asJsonObject)
-                    } +
-                    result.playlists.orEmpty().map { playlist -> ThorItem(ThorItemKey.Playlist(playlist.id.toString()),
-                        playlist.name, playlist.creator.nickname, playlist.coverImgUrl, trackCount = playlist.trackCount,
-                        owned = account?.userId == playlist.creator.userId.toString()) }
-            }
-        if (online.isEmpty() && matching.isEmpty() && responses.any { it !is Resource.Success || it.data.code != 200 }) {
-            error("搜索失败，请检查网络后重试")
-        }
-        (matching + online).distinctBy { it.key }.map(::decorate)
+        val response = mergeThorSearchResponses(matching, responses, account?.userId, gson)
+            .let { it.copy(items = it.items.map(::decorate)) }
+        currentCoroutineContext().ensureActive()
+        accountFence.checkCurrent(ticket)
+        check(remote.value.account.generation == generation) { "账号已变化，请重试" }
+        response
     }
 
     suspend fun toggleLike(song: MediaMetadata): ThorOperationResult = mutate { account ->

@@ -220,6 +220,7 @@ internal fun ThorBrowseList(
     vm: ThorShellViewModel, registry: ThorFocusRegistry, scene: String, items: List<ThorItem>,
     modifier: Modifier = Modifier, sourcePlaylist: ThorItemKey.Playlist? = null,
     continuation: ThorListContinuation? = null,
+    trailingLabel: ((ThorItem) -> String?)? = null,
     onItem: ((ThorItem, Int) -> Unit)? = null,
 ) {
     val library by vm.library.collectAsStateWithLifecycle()
@@ -276,7 +277,7 @@ internal fun ThorBrowseList(
     LazyColumn(modifier.fillMaxWidth().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp)) {
         itemsIndexed(items, key = { index, _ -> itemKeys[index] }) { index, item ->
             ThorMusicRow(registry, itemKeys[index], item,
-                trailing = item.trackCount?.let { "$it" },
+                trailing = trailingLabel?.invoke(item) ?: item.trackCount?.let { "$it" },
                 onClick = { focus.activate(index) },
                 onMenu = { anchor -> focus.onFocused(index); vm.openMenu(ThorMenuSubject(item, itemKeys[index], sourcePlaylist), anchor) },
                 onFocused = { focus.onFocused(index) },
@@ -415,23 +416,6 @@ private fun ThorMyPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, libr
             }
         })
     }
-}
-
-@UnstableApi
-@Composable
-private fun ThorSearchPage(vm: ThorShellViewModel, registry: ThorFocusRegistry, onBack: () -> Unit, pageActions: ThorPageActionBindings?) {
-    val search by vm.search.collectAsStateWithLifecycle()
-    val searchEntry by vm.searchEntry.collectAsStateWithLifecycle()
-    Column(Modifier.fillMaxSize()) {
-        ThorPageHeader(registry, "搜索", onBack = onBack)
-        ThorSearchInput(search.query, search.loading, registry, pageActions,
-            onQueryChange = vm::setSearchQuery, onSubmit = { vm.search(it) },
-            onEditingChange = { vm.textEditing.value = it })
-        if (search.items.isNotEmpty()) ThorBrowseList(vm, registry, "search:results:$searchEntry", search.items, Modifier.weight(1f))
-        else ThorEmptyState(vm, registry, search.error ?: when { search.loading -> "正在搜索"; search.searched -> "没有找到相关音乐"; else -> "" },
-            if (search.error != null) "重试" else null, { vm.search() }, Modifier.weight(1f), search.loading)
-    }
-    DisposableEffect(Unit) { onDispose { vm.textEditing.value = false } }
 }
 
 @UnstableApi

@@ -104,7 +104,7 @@ internal fun ThorSearchInput(
             modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                 .testTag("thor-search-input").focusRequester(requester)
                 .onFocusChanged { focused = it.isFocused; latestEditingChange(it.isFocused) }
-                .semantics { contentDescription = "搜索音乐" }
+                .semantics { contentDescription = "搜索歌曲、歌手、专辑、歌单" }
                 .thorMaterial(ThorSurfaceRole.Inset, focused = focused).padding(horizontal = 12.dp, vertical = 12.dp),
             singleLine = true,
             textStyle = TextStyle(color = theme.text, fontSize = 14.sp, lineHeight = 20.sp),
@@ -112,7 +112,7 @@ internal fun ThorSearchInput(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { submit() }),
             decorationBox = { field -> Box {
-                if (editor.value.text.isEmpty()) Text("歌曲、专辑、歌单", color = theme.secondary, fontSize = 14.sp)
+                if (editor.value.text.isEmpty()) Text("歌曲、歌手、专辑、歌单", color = theme.secondary, fontSize = 14.sp)
                 field()
             } },
         )

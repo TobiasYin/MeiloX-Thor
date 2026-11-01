@@ -233,8 +233,13 @@ internal fun thorPageActions(
                 if (page.item.tracks.isEmpty()) action("detail:reload", "重新加载", !vm.detailLoading.value) { vm.open(page.item) }
             }
             ThorPage.Search -> {
-                callback("search:edit", "编辑搜索词")
-                callback("search:submit", if (vm.search.value.error != null) "重试搜索" else "搜索", vm.search.value.query.isNotBlank())
+                callback("search:edit", "编辑歌曲 / 歌手关键词")
+                callback("search:submit", if (vm.search.value.error != null || vm.search.value.failedCategories.isNotEmpty()) "重试搜索" else "搜索", vm.search.value.query.isNotBlank())
+                ThorSearchCategory.entries.forEach { category ->
+                    action("search:category:${category.name}", category.title) {
+                        selectThorSearchCategory(category, bindings, vm::selectSearchCategory)
+                    }
+                }
             }
             ThorPage.Appearance -> {
                 ThorThemePack.entries.forEach { pack -> action("theme:${pack.name}", "材质 · ${pack.title}") { vm.updatePreferences { it.copy(theme = pack) } } }
